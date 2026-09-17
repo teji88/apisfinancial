@@ -259,7 +259,7 @@ export function projectRetirement(input: PlannerInputs): Projection {
 
     const ages = people.map((p) => p.spec.age + (age - startAge));
     const cpp = people.map((p, i) =>
-      ages[i]! >= p.spec.cppStartAge ? cppAt(p.spec.cppStartAge, 100) * 0 + adjustedCpp(p.spec) * indexation : 0,
+      ages[i]! >= p.spec.cppStartAge ? adjustedCpp(p.spec) * indexation : 0,
     );
     const oasGross = people.map((p, i) =>
       ages[i]! >= Math.max(65, p.spec.oasStartAge)
@@ -364,7 +364,7 @@ export function projectRetirement(input: PlannerInputs): Projection {
       const level = registered / remainingYears;
       const baseOrdinary = cpp[i]! + oasGross[i]! + other[i]!;
       const ceiling = Math.min(
-        nextFederalBracketTop(baseOrdinary) * (baseOrdinary > 0 ? 1 : 1),
+        nextFederalBracketTop(baseOrdinary),
         ages[i]! >= 60 ? clawThreshold : Infinity,
       );
       const room = Math.max(0, ceiling - baseOrdinary);
