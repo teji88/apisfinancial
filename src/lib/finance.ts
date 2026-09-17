@@ -446,6 +446,7 @@ export function buildValuationSeries(
     if (!h) continue;
     const q = quotes[h.symbol.toUpperCase()];
     if (q?.price != null) lastPrice.set(hid, q.price);
+    lastFx.set(hid, h.currency === "USD" ? fxUsdCad : 1);
   }
   const today = new Date().toISOString().slice(0, 10);
   points.push({ date: today, value: valueAt(), flow: 0 });
