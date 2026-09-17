@@ -1,0 +1,193 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { ACCOUNT_TYPES, formatCad, summariseAccount } from "@/lib/finance";
+import { useAddAccount, useDeleteAccount, usePortfolio } from "@/lib/portfolio";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+export const Route = createFileRoute("/_authenticated/accounts")({
+  head: () => ({
+    meta: [
+      { title: "Accounts — MapleWealth" },
+      {
+        name: "description",
+        content:
+          "Manage your TFSA, RRSP, Spousal RRSP, LIRA, RESP, RDSP, FHSA, non-registered and corporate accounts in one place.",
+      },
+      { property: "og:title", content: "Accounts — MapleWealth" },
+      {
+        property: "og:description",
+        content: "Every Canadian registered and taxable account type, tracked in CAD.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: AccountsPage,
+});
+
+function AccountsPage() {
+  const { accounts, holdings, transactions, quotes, fxUsdCad } = usePortfolio();
+  const addAccount = useAddAccount();
+  const deleteAccount = useDeleteAccount();
+
+  const [accountType, setAccountType] = useState<string>("TFSA");
+  const [accountName, setAccountName] = useState("");
+  const [currency, setCurrency] = useState("CAD");
+  const [institution, setInstitution] = useState("");
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await addAccount.mutateAsync({ accountType, accountName, currency, institution });
+      toast.success(`${accountName} added`);
+      setAccountName("");
+      setInstitution("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add the account");
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Accounts</h1>
+        <p className="text-sm text-muted-foreground">
+          Registered and taxable accounts. Balances are converted to CAD.
+        </p>
+      </div>
+
+      <form onSubmit={handleAdd} className="panel grid gap-4 p-5 md:grid-cols-5">
+        <div className="space-y-1.5">
+          <Label>Account type</Label>
+          <Select value={accountType} onValueChange={setAccountType}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ACCOUNT_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="name">Nickname</Label>
+          <Input
+            id="name"
+            required
+            placeholder="My TFSA"
+            value={accountName}
+            onChange={(e) => setAccountName(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Currency</Label>
+          <Select value={currency} onValueChange={setCurrency}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="CAD">CAD</SelectItem>
+              <SelectItem value="USD">USD</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="inst">Institution</Label>
+          <Input
+            id="inst"
+            placeholder="Questrade"
+            value={institution}
+            onChange={(e) => setInstitution(e.target.value)}
+          />
+        </div>
+        <div className="flex items-end">
+          <Button type="submit" className="w-full" disabled={addAccount.isPending}>
+            Add account
+          </Button>
+        </div>
+      </form>
+
+      <div className="panel overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Account</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Institution</TableHead>
+              <TableHead className="text-right">Total value</TableHead>
+              <TableHead className="w-10" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {accounts.map((a) => {
+              const s = summariseAccount(
+                a,
+                transactions.filter((t) => t.account_id === a.id),
+                holdings.filter((h) => h.account_id === a.id),
+                quotes,
+                fxUsdCad,
+              );
+              return (
+                <TableRow key={a.id}>
+                  <TableCell className="font-medium">{a.account_name}</TableCell>
+                  <TableCell>
+                    {a.account_type} · {a.currency}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{a.institution ?? "—"}</TableCell>
+                  <TableCell className="num text-right">{formatCad(s.totalValue)}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Delete account"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            `Delete ${a.account_name}? All its holdings and transactions are removed too.`,
+                          )
+                        ) {
+                          deleteAccount.mutate(a.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {accounts.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                  No accounts yet.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
