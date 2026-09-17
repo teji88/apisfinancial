@@ -254,14 +254,14 @@ export function xirr(flows: CashFlow[], guess = 0.1): number | null {
   const hasPos = sorted.some((f) => f.amount > 0);
   const hasNeg = sorted.some((f) => f.amount < 0);
   if (!hasPos || !hasNeg) return null;
-  const t0 = sorted[0].date.getTime();
+  const t0 = sorted[0]!.date.getTime();
   const years = sorted.map((f) => (f.date.getTime() - t0) / (365 * DAY));
 
   const npv = (rate: number) =>
-    sorted.reduce((sum, f, i) => sum + f.amount / Math.pow(1 + rate, years[i]), 0);
+    sorted.reduce((sum, f, i) => sum + f.amount / Math.pow(1 + rate, years[i] ?? 0), 0);
   const dnpv = (rate: number) =>
     sorted.reduce(
-      (sum, f, i) => sum - (years[i] * f.amount) / Math.pow(1 + rate, years[i] + 1),
+      (sum, f, i) => sum - ((years[i] ?? 0) * f.amount) / Math.pow(1 + rate, (years[i] ?? 0) + 1),
       0,
     );
 
@@ -319,7 +319,7 @@ export function buildValuationSeries(
   let cash = 0;
 
   const points: ValuationPoint[] = [];
-  let currentDate = txns[0].transaction_date;
+  let currentDate = txns[0]!.transaction_date;
   let flowOnDate = 0;
 
   const valueAt = (): number => {
@@ -397,10 +397,10 @@ export function buildValuationSeries(
 export function twrr(points: ValuationPoint[]): number | null {
   if (points.length < 2) return null;
   let chain = 1;
-  let previousValue = points[0].value;
+  let previousValue = points[0]!.value;
   let counted = 0;
   for (let i = 1; i < points.length; i++) {
-    const p = points[i];
+    const p = points[i]!;
     const startValue = previousValue;
     const endBeforeFlow = p.value - p.flow;
     if (startValue > 0) {
@@ -416,8 +416,8 @@ export function twrr(points: ValuationPoint[]): number | null {
 /** Annualises a total return over the elapsed period of the series. */
 export function annualise(totalPct: number, points: ValuationPoint[]): number | null {
   if (points.length < 2) return null;
-  const first = new Date(points[0].date).getTime();
-  const last = new Date(points[points.length - 1].date).getTime();
+  const first = new Date(points[0]!.date).getTime();
+  const last = new Date(points[points.length - 1]!.date).getTime();
   const years = (last - first) / (365 * DAY);
   if (years <= 0.02) return null;
   return (Math.pow(1 + totalPct / 100, 1 / years) - 1) * 100;

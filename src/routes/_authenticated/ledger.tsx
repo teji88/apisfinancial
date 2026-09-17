@@ -168,7 +168,7 @@ function LedgerPage() {
         <div className="grid gap-4 md:grid-cols-4">
           <div className="space-y-1.5">
             <Label>Account</Label>
-            <Select value={accountId || accounts[0].id} onValueChange={setAccountId}>
+            <Select value={accountId || accounts[0]!.id} onValueChange={setAccountId}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
