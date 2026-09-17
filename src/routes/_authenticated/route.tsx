@@ -2,6 +2,7 @@ import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-rout
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
+  FileUp,
   Leaf,
   LogOut,
   Moon,
