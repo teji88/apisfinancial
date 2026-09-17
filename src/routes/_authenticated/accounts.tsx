@@ -47,17 +47,19 @@ export const Route = createFileRoute("/_authenticated/accounts")({
 function AccountsPage() {
   const { accounts, holdings, transactions, quotes, fxUsdCad } = usePortfolio();
   const addAccount = useAddAccount();
+  const updateAccount = useUpdateAccount();
   const deleteAccount = useDeleteAccount();
 
   const [accountType, setAccountType] = useState<string>("TFSA");
   const [accountName, setAccountName] = useState("");
   const [currency, setCurrency] = useState("CAD");
   const [institution, setInstitution] = useState("");
+  const [trackCash, setTrackCash] = useState(false);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await addAccount.mutateAsync({ accountType, accountName, currency, institution });
+      await addAccount.mutateAsync({ accountType, accountName, currency, institution, trackCash });
       toast.success(`${accountName} added`);
       setAccountName("");
       setInstitution("");
