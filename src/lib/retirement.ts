@@ -145,6 +145,9 @@ export type PlannerInputs = {
   desiredIncome: number; // household after-tax, today's CAD
   annualSavings: number; // today's CAD per year until retirement
   savingsSplit: SavingsSplit; // percentages, normalised internally
+  /** Bounded income overshoot above the effective ceiling allowed when a
+   *  melt-down lookahead shows deferring only relocates the tax bill. */
+  clawbackTolerance?: number;
   self: PersonSpec;
   spouse: PersonSpec | null;
 };
@@ -180,6 +183,10 @@ export type YearRow = {
   spending: number;
   shortfall: number;
   pensionSplit: number;
+  /** Lowest income cliff respected this year (household lowest). */
+  effectiveCeiling: number;
+  /** True when future forced RRIF/LIF minimums will breach the ceiling anyway. */
+  meltdownFlag: boolean;
   people: PersonYear[];
   balances: { tfsa: number; rrsp: number; lira: number; nonreg: number; total: number };
 };
@@ -191,6 +198,10 @@ export type Projection = {
   endingBalance: number;
   totalTaxes: number;
   totalClawback: number;
+  /** Deferred tax on registered money left at death (100% income that year). */
+  estateTax: number;
+  /** Registered balance remaining at life expectancy. */
+  estateRegistered: number;
 };
 
 /* --------------------------------- Helpers ------------------------------------ */
