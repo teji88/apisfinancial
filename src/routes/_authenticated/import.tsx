@@ -1,7 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, CheckCircle2, FileUp, Loader2, Sparkles, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileUp,
+  Loader2,
+  PencilLine,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { parseStatement, type ParsedTransaction } from "@/lib/import.functions";
 import { getFxRateOn } from "@/lib/history.functions";
