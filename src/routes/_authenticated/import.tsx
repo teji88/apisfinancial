@@ -91,6 +91,31 @@ function ImportPage() {
     return byType?.id ?? accountList[0]?.id ?? "";
   }
 
+  /** Blank row so a transaction can be typed in without a file. */
+  function addManualRow() {
+    const first = accountList[0];
+    setRows((prev) => [
+      ...prev,
+      {
+        account_type: first?.account_type ?? "Non-Registered",
+        account_hint: null,
+        date: new Date().toISOString().slice(0, 10),
+        type: "BUY",
+        symbol: "",
+        name: null,
+        quantity: 0,
+        price: 0,
+        amount: null,
+        currency: first?.currency ?? "CAD",
+        fee: 0,
+        confidence: 1,
+        note: "Entered by hand",
+        rowId: `manual-${Date.now()}-${prev.length}`,
+        accountId: first?.id ?? "",
+      },
+    ]);
+  }
+
   async function handleFile(file: File) {
     if (file.size > 20 * 1024 * 1024) {
       toast.error("That file is larger than 20 MB.");
