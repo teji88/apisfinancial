@@ -513,8 +513,10 @@ function RetirementPage() {
               <h2 className="font-display text-lg font-semibold">What is left each year</h2>
               <p className="text-sm text-muted-foreground">
                 Balances by account type from age {inputs.retirementAge} to {inputs.lifeExpectancy},
-                spending indexed at {inputs.inflation}% and growth of {inputs.growth}%.
+                spending indexed at {inputs.inflation}% and growth of {inputs.growth}%. Amounts{" "}
+                {moneyNote}.
               </p>
+
             </div>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
