@@ -1,7 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const Input = z.object({ symbols: z.array(z.string()).max(120) });
+const Input = z.object({
+  symbols: z.array(z.string()).max(120),
+  force: z.boolean().optional(),
+});
 
 export type QuoteResult = {
   symbol: string;
@@ -9,94 +12,87 @@ export type QuoteResult = {
   previousClose: number | null;
   currency: string | null;
   name: string | null;
+  asOf: string | null;
 };
 
 export type QuotesResponse = {
   quotes: QuoteResult[];
   fxUsdCad: number;
+  fxAsOf: string | null;
+  pricesAsOf: string | null;
   fetchedAt: string;
 };
 
-/** Quotes are cached for this long before hitting the upstream provider again. */
-const CACHE_MS = 60 * 60 * 1000;
+/**
+ * Prices are end-of-day values refreshed once per day by the scheduled job
+ * (see /api/public/refresh-prices). The app only reaches out to the provider
+ * when a symbol has never been priced, its stored price is older than this
+ * window, or the user presses Refresh.
+ */
+const CACHE_MS = 20 * 60 * 60 * 1000;
 
 export const getQuotes = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => Input.parse(data))
   .handler(async ({ data }): Promise<QuotesResponse> => {
-    const { getMarketProvider, FX_SYMBOL } = await import("./market.server");
+    const { FX_SYMBOL, refreshPrices } = await import("./market.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const wanted = Array.from(
       new Set([...data.symbols.map((s) => s.trim().toUpperCase()).filter(Boolean), FX_SYMBOL]),
     );
-    if (wanted.length === 0) {
-      return { quotes: [], fxUsdCad: 1, fetchedAt: new Date().toISOString() };
-    }
 
-    const { data: cached } = await supabaseAdmin
+    const { data: cached, error: cacheError } = await supabaseAdmin
       .from("price_cache")
       .select("*")
       .in("symbol", wanted);
+    if (cacheError) console.error(`[market] price_cache read failed: ${cacheError.message}`);
 
     const now = Date.now();
-    const fresh = new Map<string, QuoteResult>();
+    const quotes = new Map<string, QuoteResult>();
     const stale: string[] = [];
 
     for (const symbol of wanted) {
       const row = cached?.find((c) => c.symbol === symbol);
-      if (row && now - new Date(row.updated_at).getTime() < CACHE_MS && row.price != null) {
-        fresh.set(symbol, {
+      const fresh =
+        !data.force &&
+        row?.price != null &&
+        now - new Date(row.updated_at).getTime() < CACHE_MS;
+      if (row?.price != null) {
+        quotes.set(symbol, {
           symbol,
           price: Number(row.price),
           previousClose: row.previous_close == null ? null : Number(row.previous_close),
           currency: row.currency,
           name: row.name,
+          asOf: row.as_of ?? row.updated_at.slice(0, 10),
         });
-      } else {
-        stale.push(symbol);
       }
+      if (!fresh) stale.push(symbol);
     }
 
     if (stale.length > 0) {
-      const provider = getMarketProvider();
-      const fetched = await provider.fetchQuotes(stale);
-      const rows = fetched
-        .filter((q) => q.price != null)
-        .map((q) => ({
-          symbol: q.symbol.toUpperCase(),
-          price: q.price,
-          previous_close: q.previousClose,
-          currency: q.currency,
-          name: q.name,
-          updated_at: new Date().toISOString(),
-        }));
-      if (rows.length > 0) {
-        await supabaseAdmin.from("price_cache").upsert(rows, { onConflict: "symbol" });
-      }
+      const { quotes: fetched, asOf } = await refreshPrices(
+        stale.filter((s) => s !== FX_SYMBOL),
+      );
       for (const q of fetched) {
-        if (q.price != null) fresh.set(q.symbol.toUpperCase(), { ...q, symbol: q.symbol.toUpperCase() });
-      }
-      // Fall back to any stale cached value we still have
-      for (const symbol of stale) {
-        if (fresh.has(symbol)) continue;
-        const row = cached?.find((c) => c.symbol === symbol);
-        if (row?.price != null) {
-          fresh.set(symbol, {
-            symbol,
-            price: Number(row.price),
-            previousClose: row.previous_close == null ? null : Number(row.previous_close),
-            currency: row.currency,
-            name: row.name,
-          });
-        }
+        if (q.price == null) continue;
+        quotes.set(q.symbol.toUpperCase(), { ...q, symbol: q.symbol.toUpperCase(), asOf });
       }
     }
 
-    const fx = fresh.get(FX_SYMBOL)?.price ?? 1.37;
+    const fxQuote = quotes.get(FX_SYMBOL);
+    const tickers = Array.from(quotes.values()).filter((q) => q.symbol !== FX_SYMBOL);
+    const pricesAsOf = tickers
+      .map((q) => q.asOf)
+      .filter((d): d is string => Boolean(d))
+      .sort()
+      .pop();
 
     return {
-      quotes: Array.from(fresh.values()).filter((q) => q.symbol !== FX_SYMBOL),
-      fxUsdCad: fx,
+      quotes: tickers,
+      fxUsdCad: fxQuote?.price ?? 1.37,
+      fxAsOf: fxQuote?.asOf ?? null,
+      pricesAsOf: pricesAsOf ?? fxQuote?.asOf ?? null,
       fetchedAt: new Date().toISOString(),
     };
   });
@@ -105,7 +101,7 @@ const LookupInput = z.object({ symbol: z.string().min(1) });
 
 export const lookupSymbol = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => LookupInput.parse(data))
-  .handler(async ({ data }): Promise<QuoteResult | null> => {
+  .handler(async ({ data }) => {
     const { getMarketProvider } = await import("./market.server");
     const [quote] = await getMarketProvider().fetchQuotes([data.symbol.trim().toUpperCase()]);
     return quote ?? null;

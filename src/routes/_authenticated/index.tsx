@@ -55,7 +55,17 @@ const CHART_COLORS = [
 ];
 
 function Dashboard() {
-  const { accounts, holdings, transactions, quotes, fxUsdCad, loading } = usePortfolio();
+  const {
+    accounts,
+    holdings,
+    transactions,
+    quotes,
+    fxUsdCad,
+    pricesAsOf,
+    missingPrices,
+    loading,
+  } = usePortfolio();
+
 
   const positions = useMemo(
     () => computePositions(holdings, transactions, quotes, fxUsdCad),
@@ -283,7 +293,12 @@ function Dashboard() {
             Holdings
           </h2>
           <span className="text-xs text-muted-foreground">
-            Quotes cached hourly · USD/CAD {fxUsdCad.toFixed(4)}
+            Prices as of {pricesAsOf ?? "—"} · refreshed once daily after market close ·
+            USD/CAD {fxUsdCad.toFixed(4)}
+            {missingPrices.length > 0
+              ? ` · no price available for ${missingPrices.join(", ")}`
+              : ""}
+
           </span>
         </div>
         <div className="overflow-x-auto">

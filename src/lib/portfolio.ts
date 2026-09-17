@@ -66,12 +66,29 @@ export function useQuotes(symbols: string[]) {
   });
 }
 
+/** Forces a fresh pull from the market data provider, bypassing the daily cache. */
+export function useRefreshPrices(symbols: string[]) {
+  const fetchQuotes = useServerFn(getQuotes);
+  const qc = useQueryClient();
+  const key = Array.from(new Set(symbols.map((s) => s.toUpperCase()))).sort();
+  return useMutation({
+    mutationFn: async () => fetchQuotes({ data: { symbols: key, force: true } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["quotes"] });
+    },
+  });
+}
+
 export type PortfolioData = {
   accounts: Account[];
   holdings: Holding[];
   transactions: Transaction[];
   quotes: Record<string, Quote>;
   fxUsdCad: number;
+  pricesAsOf: string | null;
+  missingPrices: string[];
+  refreshingPrices: boolean;
+  refreshPrices: () => void;
   loading: boolean;
 };
 
@@ -79,7 +96,9 @@ export function usePortfolio(): PortfolioData {
   const accounts = useAccounts();
   const holdings = useHoldings();
   const transactions = useTransactions();
-  const quotes = useQuotes((holdings.data ?? []).map((h) => h.symbol));
+  const symbols = (holdings.data ?? []).map((h) => h.symbol);
+  const quotes = useQuotes(symbols);
+  const refresh = useRefreshPrices(symbols);
 
   const quoteMap: Record<string, Quote> = {};
   for (const q of quotes.data?.quotes ?? []) {
@@ -92,15 +111,24 @@ export function usePortfolio(): PortfolioData {
     };
   }
 
+  const missingPrices = Array.from(new Set(symbols.map((s) => s.toUpperCase()))).filter(
+    (s) => quoteMap[s]?.price == null,
+  );
+
   return {
     accounts: accounts.data ?? [],
     holdings: holdings.data ?? [],
     transactions: transactions.data ?? [],
     quotes: quoteMap,
     fxUsdCad: quotes.data?.fxUsdCad ?? 1.37,
+    pricesAsOf: quotes.data?.pricesAsOf ?? null,
+    missingPrices,
+    refreshingPrices: refresh.isPending || quotes.isFetching,
+    refreshPrices: () => refresh.mutate(),
     loading: accounts.isLoading || holdings.isLoading || transactions.isLoading,
   };
 }
+
 
 export function useInvalidatePortfolio() {
   const qc = useQueryClient();

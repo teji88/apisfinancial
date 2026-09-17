@@ -90,6 +90,7 @@ export type Database = {
       }
       price_cache: {
         Row: {
+          as_of: string | null
           currency: string | null
           name: string | null
           previous_close: number | null
@@ -98,6 +99,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          as_of?: string | null
           currency?: string | null
           name?: string | null
           previous_close?: number | null
@@ -106,6 +108,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          as_of?: string | null
           currency?: string | null
           name?: string | null
           previous_close?: number | null
