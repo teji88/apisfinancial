@@ -482,6 +482,224 @@ function LedgerPage() {
           </Table>
         </div>
       </div>
+
+      {editing ? (
+        <EditTransactionDialog
+          transaction={editing}
+          accounts={accounts}
+          holdings={holdings}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function EditTransactionDialog({
+  transaction,
+  accounts,
+  holdings,
+  onClose,
+}: {
+  transaction: Transaction;
+  accounts: Account[];
+  holdings: Holding[];
+  onClose: () => void;
+}) {
+  const updateTransaction = useUpdateTransaction();
+  const fxOnDate = useServerFn(getFxRateOn);
+  const holding = holdings.find((h) => h.id === transaction.holding_id);
+
+  const [accountId, setAccountId] = useState(transaction.account_id);
+  const [type, setType] = useState(transaction.transaction_type);
+  const [symbol, setSymbol] = useState(holding?.symbol ?? "");
+  const [date, setDate] = useState(transaction.transaction_date);
+  const [units, setUnits] = useState(String(transaction.units ?? 0));
+  const [price, setPrice] = useState(String(transaction.price_per_unit ?? 0));
+  const [amount, setAmount] = useState(transaction.amount == null ? "" : String(transaction.amount));
+  const [currency, setCurrency] = useState(transaction.currency);
+  const [fxRate, setFxRate] = useState(String(transaction.fx_rate ?? 1));
+  const [fee, setFee] = useState(String(transaction.fee ?? 0));
+
+  const isCash = CASH_TYPES.includes(type);
+
+  async function pullRate() {
+    if (currency !== "USD") {
+      setFxRate("1");
+      return;
+    }
+    const res = await fxOnDate({ data: { date } });
+    if (res.rate) setFxRate(res.rate.toFixed(4));
+    else toast.error("No published rate for that date.");
+  }
+
+  async function save() {
+    try {
+      await updateTransaction.mutateAsync({
+        id: transaction.id,
+        accountId,
+        symbol: isCash ? "" : symbol,
+        name: holding?.name ?? null,
+        assetType: holding?.asset_type ?? "Stock",
+        transactionType: type,
+        units: isCash ? 0 : Number(units || 0),
+        pricePerUnit: isCash ? 0 : Number(price || 0),
+        amount:
+          isCash || type === "DIVIDEND" ? Number(amount || 0) || null : null,
+        currency,
+        fxRate: Number(fxRate || 1),
+        fee: Number(fee || 0),
+        date,
+      });
+      toast.success("Transaction updated");
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the change");
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit transaction</DialogTitle>
+          <DialogDescription>
+            Correcting a figure here updates your ACB, returns and retirement plan straight away.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>Account</Label>
+            <Select value={accountId} onValueChange={setAccountId}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.account_type} · {a.account_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Type</Label>
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TRANSACTION_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-date">Date</Label>
+            <Input
+              id="edit-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Currency</Label>
+            <Select value={currency} onValueChange={setCurrency}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CAD">CAD</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {!isCash ? (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-symbol">Symbol</Label>
+                <Input
+                  id="edit-symbol"
+                  value={symbol}
+                  onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-units">Units</Label>
+                <Input
+                  id="edit-units"
+                  type="number"
+                  step="any"
+                  value={units}
+                  onChange={(e) => setUnits(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-price">Price per unit</Label>
+                <Input
+                  id="edit-price"
+                  type="number"
+                  step="any"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+              </div>
+            </>
+          ) : null}
+          {isCash || type === "DIVIDEND" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-amount">Amount</Label>
+              <Input
+                id="edit-amount"
+                type="number"
+                step="any"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </div>
+          ) : null}
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-fx">FX rate to CAD</Label>
+            <div className="flex gap-2">
+              <Input
+                id="edit-fx"
+                type="number"
+                step="any"
+                value={fxRate}
+                onChange={(e) => setFxRate(e.target.value)}
+              />
+              <Button type="button" variant="outline" onClick={() => void pullRate()}>
+                Use rate on date
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-fee">Commission / fee</Label>
+            <Input
+              id="edit-fee"
+              type="number"
+              step="any"
+              value={fee}
+              onChange={(e) => setFee(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => void save()} disabled={updateTransaction.isPending}>
+            Save changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
