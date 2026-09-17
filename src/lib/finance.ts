@@ -216,10 +216,14 @@ function sortByDate(a: Transaction, b: Transaction): number {
   return a.transaction_date.localeCompare(b.transaction_date);
 }
 
-/** Uninvested cash balance (CAD) held inside an account. */
-export function cashBalance(transactions: Transaction[]): number {
+/**
+ * Uninvested cash balance (CAD) held inside an account.
+ * Accounts that do not track cash contribute nothing.
+ */
+export function cashBalance(transactions: Transaction[], cashAccounts?: Set<string>): number {
   let cash = 0;
   for (const t of transactions) {
+    if (!tracksCash(t, cashAccounts)) continue;
     switch (t.transaction_type) {
       case "DEPOSIT":
         cash += grossCad(t);
@@ -248,14 +252,34 @@ export function cashBalance(transactions: Transaction[]): number {
 
 export type CashFlow = { date: Date; amount: number };
 
-/** External cash flows only: deposits (-) and withdrawals (+) from the investor's view. */
-export function externalFlows(transactions: Transaction[]): CashFlow[] {
+/**
+ * External cash flows from the investor's view: money put in is negative,
+ * money taken out is positive.
+ * Cash-tracking accounts count deposits and withdrawals. Accounts without a
+ * cash balance count the cost of every purchase as money put in, and sale
+ * proceeds and dividends as money taken out.
+ */
+export function externalFlows(
+  transactions: Transaction[],
+  cashAccounts?: Set<string>,
+): CashFlow[] {
   const flows: CashFlow[] = [];
   for (const t of transactions) {
-    if (t.transaction_type === "DEPOSIT") {
-      flows.push({ date: new Date(t.transaction_date), amount: -grossCad(t) });
-    } else if (t.transaction_type === "WITHDRAWAL") {
-      flows.push({ date: new Date(t.transaction_date), amount: grossCad(t) });
+    const date = new Date(t.transaction_date);
+    if (tracksCash(t, cashAccounts)) {
+      if (t.transaction_type === "DEPOSIT") {
+        flows.push({ date, amount: -grossCad(t) });
+      } else if (t.transaction_type === "WITHDRAWAL") {
+        flows.push({ date, amount: grossCad(t) });
+      }
+      continue;
+    }
+    if (t.transaction_type === "BUY") {
+      flows.push({ date, amount: -(grossCad(t) + feeCad(t)) });
+    } else if (t.transaction_type === "SELL") {
+      flows.push({ date, amount: grossCad(t) - feeCad(t) });
+    } else if (t.transaction_type === "DIVIDEND") {
+      flows.push({ date, amount: grossCad(t) });
     }
   }
   return flows.sort((a, b) => a.date.getTime() - b.date.getTime());
