@@ -27,3 +27,10 @@
 - [x] RRIF minimums, LIF maximums, age-71 conversions
 - [x] Engine 1: when can I retire (depletion chart)
 - [x] Engine 2: tax-efficient drawdown solver + year-by-year matrix
+
+## Phase 6 — Retirement planner rebuild (done)
+- CPP from past/future earnings and years worked; OAS from years of Canadian residence
+- Savings split across TFSA / RRSP / non-registered
+- Full spouse profile (earnings, residence, CPP/OAS timing, balances) with pension splitting
+- Early registered meltdown to limit forced RRIF income and OAS clawback
+- Rebuilt page: summary cards, income sources chart, balances chart, year-by-year and per-person tables
