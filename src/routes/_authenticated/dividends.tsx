@@ -288,13 +288,25 @@ function DividendsPage() {
                     {p.amount.toFixed(2)} {p.currency}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      disabled={recording === p.holdingId + p.exDivDate}
-                      onClick={() => void record(p)}
-                    >
-                      Approve &amp; record
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        disabled={recording === p.holdingId + p.exDivDate}
+                        onClick={() => void record(p)}
+                      >
+                        Approve &amp; record
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          saveDismissed([...dismissed, p.holdingId + p.exDivDate]);
+                          toast.message(`Skipped the ${p.symbol} payment`);
+                        }}
+                      >
+                        Skip
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
