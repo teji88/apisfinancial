@@ -1,0 +1,18 @@
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS annual_savings numeric NOT NULL DEFAULT 12000,
+  ADD COLUMN IF NOT EXISTS save_pct_tfsa numeric NOT NULL DEFAULT 40,
+  ADD COLUMN IF NOT EXISTS save_pct_rrsp numeric NOT NULL DEFAULT 40,
+  ADD COLUMN IF NOT EXISTS save_pct_nonreg numeric NOT NULL DEFAULT 20,
+  ADD COLUMN IF NOT EXISTS cpp_avg_income numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS cpp_years_worked integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS cpp_future_income numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS oas_years_in_canada integer NOT NULL DEFAULT 40,
+  ADD COLUMN IF NOT EXISTS spouse_retirement_age integer,
+  ADD COLUMN IF NOT EXISTS spouse_cpp_avg_income numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS spouse_cpp_years_worked integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS spouse_cpp_future_income numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS spouse_oas_years_in_canada integer NOT NULL DEFAULT 40,
+  ADD COLUMN IF NOT EXISTS spouse_cpp_start_age integer NOT NULL DEFAULT 65,
+  ADD COLUMN IF NOT EXISTS spouse_oas_start_age integer NOT NULL DEFAULT 65,
+  ADD COLUMN IF NOT EXISTS spouse_lira numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS spouse_nonreg numeric NOT NULL DEFAULT 0;

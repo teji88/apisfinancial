@@ -132,9 +132,13 @@ export type Database = {
       }
       profiles: {
         Row: {
+          annual_savings: number
           base_currency: string
+          cpp_avg_income: number
+          cpp_future_income: number
           cpp_pct: number
           cpp_start_age: number
+          cpp_years_worked: number
           created_at: string
           current_age: number | null
           desired_income: number
@@ -146,23 +150,40 @@ export type Database = {
           manual_override: boolean
           marital_status: string
           oas_start_age: number
+          oas_years_in_canada: number
           override_fhsa: number
           override_lira: number
           override_nonreg: number
           override_rrsp: number
           override_tfsa: number
           province: string
+          save_pct_nonreg: number
+          save_pct_rrsp: number
+          save_pct_tfsa: number
           spouse_age: number | null
+          spouse_cpp_avg_income: number
+          spouse_cpp_future_income: number
+          spouse_cpp_start_age: number
+          spouse_cpp_years_worked: number
           spouse_income: number
+          spouse_lira: number
+          spouse_nonreg: number
+          spouse_oas_start_age: number
+          spouse_oas_years_in_canada: number
+          spouse_retirement_age: number | null
           spouse_rrsp: number
           spouse_tfsa: number
           target_retirement_age: number | null
           updated_at: string
         }
         Insert: {
+          annual_savings?: number
           base_currency?: string
+          cpp_avg_income?: number
+          cpp_future_income?: number
           cpp_pct?: number
           cpp_start_age?: number
+          cpp_years_worked?: number
           created_at?: string
           current_age?: number | null
           desired_income?: number
@@ -174,23 +195,40 @@ export type Database = {
           manual_override?: boolean
           marital_status?: string
           oas_start_age?: number
+          oas_years_in_canada?: number
           override_fhsa?: number
           override_lira?: number
           override_nonreg?: number
           override_rrsp?: number
           override_tfsa?: number
           province?: string
+          save_pct_nonreg?: number
+          save_pct_rrsp?: number
+          save_pct_tfsa?: number
           spouse_age?: number | null
+          spouse_cpp_avg_income?: number
+          spouse_cpp_future_income?: number
+          spouse_cpp_start_age?: number
+          spouse_cpp_years_worked?: number
           spouse_income?: number
+          spouse_lira?: number
+          spouse_nonreg?: number
+          spouse_oas_start_age?: number
+          spouse_oas_years_in_canada?: number
+          spouse_retirement_age?: number | null
           spouse_rrsp?: number
           spouse_tfsa?: number
           target_retirement_age?: number | null
           updated_at?: string
         }
         Update: {
+          annual_savings?: number
           base_currency?: string
+          cpp_avg_income?: number
+          cpp_future_income?: number
           cpp_pct?: number
           cpp_start_age?: number
+          cpp_years_worked?: number
           created_at?: string
           current_age?: number | null
           desired_income?: number
@@ -202,14 +240,27 @@ export type Database = {
           manual_override?: boolean
           marital_status?: string
           oas_start_age?: number
+          oas_years_in_canada?: number
           override_fhsa?: number
           override_lira?: number
           override_nonreg?: number
           override_rrsp?: number
           override_tfsa?: number
           province?: string
+          save_pct_nonreg?: number
+          save_pct_rrsp?: number
+          save_pct_tfsa?: number
           spouse_age?: number | null
+          spouse_cpp_avg_income?: number
+          spouse_cpp_future_income?: number
+          spouse_cpp_start_age?: number
+          spouse_cpp_years_worked?: number
           spouse_income?: number
+          spouse_lira?: number
+          spouse_nonreg?: number
+          spouse_oas_start_age?: number
+          spouse_oas_years_in_canada?: number
+          spouse_retirement_age?: number | null
           spouse_rrsp?: number
           spouse_tfsa?: number
           target_retirement_age?: number | null
