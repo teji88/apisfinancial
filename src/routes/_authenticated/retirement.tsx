@@ -256,7 +256,63 @@ function RetirementPage() {
   };
 
   const rows = projection.rows;
+  // Everything on screen can be shown in today's buying power: each future year is
+  // divided back by the same inflation rate used to grow the plan.
+  const baseAge = p.current_age ?? 40;
+  const inflFactor = 1 + inputs.inflation / 100;
+  const rows = projection.rows.map((r) => {
+    const f = todayDollars ? 1 / inflFactor ** (r.age - baseAge) : 1;
+    if (f === 1) return r;
+    const s = (v: number) => v * f;
+    return {
+      ...r,
+      rrifDraw: s(r.rrifDraw),
+      lifDraw: s(r.lifDraw),
+      nonregDraw: s(r.nonregDraw),
+      tfsaDraw: s(r.tfsaDraw),
+      cpp: s(r.cpp),
+      oas: s(r.oas),
+      oasClawback: s(r.oasClawback),
+      otherIncome: s(r.otherIncome),
+      taxes: s(r.taxes),
+      spending: s(r.spending),
+      shortfall: s(r.shortfall),
+      pensionSplit: s(r.pensionSplit),
+      balances: {
+        tfsa: s(r.balances.tfsa),
+        rrsp: s(r.balances.rrsp),
+        lira: s(r.balances.lira),
+        nonreg: s(r.balances.nonreg),
+        total: s(r.balances.total),
+      },
+      people: r.people.map((x) => ({
+        ...x,
+        rrifDraw: s(x.rrifDraw),
+        lifDraw: s(x.lifDraw),
+        nonregDraw: s(x.nonregDraw),
+        tfsaDraw: s(x.tfsaDraw),
+        cpp: s(x.cpp),
+        oas: s(x.oas),
+        oasClawback: s(x.oasClawback),
+        otherIncome: s(x.otherIncome),
+        taxableIncome: s(x.taxableIncome),
+        taxes: s(x.taxes),
+        balances: {
+          tfsa: s(x.balances.tfsa),
+          rrsp: s(x.balances.rrsp),
+          lira: s(x.balances.lira),
+          nonreg: s(x.balances.nonreg),
+          total: s(x.balances.total),
+        },
+      })),
+    };
+  });
+  const totalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
+  const totalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
+  const endingBalance = rows.length ? rows[rows.length - 1]!.balances.total : 0;
+  const moneyNote = todayDollars ? "in today's dollars" : "in future dollars";
   const firstRow = rows[0];
+
   const startBalance = firstRow
     ? firstRow.balances.total +
       firstRow.rrifDraw +
