@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
+  Coins,
   LayoutDashboard,
   FileUp,
   Leaf,
