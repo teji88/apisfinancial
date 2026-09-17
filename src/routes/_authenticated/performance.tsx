@@ -16,10 +16,19 @@ import { Activity, Landmark, TrendingUp, Wallet } from "lucide-react";
 import { usePortfolio } from "@/lib/portfolio";
 import { getHistory } from "@/lib/history.functions";
 import {
-  BENCHMARKS,
+  BENCHMARK_GROUPS,
+  DEFAULT_BENCHMARKS,
   buildComparison,
+  type BenchmarkChoice,
   type SeriesMap,
 } from "@/lib/benchmark";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   annualise,
   buildValuationSeries,
