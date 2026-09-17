@@ -416,11 +416,13 @@ export function projectRetirement(input: PlannerInputs): Projection {
 
     let res = evaluate(draws);
 
-    // Step 2 — fill the income gap from registered money, but stop at the OAS
-    // clawback line. LIF room is use-it-or-lose-it, so locked-in money comes first.
+    // Step 4 — fill the income gap from registered money, stopping at the
+    // effective ceiling (age-amount clawback, then OAS clawback), widened by the
+    // tolerance when the lookahead flagged a melt-down. LIF room is
+    // use-it-or-lose-it, so locked-in money comes first.
     const regRoom = people.map((p, i) => {
       const baseOrdinary = cpp[i]! + oasGross[i]! + other[i]!;
-      const ceiling = Math.max(0, clawThreshold - baseOrdinary);
+      const ceiling = Math.max(0, ceilings[i]! - baseOrdinary);
       const lifCap = Math.max(0, Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - draws[i]!.lif);
       const regCap = Math.max(0, p.rrsp - draws[i]!.reg);
       const headroom = Math.max(0, ceiling - draws[i]!.reg - draws[i]!.lif);
