@@ -108,6 +108,8 @@ function LedgerPage() {
       setFxAuto(false);
       return;
     }
+    // A partially typed date ("2026-0") would fail server validation.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     void (async () => {
       const res = await fxOnDate({ data: { date } });
       if (cancelled) return;
