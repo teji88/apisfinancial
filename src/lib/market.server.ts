@@ -1,8 +1,14 @@
 /**
  * Market data provider abstraction.
- * The default provider is Yahoo Finance (free, EOD/delayed). A paid provider
- * can be swapped in later by adding an implementation and setting
- * MARKET_PROVIDER in the environment.
+ *
+ * Primary source: CNBC's public quote service. It batches symbols in a single
+ * request and covers both US listings (FNDX, SPY) and TSX listings (XIC.TO).
+ * Yahoo's chart endpoint is kept as a per-symbol fallback, but it rate-limits
+ * (HTTP 429) server-side traffic, so it is never relied on alone.
+ * FX uses Frankfurter (ECB reference rates) with open.er-api.com as backup.
+ *
+ * A paid provider (FMP, Polygon, Alpha Vantage) can be dropped in by adding an
+ * implementation below and returning it from getMarketProvider().
  */
 
 export type ProviderQuote = {
@@ -18,65 +24,210 @@ export interface MarketProvider {
   fetchQuotes(symbols: string[]): Promise<ProviderQuote[]>;
 }
 
-const yahooProvider: MarketProvider = {
-  name: "yahoo",
-  async fetchQuotes(symbols) {
-    const results = await Promise.all(
-      symbols.map(async (symbol): Promise<ProviderQuote> => {
-        const empty: ProviderQuote = {
-          symbol,
-          price: null,
+export const FX_SYMBOL = "USDCAD=X";
+
+const UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36";
+
+function emptyQuote(symbol: string): ProviderQuote {
+  return { symbol, price: null, previousClose: null, currency: null, name: null };
+}
+
+function num(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[$,%\s]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+type CnbcQuote = {
+  symbol?: string;
+  name?: string;
+  last?: string;
+  previous_day_closing?: string;
+  currencyCode?: string;
+};
+
+/** Batched quotes from CNBC (max ~50 symbols per call). */
+async function cnbcQuotes(symbols: string[]): Promise<Map<string, ProviderQuote>> {
+  const found = new Map<string, ProviderQuote>();
+  if (symbols.length === 0) return found;
+  const url = `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=${encodeURIComponent(
+    symbols.join("|"),
+  )}&requestMethod=itv&noform=1&partnerId=2&fund=1&exthrs=1&output=json&events=1`;
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+    if (!res.ok) {
+      console.warn(`[market] cnbc -> HTTP ${res.status}`);
+      return found;
+    }
+    const json = (await res.json()) as {
+      FormattedQuoteResult?: { FormattedQuote?: CnbcQuote | CnbcQuote[] };
+    };
+    const raw = json.FormattedQuoteResult?.FormattedQuote;
+    const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    for (const q of list) {
+      const symbol = (q.symbol ?? "").toUpperCase();
+      const price = num(q.last);
+      if (!symbol || price == null) continue;
+      found.set(symbol, {
+        symbol,
+        price,
+        previousClose: num(q.previous_day_closing),
+        currency: q.currencyCode ?? null,
+        name: q.name ?? null,
+      });
+    }
+  } catch (err) {
+    console.warn(`[market] cnbc -> ${String(err)}`);
+  }
+  return found;
+}
+
+type YahooChart = {
+  chart?: {
+    result?: Array<{
+      meta?: {
+        regularMarketPrice?: number;
+        chartPreviousClose?: number;
+        previousClose?: number;
+        currency?: string;
+        longName?: string;
+        shortName?: string;
+      };
+      indicators?: { quote?: Array<{ close?: Array<number | null> }> };
+    }>;
+  };
+};
+
+/** Fallback: one symbol from Yahoo, trying both hosts. */
+async function yahooQuote(symbol: string): Promise<ProviderQuote> {
+  for (const host of ["https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"]) {
+    try {
+      const url = `${host}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=10d`;
+      const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+      if (!res.ok) {
+        console.warn(`[market] yahoo ${symbol} via ${host} -> HTTP ${res.status}`);
+        continue;
+      }
+      const json = (await res.json()) as YahooChart;
+      const result = json.chart?.result?.[0];
+      const meta = result?.meta;
+      if (!meta) continue;
+      const closes = (result?.indicators?.quote?.[0]?.close ?? []).filter(
+        (c): c is number => typeof c === "number",
+      );
+      const price = meta.regularMarketPrice ?? closes[closes.length - 1] ?? null;
+      if (price == null) continue;
+      return {
+        symbol,
+        price,
+        previousClose:
+          meta.previousClose ?? meta.chartPreviousClose ?? closes[closes.length - 2] ?? null,
+        currency: meta.currency ?? null,
+        name: meta.longName ?? meta.shortName ?? null,
+      };
+    } catch (err) {
+      console.warn(`[market] yahoo ${symbol} via ${host} -> ${String(err)}`);
+    }
+  }
+  return emptyQuote(symbol);
+}
+
+/** USD -> CAD from the ECB reference feed, with a second key-free backup. */
+async function fetchUsdCad(): Promise<ProviderQuote> {
+  const sources = [
+    "https://api.frankfurter.app/latest?from=USD&to=CAD",
+    "https://open.er-api.com/v6/latest/USD",
+  ];
+  for (const url of sources) {
+    try {
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!res.ok) {
+        console.warn(`[market] fx ${url} -> HTTP ${res.status}`);
+        continue;
+      }
+      const json = (await res.json()) as { rates?: { CAD?: number } };
+      const rate = json.rates?.CAD;
+      if (typeof rate === "number") {
+        return {
+          symbol: FX_SYMBOL,
+          price: rate,
           previousClose: null,
-          currency: null,
-          name: null,
+          currency: "CAD",
+          name: "US Dollar / Canadian Dollar",
         };
-        try {
-          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
-            symbol,
-          )}?interval=1d&range=5d`;
-          const res = await fetch(url, {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
-              Accept: "application/json",
-            },
-          });
-          if (!res.ok) return empty;
-          const json = (await res.json()) as {
-            chart?: {
-              result?: Array<{
-                meta?: {
-                  regularMarketPrice?: number;
-                  chartPreviousClose?: number;
-                  previousClose?: number;
-                  currency?: string;
-                  longName?: string;
-                  shortName?: string;
-                };
-              }>;
-            };
-          };
-          const meta = json.chart?.result?.[0]?.meta;
-          if (!meta) return empty;
-          return {
-            symbol,
-            price: meta.regularMarketPrice ?? null,
-            previousClose: meta.previousClose ?? meta.chartPreviousClose ?? null,
-            currency: meta.currency ?? null,
-            name: meta.longName ?? meta.shortName ?? null,
-          };
-        } catch {
-          return empty;
-        }
-      }),
-    );
-    return results;
+      }
+    } catch (err) {
+      console.warn(`[market] fx ${url} -> ${String(err)}`);
+    }
+  }
+  return emptyQuote(FX_SYMBOL);
+}
+
+const defaultProvider: MarketProvider = {
+  name: "cnbc+frankfurter",
+  async fetchQuotes(symbols) {
+    const wanted = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)));
+    const tickers = wanted.filter((s) => s !== FX_SYMBOL);
+    const out: ProviderQuote[] = [];
+
+    // Batched primary source, in chunks so a long holdings list still works.
+    const found = new Map<string, ProviderQuote>();
+    for (let i = 0; i < tickers.length; i += 40) {
+      const batch = await cnbcQuotes(tickers.slice(i, i + 40));
+      batch.forEach((quote, symbol) => found.set(symbol, quote));
+    }
+
+    for (const symbol of tickers) {
+      const hit = found.get(symbol);
+      out.push(hit ?? (await yahooQuote(symbol)));
+    }
+
+    if (wanted.includes(FX_SYMBOL)) {
+      const fx = await fetchUsdCad();
+      out.push(fx.price != null ? fx : await yahooQuote(FX_SYMBOL));
+    }
+
+    return out;
   },
 };
 
 export function getMarketProvider(): MarketProvider {
-  // Future providers (Polygon, FMP, Alpha Vantage) register here.
-  return yahooProvider;
+  // Future providers (FMP, Polygon, Alpha Vantage) register here.
+  return defaultProvider;
 }
 
-export const FX_SYMBOL = "USDCAD=X";
+/** Shared refresh used by the app and by the daily scheduled job. */
+export async function refreshPrices(symbols: string[]): Promise<{
+  quotes: ProviderQuote[];
+  saved: number;
+  asOf: string;
+}> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const wanted = Array.from(
+    new Set([...symbols.map((s) => s.trim().toUpperCase()).filter(Boolean), FX_SYMBOL]),
+  );
+  const quotes = await getMarketProvider().fetchQuotes(wanted);
+  const asOf = new Date().toISOString().slice(0, 10);
+  const rows = quotes
+    .filter((q) => q.price != null)
+    .map((q) => ({
+      symbol: q.symbol.toUpperCase(),
+      price: q.price,
+      previous_close: q.previousClose,
+      currency: q.currency,
+      name: q.name,
+      as_of: asOf,
+      updated_at: new Date().toISOString(),
+    }));
+  if (rows.length > 0) {
+    const { error } = await supabaseAdmin
+      .from("price_cache")
+      .upsert(rows, { onConflict: "symbol" });
+    if (error) console.error(`[market] price_cache upsert failed: ${error.message}`);
+  }
+  return { quotes, saved: rows.length, asOf };
+}

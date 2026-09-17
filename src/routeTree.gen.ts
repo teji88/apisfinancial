@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
 import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated/ledger'
+import { Route as ApiPublicRefreshPricesRouteImport } from './routes/api/public/refresh-prices'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -39,18 +40,25 @@ const AuthenticatedLedgerRoute = AuthenticatedLedgerRouteImport.update({
   path: '/ledger',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicRefreshPricesRoute = ApiPublicRefreshPricesRouteImport.update({
+  id: '/api/public/refresh-prices',
+  path: '/api/public/refresh-prices',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/ledger': typeof AuthenticatedLedgerRoute
+  '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/ledger': typeof AuthenticatedLedgerRoute
   '/': typeof AuthenticatedIndexRoute
+  '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,12 +67,14 @@ export interface FileRoutesById {
   '/_authenticated/accounts': typeof AuthenticatedAccountsRoute
   '/_authenticated/ledger': typeof AuthenticatedLedgerRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/accounts' | '/ledger'
+  fullPaths:
+    '/' | '/auth' | '/accounts' | '/ledger' | '/api/public/refresh-prices'
   fileRoutesByTo: FileRoutesByTo
-  to: '/auth' | '/accounts' | '/ledger' | '/'
+  to: '/auth' | '/accounts' | '/ledger' | '/' | '/api/public/refresh-prices'
   id:
     | '__root__'
     | '/_authenticated'
@@ -72,11 +82,13 @@ export interface FileRouteTypes {
     | '/_authenticated/accounts'
     | '/_authenticated/ledger'
     | '/_authenticated/'
+    | '/api/public/refresh-prices'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicRefreshPricesRoute: typeof ApiPublicRefreshPricesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -116,6 +128,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLedgerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/refresh-prices': {
+      id: '/api/public/refresh-prices'
+      path: '/api/public/refresh-prices'
+      fullPath: '/api/public/refresh-prices'
+      preLoaderRoute: typeof ApiPublicRefreshPricesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -137,6 +156,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicRefreshPricesRoute: ApiPublicRefreshPricesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

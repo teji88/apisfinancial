@@ -6,6 +6,8 @@ import {
   LogOut,
   Moon,
   Receipt,
+  RefreshCw,
+
   Sun,
   Wallet,
 } from "lucide-react";
@@ -52,7 +54,17 @@ function AppLayout() {
 }
 
 function AppHeader() {
-  const { accounts, holdings, transactions, quotes, fxUsdCad } = usePortfolio();
+  const {
+    accounts,
+    holdings,
+    transactions,
+    quotes,
+    fxUsdCad,
+    pricesAsOf,
+    refreshingPrices,
+    refreshPrices,
+  } = usePortfolio();
+
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -116,9 +128,23 @@ function AppHeader() {
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">USD/CAD</p>
             <p className="num text-sm font-semibold">{fxUsdCad.toFixed(4)}</p>
           </div>
+          <div className="hidden text-right lg:block">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Prices as of</p>
+            <p className="num text-sm font-semibold">{pricesAsOf ?? "—"}</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Refresh prices"
+            disabled={refreshingPrices}
+            onClick={() => refreshPrices()}
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshingPrices ? "animate-spin" : ""}`} />
+          </Button>
           <Button variant="ghost" size="icon" onClick={() => setDark(!dark)} aria-label="Theme">
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
+
           <Button
             variant="ghost"
             size="icon"
