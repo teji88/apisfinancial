@@ -277,7 +277,7 @@ export function buildComparison(
   const portfolioMwrr =
     flows.length > 0 ? xirr([...xirrFlows, { date: new Date(end), amount: portfolioEndValue }]) : null;
 
-  const benchmarks: BenchmarkResult[] = BENCHMARKS.map((b) => {
+  const benchmarks: BenchmarkResult[] = selection.map((b) => {
     const hist = history.get(b.symbol.toUpperCase());
     if (!hist || hist.points.length === 0) {
       return { ...b, values: grid.map(() => 0), endValue: 0, mwrr: null, available: false };
