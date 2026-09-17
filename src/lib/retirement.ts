@@ -10,10 +10,19 @@ import { computeTax, nextFederalBracketTop, type ProvinceCode } from "./tax";
 
 /* ---------------------------------- CPP / OAS --------------------------------- */
 
-export const CPP_MAX_MONTHLY_65 = 1_507.65;
-export const OAS_MAX_MONTHLY_65 = 734.95;
+/** 2026 maximum CPP at 65: $18,091/year. */
+export const CPP_MAX_ANNUAL_65 = 18_091;
+export const CPP_MAX_MONTHLY_65 = CPP_MAX_ANNUAL_65 / 12;
+/** 2026 maximum OAS at 65: $8,732/year. */
+export const OAS_MAX_ANNUAL_65 = 8_732;
+export const OAS_MAX_MONTHLY_65 = OAS_MAX_ANNUAL_65 / 12;
 export const OAS_CLAWBACK_THRESHOLD = 95_323;
 export const OAS_CLAWBACK_RATE = 0.15;
+
+/** Inflation-stripped growth rate: everything in the plan is modelled in 2026 dollars. */
+export function realReturn(nominalPct: number, inflationPct: number): number {
+  return (1 + nominalPct / 100) / (1 + inflationPct / 100) - 1;
+}
 /** Year's maximum pensionable earnings (2026 estimate). */
 export const YMPE = 71_300;
 /** Contributory years counted after the 17% general drop-out. */
