@@ -17,7 +17,6 @@ import { Route as AuthenticatedDividendsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
 import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated/ledger'
 import { Route as AuthenticatedPerformanceRouteImport } from './routes/_authenticated/performance'
-import { Route as ApiPublicHistProbeRouteImport } from './routes/api/public/hist-probe'
 import { Route as ApiPublicRefreshPricesRouteImport } from './routes/api/public/refresh-prices'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -60,11 +59,6 @@ const AuthenticatedPerformanceRoute =
     path: '/performance',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const ApiPublicHistProbeRoute = ApiPublicHistProbeRouteImport.update({
-  id: '/api/public/hist-probe',
-  path: '/api/public/hist-probe',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiPublicRefreshPricesRoute = ApiPublicRefreshPricesRouteImport.update({
   id: '/api/public/refresh-prices',
   path: '/api/public/refresh-prices',
@@ -79,7 +73,6 @@ export interface FileRoutesByFullPath {
   '/import': typeof AuthenticatedImportRoute
   '/ledger': typeof AuthenticatedLedgerRoute
   '/performance': typeof AuthenticatedPerformanceRoute
-  '/api/public/hist-probe': typeof ApiPublicHistProbeRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
 export interface FileRoutesByTo {
@@ -90,7 +83,6 @@ export interface FileRoutesByTo {
   '/ledger': typeof AuthenticatedLedgerRoute
   '/performance': typeof AuthenticatedPerformanceRoute
   '/': typeof AuthenticatedIndexRoute
-  '/api/public/hist-probe': typeof ApiPublicHistProbeRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
 export interface FileRoutesById {
@@ -103,7 +95,6 @@ export interface FileRoutesById {
   '/_authenticated/ledger': typeof AuthenticatedLedgerRoute
   '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/api/public/hist-probe': typeof ApiPublicHistProbeRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
 export interface FileRouteTypes {
@@ -116,7 +107,6 @@ export interface FileRouteTypes {
     | '/import'
     | '/ledger'
     | '/performance'
-    | '/api/public/hist-probe'
     | '/api/public/refresh-prices'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -127,7 +117,6 @@ export interface FileRouteTypes {
     | '/ledger'
     | '/performance'
     | '/'
-    | '/api/public/hist-probe'
     | '/api/public/refresh-prices'
   id:
     | '__root__'
@@ -139,14 +128,12 @@ export interface FileRouteTypes {
     | '/_authenticated/ledger'
     | '/_authenticated/performance'
     | '/_authenticated/'
-    | '/api/public/hist-probe'
     | '/api/public/refresh-prices'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
-  ApiPublicHistProbeRoute: typeof ApiPublicHistProbeRoute
   ApiPublicRefreshPricesRoute: typeof ApiPublicRefreshPricesRoute
 }
 
@@ -208,13 +195,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPerformanceRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/public/hist-probe': {
-      id: '/api/public/hist-probe'
-      path: '/api/public/hist-probe'
-      fullPath: '/api/public/hist-probe'
-      preLoaderRoute: typeof ApiPublicHistProbeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/refresh-prices': {
       id: '/api/public/refresh-prices'
       path: '/api/public/refresh-prices'
@@ -249,7 +229,6 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
-  ApiPublicHistProbeRoute: ApiPublicHistProbeRoute,
   ApiPublicRefreshPricesRoute: ApiPublicRefreshPricesRoute,
 }
 export const routeTree = rootRouteImport

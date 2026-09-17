@@ -317,7 +317,7 @@ function StatCard({
   icon: React.ReactNode;
   label: string;
   value: string;
-  hint?: string;
+  hint?: string | undefined;
 }) {
   return (
     <div className="panel p-4">
