@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -16,10 +16,19 @@ import { Activity, Landmark, TrendingUp, Wallet } from "lucide-react";
 import { usePortfolio } from "@/lib/portfolio";
 import { getHistory } from "@/lib/history.functions";
 import {
-  BENCHMARKS,
+  BENCHMARK_GROUPS,
+  DEFAULT_BENCHMARKS,
   buildComparison,
+  type BenchmarkChoice,
   type SeriesMap,
 } from "@/lib/benchmark";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   annualise,
   buildValuationSeries,
@@ -72,9 +81,24 @@ function PerformancePage() {
   }, [transactions]);
   const end = new Date().toISOString().slice(0, 10);
 
+  const [picked, setPicked] = useState<Record<string, string>>(() =>
+    Object.fromEntries(DEFAULT_BENCHMARKS.map((b) => [b.id, b.symbol])),
+  );
+
+  const selection: BenchmarkChoice[] = useMemo(
+    () =>
+      BENCHMARK_GROUPS.map((g) => {
+        const symbol = picked[g.id] ?? g.options[0]!.symbol;
+        const option = g.options.find((o) => o.symbol === symbol) ?? g.options[0]!;
+        return { id: g.id, label: g.label, symbol: option.symbol, note: option.note };
+      }),
+    [picked],
+  );
+
   const symbols = useMemo(() => {
     const own = holdings.map((h) => h.symbol.toUpperCase());
-    return Array.from(new Set([...own, ...BENCHMARKS.map((b) => b.symbol)])).sort();
+    const benches = BENCHMARK_GROUPS.flatMap((g) => g.options.map((o) => o.symbol));
+    return Array.from(new Set([...own, ...benches])).sort();
   }, [holdings]);
 
   const history = useQuery({
@@ -114,8 +138,9 @@ function PerformancePage() {
       history.data.fx,
       fxUsdCad,
       portfolioValue,
+      selection,
     );
-  }, [history.data, transactions, holdings, fxUsdCad, portfolioValue]);
+  }, [history.data, transactions, holdings, fxUsdCad, portfolioValue, selection]);
 
   const chartData = useMemo(() => {
     if (!comparison) return [];
@@ -191,6 +216,29 @@ function PerformancePage() {
           <span className="text-xs text-muted-foreground">
             {start} → {end}
           </span>
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          {BENCHMARK_GROUPS.map((g) => (
+            <div key={g.id} className="space-y-1">
+              <p className="text-xs text-muted-foreground">{g.label}</p>
+              <Select
+                value={picked[g.id] ?? g.options[0]!.symbol}
+                onValueChange={(v) => setPicked((prev) => ({ ...prev, [g.id]: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {g.options.map((o) => (
+                    <SelectItem key={o.symbol} value={o.symbol}>
+                      {o.symbol} · {o.note}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
         </div>
 
         {loading || history.isLoading ? (
@@ -272,7 +320,7 @@ function PerformancePage() {
               </TableCell>
               <TableCell className="num text-right text-muted-foreground">—</TableCell>
             </TableRow>
-            {(comparison?.benchmarks ?? BENCHMARKS.map((b) => ({ ...b, available: false, endValue: 0, mwrr: null, values: [] }))).map(
+            {(comparison?.benchmarks ?? selection.map((b) => ({ ...b, available: false, endValue: 0, mwrr: null, values: [] }))).map(
               (b) => {
                 const diff = b.available ? portfolioValue - b.endValue : null;
                 return (

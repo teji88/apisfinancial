@@ -1,9 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, CheckCircle2, FileUp, Loader2, Sparkles, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileUp,
+  Loader2,
+  PencilLine,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { parseStatement, type ParsedTransaction } from "@/lib/import.functions";
+import { getFxRateOn } from "@/lib/history.functions";
 import { useAccounts, useAddTransaction } from "@/lib/portfolio";
 import { ACCOUNT_TYPES, TRANSACTION_TYPES } from "@/lib/finance";
 import { Button } from "@/components/ui/button";
@@ -72,6 +81,7 @@ function ImportPage() {
   const accounts = useAccounts();
   const addTransaction = useAddTransaction();
   const parse = useServerFn(parseStatement);
+  const fxOnDate = useServerFn(getFxRateOn);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [dragging, setDragging] = useState(false);
@@ -87,6 +97,31 @@ function ImportPage() {
       (a) => a.account_type.toLowerCase() === parsed.account_type.toLowerCase(),
     );
     return byType?.id ?? accountList[0]?.id ?? "";
+  }
+
+  /** Blank row so a transaction can be typed in without a file. */
+  function addManualRow() {
+    const first = accountList[0];
+    setRows((prev) => [
+      ...prev,
+      {
+        account_type: first?.account_type ?? "Non-Registered",
+        account_hint: null,
+        date: new Date().toISOString().slice(0, 10),
+        type: "BUY",
+        symbol: "",
+        name: null,
+        quantity: 0,
+        price: 0,
+        amount: null,
+        currency: first?.currency ?? "CAD",
+        fee: 0,
+        confidence: 1,
+        note: "Entered by hand",
+        rowId: `manual-${Date.now()}-${prev.length}`,
+        accountId: first?.id ?? "",
+      },
+    ]);
   }
 
   async function handleFile(file: File) {
@@ -138,6 +173,16 @@ function ImportPage() {
     }
     setSaving(true);
     let saved = 0;
+    const rateCache = new Map<string, number>();
+    const rateFor = async (currency: string, date: string): Promise<number> => {
+      if (currency !== "USD") return 1;
+      const cached = rateCache.get(date);
+      if (cached) return cached;
+      const res = await fxOnDate({ data: { date } });
+      const rate = res.rate ?? 1;
+      rateCache.set(date, rate);
+      return rate;
+    };
     try {
       for (const row of rows) {
         const units = row.quantity ?? 0;
@@ -155,7 +200,7 @@ function ImportPage() {
             ? cashAmount
             : null,
           currency: row.currency,
-          fxRate: 1,
+          fxRate: await rateFor(row.currency, row.date),
           fee: row.fee ?? 0,
           date: row.date,
         });
@@ -221,10 +266,21 @@ function ImportPage() {
             </span>
             <p className="text-sm font-medium">Drag a file here</p>
             <p className="text-xs text-muted-foreground">CSV, PDF, PNG or JPEG · up to 20 MB</p>
-            <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
-              <Sparkles className="mr-1.5 h-4 w-4" />
-              Choose a file
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+                <Sparkles className="mr-1.5 h-4 w-4" />
+                Choose a file
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={accountList.length === 0}
+                onClick={addManualRow}
+              >
+                <PencilLine className="mr-1.5 h-4 w-4" />
+                Enter one by hand
+              </Button>
+            </div>
             <input
               ref={inputRef}
               type="file"

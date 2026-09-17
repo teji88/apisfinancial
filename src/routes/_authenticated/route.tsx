@@ -11,15 +11,44 @@ import {
   Receipt,
   Landmark,
   RefreshCw,
-
+  Settings,
   Sun,
+  User,
   Wallet,
 } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/lib/portfolio";
+import { useProfile, useUpdateProfile } from "@/lib/profile";
+import { PROVINCES, PROVINCE_CODES } from "@/lib/tax";
 import { formatCad, formatPct, summariseAccount } from "@/lib/finance";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated")({
   component: AppLayout,
@@ -153,16 +182,7 @@ function AppHeader() {
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Sign out"
-            onClick={() => {
-              void supabase.auth.signOut();
-            }}
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <ProfileMenu />
         </div>
       </div>
 
@@ -181,5 +201,127 @@ function AppHeader() {
         ))}
       </div>
     </header>
+  );
+}
+
+function ProfileMenu() {
+  const profileQuery = useProfile();
+  const updateProfile = useUpdateProfile();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [province, setProvince] = useState("AB");
+  const [currency, setCurrency] = useState("CAD");
+
+  const profile = profileQuery.data;
+
+  function openSettings() {
+    setName(profile?.display_name ?? "");
+    setProvince(profile?.province ?? "AB");
+    setCurrency(profile?.base_currency ?? "CAD");
+    setOpen(true);
+  }
+
+  async function save() {
+    try {
+      await updateProfile.mutateAsync({
+        display_name: name.trim() || null,
+        province,
+        base_currency: currency,
+      });
+      toast.success("Profile saved");
+      setOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save your profile");
+    }
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label="Profile">
+            <User className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel>
+            <p className="text-sm font-medium">{profile?.display_name ?? "Your profile"}</p>
+            <p className="text-xs font-normal text-muted-foreground">
+              {profile?.province ?? "AB"} · {profile?.base_currency ?? "CAD"}
+            </p>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setTimeout(openSettings, 0)}>
+            <Settings className="mr-2 h-4 w-4" />
+            Profile settings
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              void supabase.auth.signOut();
+            }}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Profile settings</DialogTitle>
+            <DialogDescription>
+              Your home province sets the tax rates used across the retirement plan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-name">Name</Label>
+              <Input
+                id="profile-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Province</Label>
+              <Select value={province} onValueChange={setProvince}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROVINCE_CODES.map((code) => (
+                    <SelectItem key={code} value={code}>
+                      {PROVINCES[code].name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Display currency</Label>
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CAD">CAD</SelectItem>
+                  <SelectItem value="USD">USD</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void save()} disabled={updateProfile.isPending}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

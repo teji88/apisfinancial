@@ -10,13 +10,50 @@ import type { HistoryPoint } from "./history.server";
 import type { Holding, Transaction } from "./finance";
 import { xirr } from "./finance";
 
-export const BENCHMARKS = [
-  { id: "sp500", label: "S&P 500", symbol: "IVV", note: "iShares Core S&P 500 (USD)" },
-  { id: "tsx", label: "S&P/TSX Composite", symbol: "XIC.TO", note: "iShares Core S&P/TSX Capped (CAD)" },
-  { id: "global", label: "All-Equity Global", symbol: "XEQT.TO", note: "iShares All-Equity ETF Portfolio (CAD)" },
-] as const;
+export type BenchmarkOption = { symbol: string; note: string };
+export type BenchmarkGroup = { id: string; label: string; options: BenchmarkOption[] };
 
-export type BenchmarkId = (typeof BENCHMARKS)[number]["id"];
+/** Each index can be tracked with either of the common Canadian-listed proxies. */
+export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
+  {
+    id: "sp500",
+    label: "S&P 500",
+    options: [
+      { symbol: "IVV", note: "iShares Core S&P 500 (USD)" },
+      { symbol: "SPY", note: "SPDR S&P 500 ETF Trust (USD)" },
+    ],
+  },
+  {
+    id: "tsx",
+    label: "S&P/TSX Composite",
+    options: [
+      { symbol: "XIC.TO", note: "iShares Core S&P/TSX Capped (CAD)" },
+      { symbol: "VCN.TO", note: "Vanguard FTSE Canada All Cap (CAD)" },
+    ],
+  },
+  {
+    id: "global",
+    label: "All-Equity Global",
+    options: [
+      { symbol: "XEQT.TO", note: "iShares All-Equity ETF Portfolio (CAD)" },
+      { symbol: "VEQT.TO", note: "Vanguard All-Equity ETF Portfolio (CAD)" },
+    ],
+  },
+];
+
+export type BenchmarkChoice = { id: string; label: string; symbol: string; note: string };
+
+export const DEFAULT_BENCHMARKS: BenchmarkChoice[] = BENCHMARK_GROUPS.map((g) => ({
+  id: g.id,
+  label: g.label,
+  symbol: g.options[0]!.symbol,
+  note: g.options[0]!.note,
+}));
+
+/** Default proxies, kept for callers that don't offer a choice. */
+export const BENCHMARKS = DEFAULT_BENCHMARKS;
+
+export type BenchmarkId = string;
 
 export type SeriesMap = Map<string, { currency: string; points: HistoryPoint[] }>;
 
@@ -222,6 +259,7 @@ export function buildComparison(
   fx: HistoryPoint[],
   fxNow: number,
   portfolioEndValue: number,
+  selection: BenchmarkChoice[] = DEFAULT_BENCHMARKS,
 ): ComparisonResult | null {
   const flows = contributionFlows(transactions);
   if (transactions.length === 0) return null;
@@ -239,7 +277,7 @@ export function buildComparison(
   const portfolioMwrr =
     flows.length > 0 ? xirr([...xirrFlows, { date: new Date(end), amount: portfolioEndValue }]) : null;
 
-  const benchmarks: BenchmarkResult[] = BENCHMARKS.map((b) => {
+  const benchmarks: BenchmarkResult[] = selection.map((b) => {
     const hist = history.get(b.symbol.toUpperCase());
     if (!hist || hist.points.length === 0) {
       return { ...b, values: grid.map(() => 0), endValue: 0, mwrr: null, available: false };

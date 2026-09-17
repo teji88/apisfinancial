@@ -131,3 +131,27 @@ export async function fetchFxHistory(start: string, end: string): Promise<Histor
     return [];
   }
 }
+
+const fxDayCache = new Map<string, { at: number; value: number | null }>();
+
+/**
+ * USD→CAD rate on a specific date (the most recent published rate at or
+ * before that date — Frankfurter rolls weekends/holidays back automatically).
+ */
+export async function fetchFxRateOn(date: string): Promise<number | null> {
+  const hit = fxDayCache.get(date);
+  if (hit && Date.now() - hit.at < TTL) return hit.value;
+  try {
+    const res = await fetch(`https://api.frankfurter.app/${date}?from=USD&to=CAD`, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { rates?: { CAD?: number } };
+    const rate = json.rates?.CAD;
+    const value = typeof rate === "number" && rate > 0 ? rate : null;
+    fxDayCache.set(date, { at: Date.now(), value });
+    return value;
+  } catch {
+    return null;
+  }
+}

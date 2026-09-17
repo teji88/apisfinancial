@@ -87,6 +87,8 @@ const RRSP_TYPES = ["RRSP", "Spousal RRSP"];
 const LIRA_TYPES = ["LIRA", "LRSP"];
 const FHSA_TYPES = ["FHSA"];
 const NONREG_TYPES = ["Non-Registered", "Corporate"];
+const RESP_TYPES = ["RESP"];
+const RDSP_TYPES = ["RDSP"];
 
 function num(v: string, fallback = 0) {
   const n = Number(v.replace(/[^0-9.-]/g, ""));
@@ -101,6 +103,9 @@ function RetirementPage() {
   const [form, setForm] = useState<Profile | null>(null);
   /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
   const [clawbackTolerance, setClawbackTolerance] = useState(0);
+  /** RESP/RDSP money counted as retirement savings only when switched on. */
+  const [includeRespRdsp, setIncludeRespRdsp] = useState(false);
+
 
 
   useEffect(() => {
@@ -127,27 +132,32 @@ function RetirementPage() {
       lira: pick(LIRA_TYPES),
       fhsa: pick(FHSA_TYPES),
       nonreg: pick(NONREG_TYPES),
+      resp: pick(RESP_TYPES),
+      rdsp: pick(RDSP_TYPES),
     };
   }, [accounts, transactions, holdings, quotes, fxUsdCad]);
 
   const p = form;
 
   const balances = useMemo(() => {
+    // RESP/RDSP are earmarked for education and disability support, so they are
+    // left out of retirement income unless the user opts them in.
+    const extra = includeRespRdsp ? byType.resp + byType.rdsp : 0;
     if (p?.manual_override) {
       return {
         tfsa: p.override_tfsa ?? 0,
         rrsp: (p.override_rrsp ?? 0) + (p.override_fhsa ?? 0),
         lira: p.override_lira ?? 0,
-        nonreg: p.override_nonreg ?? 0,
+        nonreg: (p.override_nonreg ?? 0) + extra,
       };
     }
     return {
       tfsa: byType.tfsa,
       rrsp: byType.rrsp + byType.fhsa,
       lira: byType.lira,
-      nonreg: byType.nonreg,
+      nonreg: byType.nonreg + extra,
     };
-  }, [p, byType]);
+  }, [p, byType, includeRespRdsp]);
 
   const derived = useMemo(() => {
     if (!p) return null;
@@ -846,6 +856,27 @@ function RetirementPage() {
                   />
                 </Field>
               ))}
+            </div>
+          </div>
+
+          <div className="panel space-y-3 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Count RESP and RDSP money too</p>
+                <p className="text-xs text-muted-foreground">
+                  These are not retirement income — an RESP is for a child's education and an
+                  RDSP for disability support — so they are left out by default.
+                </p>
+              </div>
+              <Switch checked={includeRespRdsp} onCheckedChange={setIncludeRespRdsp} />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="RESP balance">
+                <Input type="number" disabled value={Math.round(byType.resp)} />
+              </Field>
+              <Field label="RDSP balance">
+                <Input type="number" disabled value={Math.round(byType.rdsp)} />
+              </Field>
             </div>
           </div>
 

@@ -36,3 +36,13 @@ export const getHistory = createServerFn({ method: "POST" })
 
     return { series, fx, missing };
   });
+
+const FxInput = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
+
+/** Historical USD→CAD rate for a transaction date. */
+export const getFxRateOn = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => FxInput.parse(data))
+  .handler(async ({ data }): Promise<{ date: string; rate: number | null }> => {
+    const { fetchFxRateOn } = await import("./history.server");
+    return { date: data.date, rate: await fetchFxRateOn(data.date) };
+  });
