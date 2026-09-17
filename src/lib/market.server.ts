@@ -17,6 +17,14 @@ export type ProviderQuote = {
   previousClose: number | null;
   currency: string | null;
   name: string | null;
+  /** Forward annual dividend per share, in the listing currency. */
+  dividendRate?: number | null;
+  /** Trailing/forward dividend yield in percent. */
+  dividendYield?: number | null;
+  /** Most recent or upcoming ex-dividend date (ISO). */
+  exDivDate?: string | null;
+  /** Per-share amount of that ex-dividend event. */
+  exDivAmount?: number | null;
 };
 
 export interface MarketProvider {
