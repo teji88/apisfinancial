@@ -1,18 +1,35 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { Loader2, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Pencil, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import {
   TRANSACTION_TYPES,
   formatCad,
   formatUnits,
+  type Account,
+  type Holding,
+  type Transaction,
 } from "@/lib/finance";
-import { useAddTransaction, useDeleteTransaction, usePortfolio } from "@/lib/portfolio";
+import {
+  useAddTransaction,
+  useDeleteTransaction,
+  useUpdateTransaction,
+  usePortfolio,
+} from "@/lib/portfolio";
 import { lookupSymbol } from "@/lib/market.functions";
+import { getFxRateOn } from "@/lib/history.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
