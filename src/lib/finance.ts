@@ -353,6 +353,7 @@ export function buildValuationSeries(
   holdings: Holding[],
   quotes: Record<string, Quote>,
   fxUsdCad: number,
+  cashAccounts?: Set<string>,
 ): ValuationPoint[] {
   const txns = transactions.slice().sort(sortByDate);
   if (txns.length === 0) return [];
@@ -386,35 +387,45 @@ export function buildValuationSeries(
     }
     const gross = grossCad(t);
     const fee = feeCad(t);
+    const withCash = tracksCash(t, cashAccounts);
     switch (t.transaction_type) {
       case "DEPOSIT":
-        cash += gross;
-        flowOnDate += gross;
+        if (withCash) {
+          cash += gross;
+          flowOnDate += gross;
+        }
         break;
       case "WITHDRAWAL":
-        cash -= gross;
-        flowOnDate -= gross;
+        if (withCash) {
+          cash -= gross;
+          flowOnDate -= gross;
+        }
         break;
       case "BUY":
       case "DRIP":
-        if (t.transaction_type === "BUY") cash -= gross + fee;
+        if (t.transaction_type === "BUY") {
+          if (withCash) cash -= gross + fee;
+          else flowOnDate += gross + fee;
+        }
         if (t.holding_id) {
           units.set(t.holding_id, (units.get(t.holding_id) ?? 0) + (t.units || 0));
           if (t.price_per_unit) lastPrice.set(t.holding_id, t.price_per_unit);
         }
         break;
       case "SELL":
-        cash += gross - fee;
+        if (withCash) cash += gross - fee;
+        else flowOnDate -= gross - fee;
         if (t.holding_id) {
           units.set(t.holding_id, (units.get(t.holding_id) ?? 0) - (t.units || 0));
           if (t.price_per_unit) lastPrice.set(t.holding_id, t.price_per_unit);
         }
         break;
       case "DIVIDEND":
-        cash += gross;
+        if (withCash) cash += gross;
+        else flowOnDate -= gross;
         break;
       case "FEE":
-        cash -= gross + fee;
+        if (withCash) cash -= gross + fee;
         break;
     }
   }
