@@ -361,11 +361,18 @@ export function buildValuationSeries(
 
   const units = new Map<string, number>();
   const lastPrice = new Map<string, number>();
+  // Historical points must be valued at the exchange rate that was used to
+  // convert the cash flows of the same period, otherwise a currency move
+  // between the trade date and today shows up as a fake gain or loss.
+  const lastFx = new Map<string, number>();
   let cash = 0;
 
   const points: ValuationPoint[] = [];
   let currentDate = txns[0]!.transaction_date;
   let flowOnDate = 0;
+
+  const rateFor = (t: Transaction, h: Holding | undefined): number =>
+    t.fx_rate || ((h?.currency ?? t.currency) === "USD" ? fxUsdCad : 1);
 
   const valueAt = (): number => {
     let total = cash;
@@ -373,7 +380,7 @@ export function buildValuationSeries(
       const h = holdingById.get(hid);
       if (!h || u === 0) continue;
       const p = lastPrice.get(hid) ?? 0;
-      const fx = h.currency === "USD" ? fxUsdCad : 1;
+      const fx = lastFx.get(hid) ?? (h.currency === "USD" ? fxUsdCad : 1);
       total += u * p * fx;
     }
     return total;
