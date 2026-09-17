@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -55,11 +55,39 @@ export const Route = createFileRoute("/_authenticated/dividends")({
   component: DividendsPage,
 });
 
+const DISMISSED_KEY = "maplewealth.dismissedDividends";
+
+function loadDismissed(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(DISMISSED_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 function DividendsPage() {
   const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
     usePortfolio();
   const addTransaction = useAddTransaction();
   const [recording, setRecording] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<string[]>([]);
+
+  useEffect(() => {
+    setDismissed(loadDismissed());
+  }, []);
+
+  const saveDismissed = (next: string[]) => {
+    setDismissed(next);
+    try {
+      window.localStorage.setItem(DISMISSED_KEY, JSON.stringify(next));
+    } catch {
+      /* storage unavailable — dismissal lasts for this visit only */
+    }
+  };
+
 
   const [growth, setGrowth] = useState(6);
   const [priceGrowth, setPriceGrowth] = useState(6);
@@ -77,10 +105,15 @@ function DividendsPage() {
   );
 
   const months = useMemo(() => monthlyIncome(transactions), [transactions]);
-  const pending = useMemo(
+  const allPending = useMemo(
     () => pendingDividends(rows, transactions, holdings),
     [rows, transactions, holdings],
   );
+  const pending = useMemo(
+    () => allPending.filter((p) => !dismissed.includes(p.holdingId + p.exDivDate)),
+    [allPending, dismissed],
+  );
+  const hiddenCount = allPending.length - pending.length;
 
   const totals = useMemo(() => {
     const marketValue = rows.reduce((s, r) => s + r.marketValue, 0);
@@ -208,14 +241,23 @@ function DividendsPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Ex-dividend events to record
           </h2>
-          <span className="text-xs text-muted-foreground">
+          <span className="flex items-center gap-3 text-xs text-muted-foreground">
             {pending.length} not yet in your ledger
+            {hiddenCount > 0 ? (
+              <button
+                type="button"
+                className="underline underline-offset-2 hover:text-foreground"
+                onClick={() => saveDismissed([])}
+              >
+                {hiddenCount} skipped · restore
+              </button>
+            ) : null}
           </span>
         </div>
         {pending.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">
             Nothing outstanding — every reported ex-dividend date for your holdings is already
-            recorded.
+            recorded{hiddenCount > 0 ? " or skipped" : ""}.
           </p>
         ) : (
           <Table className="mt-3">
@@ -246,13 +288,25 @@ function DividendsPage() {
                     {p.amount.toFixed(2)} {p.currency}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      disabled={recording === p.holdingId + p.exDivDate}
-                      onClick={() => void record(p)}
-                    >
-                      Approve &amp; record
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        disabled={recording === p.holdingId + p.exDivDate}
+                        onClick={() => void record(p)}
+                      >
+                        Approve &amp; record
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          saveDismissed([...dismissed, p.holdingId + p.exDivDate]);
+                          toast.message(`Skipped the ${p.symbol} payment`);
+                        }}
+                      >
+                        Skip
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
