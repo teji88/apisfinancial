@@ -255,7 +255,6 @@ function RetirementPage() {
     });
   };
 
-  const rows = projection.rows;
   // Everything on screen can be shown in today's buying power: each future year is
   // divided back by the same inflation rate used to grow the plan.
   const baseAge = p.current_age ?? 40;
