@@ -233,10 +233,11 @@ function RetirementPage() {
         rrsp: p.save_pct_rrsp ?? 40,
         nonreg: p.save_pct_nonreg ?? 20,
       },
+      clawbackTolerance,
       self,
       spouse,
     };
-  }, [p, derived, balances]);
+  }, [p, derived, balances, clawbackTolerance]);
 
   const projection = useMemo(() => (inputs ? projectRetirement(inputs) : null), [inputs]);
   const earliest = useMemo(() => (inputs ? earliestRetirementAge(inputs) : null), [inputs]);
