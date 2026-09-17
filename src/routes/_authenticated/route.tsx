@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
+  BarChart3,
   Coins,
   LayoutDashboard,
   FileUp,
@@ -27,6 +28,7 @@ const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/ledger", label: "Ledger", icon: Receipt },
   { to: "/dividends", label: "Dividends", icon: Coins },
+  { to: "/performance", label: "Performance", icon: BarChart3 },
   { to: "/accounts", label: "Accounts", icon: Wallet },
   { to: "/import", label: "Import", icon: FileUp },
 ] as const;

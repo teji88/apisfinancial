@@ -18,8 +18,8 @@
 - [x] Ex-dividend calendar + "approve & record" to the ledger
 - [x] 10-year DRIP compounder projection with growth/contribution controls
 
-## Phase 4 — benchmarking
-- [ ] Cash-flow-matched benchmark simulation vs SPY, XIC.TO, XEQT.TO (direct alpha)
+## Phase 4 — benchmarking (done)
+- [x] Cash-flow-matched benchmark simulation vs IVV, XIC.TO, XEQT.TO (direct alpha)
 
 ## Phase 5 — Canadian retirement planner
 - [ ] Assumptions + spouse inputs, manual override mode

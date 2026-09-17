@@ -16,6 +16,7 @@ import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedDividendsRouteImport } from './routes/_authenticated/dividends'
 import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
 import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated/ledger'
+import { Route as AuthenticatedPerformanceRouteImport } from './routes/_authenticated/performance'
 import { Route as ApiPublicRefreshPricesRouteImport } from './routes/api/public/refresh-prices'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -52,6 +53,12 @@ const AuthenticatedLedgerRoute = AuthenticatedLedgerRouteImport.update({
   path: '/ledger',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPerformanceRoute =
+  AuthenticatedPerformanceRouteImport.update({
+    id: '/performance',
+    path: '/performance',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiPublicRefreshPricesRoute = ApiPublicRefreshPricesRouteImport.update({
   id: '/api/public/refresh-prices',
   path: '/api/public/refresh-prices',
@@ -65,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/dividends': typeof AuthenticatedDividendsRoute
   '/import': typeof AuthenticatedImportRoute
   '/ledger': typeof AuthenticatedLedgerRoute
+  '/performance': typeof AuthenticatedPerformanceRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
 export interface FileRoutesByTo {
@@ -73,6 +81,7 @@ export interface FileRoutesByTo {
   '/dividends': typeof AuthenticatedDividendsRoute
   '/import': typeof AuthenticatedImportRoute
   '/ledger': typeof AuthenticatedLedgerRoute
+  '/performance': typeof AuthenticatedPerformanceRoute
   '/': typeof AuthenticatedIndexRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
@@ -84,6 +93,7 @@ export interface FileRoutesById {
   '/_authenticated/dividends': typeof AuthenticatedDividendsRoute
   '/_authenticated/import': typeof AuthenticatedImportRoute
   '/_authenticated/ledger': typeof AuthenticatedLedgerRoute
+  '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/dividends'
     | '/import'
     | '/ledger'
+    | '/performance'
     | '/api/public/refresh-prices'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -104,6 +115,7 @@ export interface FileRouteTypes {
     | '/dividends'
     | '/import'
     | '/ledger'
+    | '/performance'
     | '/'
     | '/api/public/refresh-prices'
   id:
@@ -114,6 +126,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dividends'
     | '/_authenticated/import'
     | '/_authenticated/ledger'
+    | '/_authenticated/performance'
     | '/_authenticated/'
     | '/api/public/refresh-prices'
   fileRoutesById: FileRoutesById
@@ -175,6 +188,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLedgerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/performance': {
+      id: '/_authenticated/performance'
+      path: '/performance'
+      fullPath: '/performance'
+      preLoaderRoute: typeof AuthenticatedPerformanceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/refresh-prices': {
       id: '/api/public/refresh-prices'
       path: '/api/public/refresh-prices'
@@ -190,6 +210,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDividendsRoute: typeof AuthenticatedDividendsRoute
   AuthenticatedImportRoute: typeof AuthenticatedImportRoute
   AuthenticatedLedgerRoute: typeof AuthenticatedLedgerRoute
+  AuthenticatedPerformanceRoute: typeof AuthenticatedPerformanceRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
@@ -198,6 +219,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDividendsRoute: AuthenticatedDividendsRoute,
   AuthenticatedImportRoute: AuthenticatedImportRoute,
   AuthenticatedLedgerRoute: AuthenticatedLedgerRoute,
+  AuthenticatedPerformanceRoute: AuthenticatedPerformanceRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
 
