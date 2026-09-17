@@ -613,6 +613,30 @@ export function projectRetirement(input: PlannerInputs): Projection {
   }
 
   const last = rows[rows.length - 1];
+
+  // Step 6 — terminal (estate) tax: registered money left at death is fully
+  // included as income in the final year, on top of that year's other income.
+  let estateTax = 0;
+  let estateRegistered = 0;
+  if (last) {
+    for (const person of last.people) {
+      const registered = person.balances.rrsp + person.balances.lira;
+      estateRegistered += registered;
+      if (registered <= 0) continue;
+      const withoutEstate = computeTax({
+        ordinary: person.taxableIncome,
+        province: input.province,
+        age: person.age,
+      }).total;
+      const withEstate = computeTax({
+        ordinary: person.taxableIncome + registered,
+        province: input.province,
+        age: person.age,
+      }).total;
+      estateTax += Math.max(0, withEstate - withoutEstate);
+    }
+  }
+
   return {
     rows,
     depletionAge,
@@ -620,6 +644,8 @@ export function projectRetirement(input: PlannerInputs): Projection {
     endingBalance: last ? last.balances.total : 0,
     totalTaxes,
     totalClawback,
+    estateTax,
+    estateRegistered,
   };
 }
 
