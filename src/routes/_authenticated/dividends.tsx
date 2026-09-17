@@ -55,11 +55,39 @@ export const Route = createFileRoute("/_authenticated/dividends")({
   component: DividendsPage,
 });
 
+const DISMISSED_KEY = "maplewealth.dismissedDividends";
+
+function loadDismissed(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(DISMISSED_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 function DividendsPage() {
   const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
     usePortfolio();
   const addTransaction = useAddTransaction();
   const [recording, setRecording] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<string[]>([]);
+
+  useEffect(() => {
+    setDismissed(loadDismissed());
+  }, []);
+
+  const saveDismissed = (next: string[]) => {
+    setDismissed(next);
+    try {
+      window.localStorage.setItem(DISMISSED_KEY, JSON.stringify(next));
+    } catch {
+      /* storage unavailable — dismissal lasts for this visit only */
+    }
+  };
+
 
   const [growth, setGrowth] = useState(6);
   const [priceGrowth, setPriceGrowth] = useState(6);
