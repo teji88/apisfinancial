@@ -99,6 +99,8 @@ function RetirementPage() {
   const updateProfile = useUpdateProfile();
 
   const [form, setForm] = useState<Profile | null>(null);
+  const [todayDollars, setTodayDollars] = useState(true);
+
 
   useEffect(() => {
     if (profileQuery.data && !form) setForm(profileQuery.data);
