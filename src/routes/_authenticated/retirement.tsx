@@ -360,9 +360,17 @@ function RetirementPage() {
             from your years in Canada.
           </p>
         </div>
-        <Button size="sm" onClick={save} disabled={updateProfile.isPending}>
-          {updateProfile.isPending ? "Saving…" : "Save plan"}
-        </Button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch id="today-dollars" checked={todayDollars} onCheckedChange={setTodayDollars} />
+            <Label htmlFor="today-dollars" className="text-sm">
+              Show in today's dollars
+            </Label>
+          </div>
+          <Button size="sm" onClick={save} disabled={updateProfile.isPending}>
+            {updateProfile.isPending ? "Saving…" : "Save plan"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -381,26 +389,27 @@ function RetirementPage() {
           icon={<PiggyBank className="h-4 w-4" />}
           label="Savings at retirement"
           value={formatCad(startBalance)}
-          hint={`Today: ${formatCad(todayTotal)}`}
+          hint={`Today: ${formatCad(todayTotal)} · ${moneyNote}`}
         />
         <StatCard
           icon={<ShieldCheck className="h-4 w-4" />}
           label="Plan outcome"
           value={projection.success ? "Fully funded" : `Runs short at ${projection.depletionAge}`}
-          hint={`Ending balance ${formatCad(projection.endingBalance)}`}
+          hint={`Ending balance ${formatCad(endingBalance)} ${moneyNote}`}
           tone={projection.success ? "good" : "warn"}
         />
         <StatCard
           icon={<TriangleAlert className="h-4 w-4" />}
           label="Lifetime tax & clawback"
-          value={formatCad(projection.totalTaxes)}
+          value={formatCad(totalTaxes)}
           hint={
-            projection.totalClawback > 1
-              ? `${formatCad(projection.totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
+            totalClawback > 1
+              ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
               : "No OAS clawback in this plan"
           }
-          tone={projection.totalClawback > 1 ? "warn" : "good"}
+          tone={totalClawback > 1 ? "warn" : "good"}
         />
+
       </div>
 
       <Tabs defaultValue="plan">
