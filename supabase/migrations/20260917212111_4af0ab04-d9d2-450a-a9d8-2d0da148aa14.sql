@@ -1,0 +1,1 @@
+ALTER TABLE public.accounts ADD COLUMN IF NOT EXISTS track_cash BOOLEAN NOT NULL DEFAULT false;
