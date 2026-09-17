@@ -6,14 +6,23 @@
  * All amounts are nominal CAD unless stated otherwise.
  */
 
-import { computeTax, nextFederalBracketTop, type ProvinceCode } from "./tax";
+import { computeTax, type ProvinceCode } from "./tax";
 
 /* ---------------------------------- CPP / OAS --------------------------------- */
 
-export const CPP_MAX_MONTHLY_65 = 1_507.65;
-export const OAS_MAX_MONTHLY_65 = 734.95;
+/** 2026 maximum CPP at 65: $18,091/year. */
+export const CPP_MAX_ANNUAL_65 = 18_091;
+export const CPP_MAX_MONTHLY_65 = CPP_MAX_ANNUAL_65 / 12;
+/** 2026 maximum OAS at 65: $8,732/year. */
+export const OAS_MAX_ANNUAL_65 = 8_732;
+export const OAS_MAX_MONTHLY_65 = OAS_MAX_ANNUAL_65 / 12;
 export const OAS_CLAWBACK_THRESHOLD = 95_323;
 export const OAS_CLAWBACK_RATE = 0.15;
+
+/** Inflation-stripped growth rate: everything in the plan is modelled in 2026 dollars. */
+export function realReturn(nominalPct: number, inflationPct: number): number {
+  return (1 + nominalPct / 100) / (1 + inflationPct / 100) - 1;
+}
 /** Year's maximum pensionable earnings (2026 estimate). */
 export const YMPE = 71_300;
 /** Contributory years counted after the 17% general drop-out. */
@@ -202,8 +211,9 @@ const zeroDraw = (): Draw => ({ reg: 0, lif: 0, nonreg: 0, tfsa: 0 });
 /* -------------------------------- Projection ---------------------------------- */
 
 export function projectRetirement(input: PlannerInputs): Projection {
-  const infl = input.inflation / 100;
-  const growth = input.growth / 100;
+  // Real-dollar engine: balances grow at the inflation-stripped return and every
+  // spending need, tax bracket, CPP/OAS amount and clawback line stays at 2026 values.
+  const growth = realReturn(input.growth, input.inflation);
   const thisYear = new Date().getUTCFullYear();
 
   const specs: PersonSpec[] = input.spouse ? [input.self, input.spouse] : [input.self];
@@ -231,7 +241,7 @@ export function projectRetirement(input: PlannerInputs): Projection {
   };
   const primary = people[0]!;
   for (let age = startAge; age < retireAge; age += 1) {
-    const contribution = input.annualSavings * (1 + infl) ** (age - startAge);
+    const contribution = input.annualSavings;
     primary.tfsa = (primary.tfsa + contribution * share.tfsa) * (1 + growth);
     primary.rrsp = (primary.rrsp + contribution * share.rrsp) * (1 + growth);
     primary.acb += contribution * share.nonreg;
@@ -252,22 +262,18 @@ export function projectRetirement(input: PlannerInputs): Projection {
 
   for (let age = retireAge; age <= input.lifeExpectancy; age += 1) {
     const yearsFromNow = age - startAge;
-    const indexation = (1 + infl) ** yearsFromNow;
-    const need = input.desiredIncome * indexation;
-    const remainingYears = Math.max(1, input.lifeExpectancy - age + 1);
-    const clawThreshold = OAS_CLAWBACK_THRESHOLD * indexation;
+    const need = input.desiredIncome;
+    const clawThreshold = OAS_CLAWBACK_THRESHOLD;
 
     const ages = people.map((p) => p.spec.age + (age - startAge));
-    const cpp = people.map((p, i) =>
-      ages[i]! >= p.spec.cppStartAge ? adjustedCpp(p.spec) * indexation : 0,
-    );
+    const cpp = people.map((p, i) => (ages[i]! >= p.spec.cppStartAge ? adjustedCpp(p.spec) : 0));
     const oasGross = people.map((p, i) =>
       ages[i]! >= Math.max(65, p.spec.oasStartAge)
-        ? oasAt(p.spec.oasStartAge, p.spec.oasFraction) * indexation
+        ? oasAt(p.spec.oasStartAge, p.spec.oasFraction)
         : 0,
     );
     const other = people.map((p, i) =>
-      ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome * indexation : 0,
+      ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome : 0,
     );
 
     /** Household tax for a set of draws, choosing the best pension split. */
@@ -356,41 +362,39 @@ export function projectRetirement(input: PlannerInputs): Projection {
       draws[i]!.lif = converted ? p.lira * rrifMinFactor(ages[i]!) : 0;
     });
 
-    // Step 2 — take spending money from registered accounts first, inside the low
-    // brackets and below the OAS clawback line, and melt at least an even slice each
-    // year so later forced withdrawals stay small. LIF room is use-it-or-lose-it,
-    // so the locked-in money comes out ahead of the RRSP.
-    const householdRegistered = people.reduce((s, p) => s + p.rrsp + p.lira, 0);
-    const baseHouseholdIncome = people.reduce(
-      (s, _, i) => s + cpp[i]! + oasGross[i]! + other[i]!,
-      0,
-    );
-    const grossNeed = Math.max(0, need * 1.2 - baseHouseholdIncome);
-    people.forEach((p, i) => {
-      const registered = p.rrsp + p.lira;
-      if (registered <= 0) return;
-      const level = registered / remainingYears;
-      const allotment =
-        householdRegistered > 0 ? (grossNeed * registered) / householdRegistered : 0;
-      const baseOrdinary = cpp[i]! + oasGross[i]! + other[i]!;
-      const ceiling = Math.min(
-        nextFederalBracketTop(baseOrdinary),
-        ages[i]! >= 60 ? clawThreshold : Infinity,
-      );
-      const room = Math.max(0, ceiling - baseOrdinary);
-      const target = Math.min(
-        Math.max(level, allotment, draws[i]!.reg + draws[i]!.lif),
-        room,
-      );
-      const lifCap = Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!));
-      const wantLif = Math.min(Math.max(draws[i]!.lif, target), lifCap);
-      const wantReg = Math.min(Math.max(draws[i]!.reg, target - wantLif), p.rrsp);
-      draws[i]!.lif = Math.max(draws[i]!.lif, wantLif);
-      draws[i]!.reg = Math.max(draws[i]!.reg, wantReg);
-    });
-
-
     let res = evaluate(draws);
+
+    // Step 2 — fill the income gap from registered money, but stop at the OAS
+    // clawback line. LIF room is use-it-or-lose-it, so locked-in money comes first.
+    const regRoom = people.map((p, i) => {
+      const baseOrdinary = cpp[i]! + oasGross[i]! + other[i]!;
+      const ceiling = Math.max(0, clawThreshold - baseOrdinary);
+      const lifCap = Math.max(0, Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - draws[i]!.lif);
+      const regCap = Math.max(0, p.rrsp - draws[i]!.reg);
+      const headroom = Math.max(0, ceiling - draws[i]!.reg - draws[i]!.lif);
+      return { lif: Math.min(lifCap, headroom), reg: Math.min(regCap, Math.max(0, headroom - Math.min(lifCap, headroom))) };
+    });
+    const regTotal = regRoom.reduce((s, r) => s + r.lif + r.reg, 0);
+    if (res.net < need && regTotal > 0) {
+      const baseline = people.map((_, i) => ({ ...draws[i]! }));
+      const apply = (x: number) => {
+        const f = x / regTotal;
+        people.forEach((_, i) => {
+          draws[i]!.lif = baseline[i]!.lif + regRoom[i]!.lif * f;
+          draws[i]!.reg = baseline[i]!.reg + regRoom[i]!.reg * f;
+        });
+      };
+      const solved = bisect(
+        (x) => {
+          apply(x);
+          return evaluate(draws).net - need;
+        },
+        0,
+        regTotal,
+      );
+      apply(solved);
+      res = evaluate(draws);
+    }
 
     // Step 3 — still short? non-registered next.
     if (res.net < need) {
