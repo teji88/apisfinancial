@@ -363,41 +363,42 @@ export function projectRetirement(input: PlannerInputs): Projection {
       draws[i]!.lif = converted ? p.lira * rrifMinFactor(ages[i]!) : 0;
     });
 
-    // Step 2 — take spending money from registered accounts first, inside the low
-    // brackets and below the OAS clawback line, and melt at least an even slice each
-    // year so later forced withdrawals stay small. LIF room is use-it-or-lose-it,
-    // so the locked-in money comes out ahead of the RRSP.
-    const householdRegistered = people.reduce((s, p) => s + p.rrsp + p.lira, 0);
-    const baseHouseholdIncome = people.reduce(
-      (s, _, i) => s + cpp[i]! + oasGross[i]! + other[i]!,
-      0,
-    );
-    const grossNeed = Math.max(0, need * 1.2 - baseHouseholdIncome);
-    people.forEach((p, i) => {
-      const registered = p.rrsp + p.lira;
-      if (registered <= 0) return;
-      const level = registered / remainingYears;
-      const allotment =
-        householdRegistered > 0 ? (grossNeed * registered) / householdRegistered : 0;
-      const baseOrdinary = cpp[i]! + oasGross[i]! + other[i]!;
-      const ceiling = Math.min(
-        nextFederalBracketTop(baseOrdinary),
-        ages[i]! >= 60 ? clawThreshold : Infinity,
-      );
-      const room = Math.max(0, ceiling - baseOrdinary);
-      const target = Math.min(
-        Math.max(level, allotment, draws[i]!.reg + draws[i]!.lif),
-        room,
-      );
-      const lifCap = Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!));
-      const wantLif = Math.min(Math.max(draws[i]!.lif, target), lifCap);
-      const wantReg = Math.min(Math.max(draws[i]!.reg, target - wantLif), p.rrsp);
-      draws[i]!.lif = Math.max(draws[i]!.lif, wantLif);
-      draws[i]!.reg = Math.max(draws[i]!.reg, wantReg);
-    });
-
-
     let res = evaluate(draws);
+
+    // Step 2 — fill the income gap from registered money, but stop at the OAS
+    // clawback line. LIF room is use-it-or-lose-it, so locked-in money comes first.
+    const regRoom = people.map((p, i) => {
+      const baseOrdinary = cpp[i]! + oasGross[i]! + other[i]!;
+      const ceiling = Math.max(0, clawThreshold - baseOrdinary);
+      const lifCap = Math.max(0, Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - draws[i]!.lif);
+      const regCap = Math.max(0, p.rrsp - draws[i]!.reg);
+      const headroom = Math.max(0, ceiling - draws[i]!.reg - draws[i]!.lif);
+      return { lif: Math.min(lifCap, headroom), reg: Math.min(regCap, Math.max(0, headroom - Math.min(lifCap, headroom))) };
+    });
+    const regTotal = regRoom.reduce((s, r) => s + r.lif + r.reg, 0);
+    if (res.net < need && regTotal > 0) {
+      const baseline = people.map((_, i) => ({ ...draws[i]! }));
+      const apply = (x: number) => {
+        const f = x / regTotal;
+        people.forEach((_, i) => {
+          draws[i]!.lif = baseline[i]!.lif + regRoom[i]!.lif * f;
+          draws[i]!.reg = baseline[i]!.reg + regRoom[i]!.reg * f;
+        });
+      };
+      const solved = bisect(
+        (x) => {
+          apply(x);
+          return evaluate(draws).net - need;
+        },
+        0,
+        regTotal,
+      );
+      apply(solved);
+      res = evaluate(draws);
+    }
+    // Unused here, kept for the level-meltdown diagnostics.
+    void remainingYears;
+    void nextFederalBracketTop;
 
     // Step 3 — still short? non-registered next.
     if (res.net < need) {
