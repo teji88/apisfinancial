@@ -945,7 +945,9 @@ function RetirementPage() {
               </Table>
             </div>
             <p className="text-xs text-muted-foreground">
-              Planning estimates on projected 2026 tax brackets. RRSPs become a RRIF and LIRAs a LIF
+              All amounts {moneyNote}. Planning estimates on projected 2026 tax brackets. RRSPs
+              become a RRIF and LIRAs a LIF
+
               at 71 with the mandatory minimums; eligible pension income is split with a spouse after
               65 wherever that lowers household tax.
             </p>
