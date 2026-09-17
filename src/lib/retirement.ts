@@ -211,8 +211,9 @@ const zeroDraw = (): Draw => ({ reg: 0, lif: 0, nonreg: 0, tfsa: 0 });
 /* -------------------------------- Projection ---------------------------------- */
 
 export function projectRetirement(input: PlannerInputs): Projection {
-  const infl = input.inflation / 100;
-  const growth = input.growth / 100;
+  // Real-dollar engine: balances grow at the inflation-stripped return and every
+  // spending need, tax bracket, CPP/OAS amount and clawback line stays at 2026 values.
+  const growth = realReturn(input.growth, input.inflation);
   const thisYear = new Date().getUTCFullYear();
 
   const specs: PersonSpec[] = input.spouse ? [input.self, input.spouse] : [input.self];
