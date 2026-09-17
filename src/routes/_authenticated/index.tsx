@@ -6,6 +6,7 @@ import { usePortfolio } from "@/lib/portfolio";
 import {
   annualise,
   buildValuationSeries,
+  cashTrackingIds,
   computePositions,
   externalFlows,
   formatCad,
@@ -97,12 +98,13 @@ function Dashboard() {
     const dayChange = summaries.reduce((s, x) => s + x.dayChange, 0);
     const netDeposits = summaries.reduce((s, x) => s + x.netDeposits, 0);
 
-    const flows = externalFlows(transactions);
+    const cashAccounts = cashTrackingIds(accounts);
+    const flows = externalFlows(transactions, cashAccounts);
     const mwrr =
       flows.length > 0 && totalValue !== 0
         ? xirr([...flows, { date: new Date(), amount: totalValue }])
         : null;
-    const series = buildValuationSeries(transactions, holdings, quotes, fxUsdCad);
+    const series = buildValuationSeries(transactions, holdings, quotes, fxUsdCad, cashAccounts);
     const twrrTotal = twrr(series);
     const twrrAnnual = twrrTotal != null ? annualise(twrrTotal, series) : null;
 
@@ -120,7 +122,7 @@ function Dashboard() {
       twrrTotal,
       twrrAnnual,
     };
-  }, [summaries, transactions, holdings, quotes, fxUsdCad]);
+  }, [summaries, accounts, transactions, holdings, quotes, fxUsdCad]);
 
   const pieData = summaries
     .filter((s) => s.totalValue > 0)

@@ -3,10 +3,16 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ACCOUNT_TYPES, formatCad, summariseAccount } from "@/lib/finance";
-import { useAddAccount, useDeleteAccount, usePortfolio } from "@/lib/portfolio";
+import {
+  useAddAccount,
+  useDeleteAccount,
+  usePortfolio,
+  useUpdateAccount,
+} from "@/lib/portfolio";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -47,17 +53,19 @@ export const Route = createFileRoute("/_authenticated/accounts")({
 function AccountsPage() {
   const { accounts, holdings, transactions, quotes, fxUsdCad } = usePortfolio();
   const addAccount = useAddAccount();
+  const updateAccount = useUpdateAccount();
   const deleteAccount = useDeleteAccount();
 
   const [accountType, setAccountType] = useState<string>("TFSA");
   const [accountName, setAccountName] = useState("");
   const [currency, setCurrency] = useState("CAD");
   const [institution, setInstitution] = useState("");
+  const [trackCash, setTrackCash] = useState(false);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await addAccount.mutateAsync({ accountType, accountName, currency, institution });
+      await addAccount.mutateAsync({ accountType, accountName, currency, institution, trackCash });
       toast.success(`${accountName} added`);
       setAccountName("");
       setInstitution("");
@@ -127,7 +135,18 @@ function AccountsPage() {
             Add account
           </Button>
         </div>
+        <div className="flex items-start gap-3 md:col-span-5">
+          <Switch id="track-cash" checked={trackCash} onCheckedChange={setTrackCash} />
+          <div className="space-y-0.5">
+            <Label htmlFor="track-cash">Keep a cash balance in this account</Label>
+            <p className="text-xs text-muted-foreground">
+              Off by default: a purchase is treated as money you brought in, so the account is
+              worth what you hold. Turn it on only if you record deposits first and then buy.
+            </p>
+          </div>
+        </div>
       </form>
+
 
       <div className="panel overflow-x-auto">
         <Table>
@@ -136,6 +155,7 @@ function AccountsPage() {
               <TableHead>Account</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Institution</TableHead>
+              <TableHead className="text-center">Cash balance</TableHead>
               <TableHead className="text-right">Total value</TableHead>
               <TableHead className="w-10" />
             </TableRow>
@@ -156,6 +176,15 @@ function AccountsPage() {
                     {a.account_type} · {a.currency}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{a.institution ?? "—"}</TableCell>
+                  <TableCell className="text-center">
+                    <Switch
+                      aria-label={`Keep a cash balance in ${a.account_name}`}
+                      checked={a.track_cash ?? false}
+                      onCheckedChange={(checked) =>
+                        updateAccount.mutate({ id: a.id, trackCash: checked })
+                      }
+                    />
+                  </TableCell>
                   <TableCell className="num text-right">{formatCad(s.totalValue)}</TableCell>
                   <TableCell>
                     <Button
@@ -180,7 +209,7 @@ function AccountsPage() {
             })}
             {accounts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                   No accounts yet.
                 </TableCell>
               </TableRow>
