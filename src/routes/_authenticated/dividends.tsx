@@ -105,10 +105,15 @@ function DividendsPage() {
   );
 
   const months = useMemo(() => monthlyIncome(transactions), [transactions]);
-  const pending = useMemo(
+  const allPending = useMemo(
     () => pendingDividends(rows, transactions, holdings),
     [rows, transactions, holdings],
   );
+  const pending = useMemo(
+    () => allPending.filter((p) => !dismissed.includes(p.holdingId + p.exDivDate)),
+    [allPending, dismissed],
+  );
+  const hiddenCount = allPending.length - pending.length;
 
   const totals = useMemo(() => {
     const marketValue = rows.reduce((s, r) => s + r.marketValue, 0);
