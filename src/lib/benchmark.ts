@@ -60,15 +60,56 @@ export function dateGrid(start: string, end: string, maxPoints = 160): string[] 
 
 export type FlowPoint = { date: string; amount: number };
 
-/** Deposits (+) and withdrawals (−) in CAD, the money the investor put in. */
+function grossOf(t: Transaction): number {
+  const fx = t.fx_rate || 1;
+  const base = t.amount != null && t.amount !== 0 ? t.amount : (t.units || 0) * (t.price_per_unit || 0);
+  return base * fx;
+}
+
+/** Cash effect of a transaction, before any implied top-up. */
+function cashDelta(t: Transaction): number {
+  const gross = grossOf(t);
+  const fee = (t.fee || 0) * (t.fx_rate || 1);
+  switch (t.transaction_type) {
+    case "DEPOSIT":
+      return gross;
+    case "WITHDRAWAL":
+      return -gross;
+    case "BUY":
+      return -(gross + fee);
+    case "SELL":
+      return gross - fee;
+    case "DIVIDEND":
+      return gross;
+    case "FEE":
+      return -(gross + fee);
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Deposits (+) and withdrawals (−) in CAD — the money the investor actually
+ * put in. When a purchase is recorded without a matching deposit, the shortfall
+ * is treated as an implied contribution on that date so benchmarking still works
+ * for ledgers that only track trades.
+ */
 export function contributionFlows(transactions: Transaction[]): FlowPoint[] {
+  const txns = transactions
+    .slice()
+    .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
   const flows: FlowPoint[] = [];
-  for (const t of transactions) {
-    const fx = t.fx_rate || 1;
-    const gross = (t.amount != null && t.amount !== 0 ? t.amount : (t.units || 0) * (t.price_per_unit || 0)) * fx;
-    if (t.transaction_type === "DEPOSIT") flows.push({ date: t.transaction_date, amount: gross });
+  let cash = 0;
+  for (const t of txns) {
+    const delta = cashDelta(t);
+    if (t.transaction_type === "DEPOSIT") flows.push({ date: t.transaction_date, amount: delta });
     else if (t.transaction_type === "WITHDRAWAL")
-      flows.push({ date: t.transaction_date, amount: -gross });
+      flows.push({ date: t.transaction_date, amount: delta });
+    cash += delta;
+    if (cash < -1e-6) {
+      flows.push({ date: t.transaction_date, amount: -cash });
+      cash = 0;
+    }
   }
   return flows.sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -95,30 +136,8 @@ export function portfolioValueSeries(
   return grid.map((date) => {
     while (idx < txns.length && txns[idx]!.transaction_date <= date) {
       const t = txns[idx]!;
-      const rate = t.fx_rate || 1;
-      const gross =
-        (t.amount != null && t.amount !== 0 ? t.amount : (t.units || 0) * (t.price_per_unit || 0)) * rate;
-      const fee = (t.fee || 0) * rate;
-      switch (t.transaction_type) {
-        case "DEPOSIT":
-          cash += gross;
-          break;
-        case "WITHDRAWAL":
-          cash -= gross;
-          break;
-        case "BUY":
-          cash -= gross + fee;
-          break;
-        case "SELL":
-          cash += gross - fee;
-          break;
-        case "DIVIDEND":
-          cash += gross;
-          break;
-        case "FEE":
-          cash -= gross + fee;
-          break;
-      }
+      cash += cashDelta(t);
+      if (cash < 0) cash = 0; // implied contribution covers the shortfall
       if (t.holding_id && (t.transaction_type === "BUY" || t.transaction_type === "DRIP")) {
         units.set(t.holding_id, (units.get(t.holding_id) ?? 0) + (t.units || 0));
       }
