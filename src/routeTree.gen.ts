@@ -17,6 +17,7 @@ import { Route as AuthenticatedDividendsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
 import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated/ledger'
 import { Route as AuthenticatedPerformanceRouteImport } from './routes/_authenticated/performance'
+import { Route as AuthenticatedRetirementRouteImport } from './routes/_authenticated/retirement'
 import { Route as ApiPublicRefreshPricesRouteImport } from './routes/api/public/refresh-prices'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -59,6 +60,11 @@ const AuthenticatedPerformanceRoute =
     path: '/performance',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedRetirementRoute = AuthenticatedRetirementRouteImport.update({
+  id: '/retirement',
+  path: '/retirement',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const ApiPublicRefreshPricesRoute = ApiPublicRefreshPricesRouteImport.update({
   id: '/api/public/refresh-prices',
   path: '/api/public/refresh-prices',
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/import': typeof AuthenticatedImportRoute
   '/ledger': typeof AuthenticatedLedgerRoute
   '/performance': typeof AuthenticatedPerformanceRoute
+  '/retirement': typeof AuthenticatedRetirementRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
 export interface FileRoutesByTo {
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/import': typeof AuthenticatedImportRoute
   '/ledger': typeof AuthenticatedLedgerRoute
   '/performance': typeof AuthenticatedPerformanceRoute
+  '/retirement': typeof AuthenticatedRetirementRoute
   '/': typeof AuthenticatedIndexRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/_authenticated/import': typeof AuthenticatedImportRoute
   '/_authenticated/ledger': typeof AuthenticatedLedgerRoute
   '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
+  '/_authenticated/retirement': typeof AuthenticatedRetirementRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/import'
     | '/ledger'
     | '/performance'
+    | '/retirement'
     | '/api/public/refresh-prices'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/import'
     | '/ledger'
     | '/performance'
+    | '/retirement'
     | '/'
     | '/api/public/refresh-prices'
   id:
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/_authenticated/import'
     | '/_authenticated/ledger'
     | '/_authenticated/performance'
+    | '/_authenticated/retirement'
     | '/_authenticated/'
     | '/api/public/refresh-prices'
   fileRoutesById: FileRoutesById
@@ -195,6 +207,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPerformanceRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/retirement': {
+      id: '/_authenticated/retirement'
+      path: '/retirement'
+      fullPath: '/retirement'
+      preLoaderRoute: typeof AuthenticatedRetirementRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/refresh-prices': {
       id: '/api/public/refresh-prices'
       path: '/api/public/refresh-prices'
@@ -211,6 +230,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedImportRoute: typeof AuthenticatedImportRoute
   AuthenticatedLedgerRoute: typeof AuthenticatedLedgerRoute
   AuthenticatedPerformanceRoute: typeof AuthenticatedPerformanceRoute
+  AuthenticatedRetirementRoute: typeof AuthenticatedRetirementRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
@@ -220,6 +240,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedImportRoute: AuthenticatedImportRoute,
   AuthenticatedLedgerRoute: AuthenticatedLedgerRoute,
   AuthenticatedPerformanceRoute: AuthenticatedPerformanceRoute,
+  AuthenticatedRetirementRoute: AuthenticatedRetirementRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
 
