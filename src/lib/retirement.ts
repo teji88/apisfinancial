@@ -535,10 +535,19 @@ export function projectRetirement(input: PlannerInputs): Projection {
       p.lira = Math.max(0, p.lira - d.lif);
       p.nonreg = Math.max(0, p.nonreg - d.nonreg);
       p.tfsa = Math.max(0, p.tfsa - d.tfsa);
-      if (i === 0 && surplus > 0) {
-        p.nonreg += surplus;
-        p.acb += surplus;
-        surplus = 0;
+      // Room accrues yearly and withdrawals are added back the following year.
+      tfsaRoom[i] = tfsaRoom[i]! + TFSA_ANNUAL_ROOM + d.tfsa;
+      if (surplus > 0) {
+        // Step 3 — sweep surplus into the TFSA while room lasts, then non-registered.
+        const toTfsa = Math.min(surplus, Math.max(0, tfsaRoom[i]!));
+        p.tfsa += toTfsa;
+        tfsaRoom[i] = tfsaRoom[i]! - toTfsa;
+        surplus -= toTfsa;
+        if (i === people.length - 1 && surplus > 0) {
+          p.nonreg += surplus;
+          p.acb += surplus;
+          surplus = 0;
+        }
       }
       p.rrsp *= 1 + growth;
       p.lira *= 1 + growth;
