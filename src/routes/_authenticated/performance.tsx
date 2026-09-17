@@ -218,6 +218,29 @@ function PerformancePage() {
           </span>
         </div>
 
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          {BENCHMARK_GROUPS.map((g) => (
+            <div key={g.id} className="space-y-1">
+              <p className="text-xs text-muted-foreground">{g.label}</p>
+              <Select
+                value={picked[g.id] ?? g.options[0]!.symbol}
+                onValueChange={(v) => setPicked((prev) => ({ ...prev, [g.id]: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {g.options.map((o) => (
+                    <SelectItem key={o.symbol} value={o.symbol}>
+                      {o.symbol} · {o.note}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
+        </div>
+
         {loading || history.isLoading ? (
           <p className="mt-4 text-sm text-muted-foreground">Loading market history…</p>
         ) : transactions.length === 0 ? (
