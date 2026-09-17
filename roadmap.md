@@ -8,10 +8,10 @@
 - [x] Market data: Yahoo Finance behind a swappable provider interface, hourly cached in `price_cache`, USD/CAD FX
 - [x] Auth: email/password + Google
 
-## Phase 2 — AI ingestion
-- [ ] Drag-and-drop CSV / PDF / screenshot upload
-- [ ] Lovable AI structured parsing of broker statements (Questrade, Wealthsimple, TD, RBC, IBKR)
-- [ ] Verification table with confidence flags before committing to the ledger
+## Phase 2 — AI ingestion (done)
+- [x] Drag-and-drop CSV / PDF / screenshot upload
+- [x] Lovable AI structured parsing of broker statements (Questrade, Wealthsimple, TD, RBC, IBKR)
+- [x] Verification table with confidence flags before committing to the ledger
 
 ## Phase 3 — dividends
 - [ ] Forward annual income, portfolio yield, yield on cost, trailing 12-month received
