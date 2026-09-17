@@ -473,8 +473,9 @@ function RetirementPage() {
               <h2 className="font-display text-lg font-semibold">Where your income comes from</h2>
               <p className="text-sm text-muted-foreground">
                 Each bar is a retirement year: benefits and withdrawals stacked against the spending
-                line, with tax shown below the axis.
+                line, with tax shown below the axis. Amounts {moneyNote}.
               </p>
+
             </div>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
