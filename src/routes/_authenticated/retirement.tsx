@@ -87,6 +87,8 @@ const RRSP_TYPES = ["RRSP", "Spousal RRSP"];
 const LIRA_TYPES = ["LIRA", "LRSP"];
 const FHSA_TYPES = ["FHSA"];
 const NONREG_TYPES = ["Non-Registered", "Corporate"];
+const RESP_TYPES = ["RESP"];
+const RDSP_TYPES = ["RDSP"];
 
 function num(v: string, fallback = 0) {
   const n = Number(v.replace(/[^0-9.-]/g, ""));
