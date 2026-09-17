@@ -281,6 +281,8 @@ export function projectRetirement(input: PlannerInputs): Projection {
   }
 
   const rows: YearRow[] = [];
+  /** Unused TFSA contribution room per person, grown each year. */
+  const tfsaRoom = people.map(() => 0);
   let depletionAge: number | null = null;
   let totalTaxes = 0;
   let totalClawback = 0;
