@@ -258,10 +258,21 @@ function ImportPage() {
             </span>
             <p className="text-sm font-medium">Drag a file here</p>
             <p className="text-xs text-muted-foreground">CSV, PDF, PNG or JPEG · up to 20 MB</p>
-            <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
-              <Sparkles className="mr-1.5 h-4 w-4" />
-              Choose a file
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+                <Sparkles className="mr-1.5 h-4 w-4" />
+                Choose a file
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={accountList.length === 0}
+                onClick={addManualRow}
+              >
+                <PencilLine className="mr-1.5 h-4 w-4" />
+                Enter one by hand
+              </Button>
+            </div>
             <input
               ref={inputRef}
               type="file"
