@@ -72,7 +72,7 @@ export const Route = createFileRoute("/_authenticated/performance")({
 const CHART_COLORS = ["var(--chart-2)", "var(--chart-3)", "var(--chart-4)"];
 
 function PerformancePage() {
-  const { holdings, transactions, quotes, fxUsdCad, loading } = usePortfolio();
+  const { accounts, holdings, transactions, quotes, fxUsdCad, loading } = usePortfolio();
   const fetchHistory = useServerFn(getHistory);
 
   const start = useMemo(() => {
