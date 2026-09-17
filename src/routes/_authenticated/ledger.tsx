@@ -357,8 +357,14 @@ function LedgerPage() {
               type="number"
               step="any"
               value={fxRate}
-              onChange={(e) => setFxRate(e.target.value)}
+              onChange={(e) => {
+                setFxRate(e.target.value);
+                setFxAuto(false);
+              }}
             />
+            {fxAuto ? (
+              <p className="text-xs text-muted-foreground">Bank rate on {date}</p>
+            ) : null}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="fee">Commission / fee</Label>
