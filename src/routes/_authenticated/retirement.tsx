@@ -20,7 +20,7 @@ import {
   Landmark,
   PiggyBank,
   ShieldCheck,
-  Sparkles,
+  Wallet,
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -99,6 +99,8 @@ function RetirementPage() {
   const updateProfile = useUpdateProfile();
 
   const [form, setForm] = useState<Profile | null>(null);
+  const [todayDollars, setTodayDollars] = useState(true);
+
 
   useEffect(() => {
     if (profileQuery.data && !form) setForm(profileQuery.data);
@@ -253,8 +255,63 @@ function RetirementPage() {
     });
   };
 
-  const rows = projection.rows;
+  // Everything on screen can be shown in today's buying power: each future year is
+  // divided back by the same inflation rate used to grow the plan.
+  const baseAge = p.current_age ?? 40;
+  const inflFactor = 1 + inputs.inflation / 100;
+  const rows = projection.rows.map((r) => {
+    const f = todayDollars ? 1 / inflFactor ** (r.age - baseAge) : 1;
+    if (f === 1) return r;
+    const s = (v: number) => v * f;
+    return {
+      ...r,
+      rrifDraw: s(r.rrifDraw),
+      lifDraw: s(r.lifDraw),
+      nonregDraw: s(r.nonregDraw),
+      tfsaDraw: s(r.tfsaDraw),
+      cpp: s(r.cpp),
+      oas: s(r.oas),
+      oasClawback: s(r.oasClawback),
+      otherIncome: s(r.otherIncome),
+      taxes: s(r.taxes),
+      spending: s(r.spending),
+      shortfall: s(r.shortfall),
+      pensionSplit: s(r.pensionSplit),
+      balances: {
+        tfsa: s(r.balances.tfsa),
+        rrsp: s(r.balances.rrsp),
+        lira: s(r.balances.lira),
+        nonreg: s(r.balances.nonreg),
+        total: s(r.balances.total),
+      },
+      people: r.people.map((x) => ({
+        ...x,
+        rrifDraw: s(x.rrifDraw),
+        lifDraw: s(x.lifDraw),
+        nonregDraw: s(x.nonregDraw),
+        tfsaDraw: s(x.tfsaDraw),
+        cpp: s(x.cpp),
+        oas: s(x.oas),
+        oasClawback: s(x.oasClawback),
+        otherIncome: s(x.otherIncome),
+        taxableIncome: s(x.taxableIncome),
+        taxes: s(x.taxes),
+        balances: {
+          tfsa: s(x.balances.tfsa),
+          rrsp: s(x.balances.rrsp),
+          lira: s(x.balances.lira),
+          nonreg: s(x.balances.nonreg),
+          total: s(x.balances.total),
+        },
+      })),
+    };
+  });
+  const totalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
+  const totalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
+  const endingBalance = rows.length ? rows[rows.length - 1]!.balances.total : 0;
+  const moneyNote = todayDollars ? "in today's dollars" : "in future dollars";
   const firstRow = rows[0];
+
   const startBalance = firstRow
     ? firstRow.balances.total +
       firstRow.rrifDraw +
@@ -303,9 +360,17 @@ function RetirementPage() {
             from your years in Canada.
           </p>
         </div>
-        <Button size="sm" onClick={save} disabled={updateProfile.isPending}>
-          {updateProfile.isPending ? "Saving…" : "Save plan"}
-        </Button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch id="today-dollars" checked={todayDollars} onCheckedChange={setTodayDollars} />
+            <Label htmlFor="today-dollars" className="text-sm">
+              Show in today's dollars
+            </Label>
+          </div>
+          <Button size="sm" onClick={save} disabled={updateProfile.isPending}>
+            {updateProfile.isPending ? "Saving…" : "Save plan"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -324,26 +389,27 @@ function RetirementPage() {
           icon={<PiggyBank className="h-4 w-4" />}
           label="Savings at retirement"
           value={formatCad(startBalance)}
-          hint={`Today: ${formatCad(todayTotal)}`}
+          hint={`Today: ${formatCad(todayTotal)} · ${moneyNote}`}
         />
         <StatCard
           icon={<ShieldCheck className="h-4 w-4" />}
           label="Plan outcome"
           value={projection.success ? "Fully funded" : `Runs short at ${projection.depletionAge}`}
-          hint={`Ending balance ${formatCad(projection.endingBalance)}`}
+          hint={`Ending balance ${formatCad(endingBalance)} ${moneyNote}`}
           tone={projection.success ? "good" : "warn"}
         />
         <StatCard
           icon={<TriangleAlert className="h-4 w-4" />}
           label="Lifetime tax & clawback"
-          value={formatCad(projection.totalTaxes)}
+          value={formatCad(totalTaxes)}
           hint={
-            projection.totalClawback > 1
-              ? `${formatCad(projection.totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
+            totalClawback > 1
+              ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
               : "No OAS clawback in this plan"
           }
-          tone={projection.totalClawback > 1 ? "warn" : "good"}
+          tone={totalClawback > 1 ? "warn" : "good"}
         />
+
       </div>
 
       <Tabs defaultValue="plan">
@@ -407,8 +473,9 @@ function RetirementPage() {
               <h2 className="font-display text-lg font-semibold">Where your income comes from</h2>
               <p className="text-sm text-muted-foreground">
                 Each bar is a retirement year: benefits and withdrawals stacked against the spending
-                line, with tax shown below the axis.
+                line, with tax shown below the axis. Amounts {moneyNote}.
               </p>
+
             </div>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -422,16 +489,17 @@ function RetirementPage() {
                   />
                   <Tooltip formatter={(v: number) => formatCad(Math.abs(v))} />
                   <Legend />
-                  <Bar dataKey="CPP" stackId="i" fill="hsl(var(--chart-1, 12 76% 61%))" />
-                  <Bar dataKey="OAS" stackId="i" fill="hsl(var(--chart-2, 173 58% 39%))" />
-                  <Bar dataKey="RRIF / LIF" stackId="i" fill="hsl(var(--chart-3, 197 37% 44%))" />
-                  <Bar dataKey="Non-Reg" stackId="i" fill="hsl(var(--chart-4, 43 74% 49%))" />
-                  <Bar dataKey="TFSA" stackId="i" fill="hsl(var(--chart-5, 27 87% 67%))" />
-                  <Bar dataKey="Taxes" stackId="i" fill="hsl(var(--destructive))" />
+                  <Bar dataKey="CPP" stackId="i" fill="var(--chart-1)" />
+                  <Bar dataKey="OAS" stackId="i" fill="var(--chart-2)" />
+                  <Bar dataKey="RRIF / LIF" stackId="i" fill="var(--chart-3)" />
+                  <Bar dataKey="Non-Reg" stackId="i" fill="var(--chart-4)" />
+                  <Bar dataKey="TFSA" stackId="i" fill="var(--chart-5)" />
+                  <Bar dataKey="Taxes" stackId="i" fill="var(--destructive)" />
+
                   <Line
                     type="monotone"
                     dataKey="Spending"
-                    stroke="hsl(var(--foreground))"
+                    stroke="var(--foreground)"
                     dot={false}
                     strokeWidth={2}
                   />
@@ -445,8 +513,10 @@ function RetirementPage() {
               <h2 className="font-display text-lg font-semibold">What is left each year</h2>
               <p className="text-sm text-muted-foreground">
                 Balances by account type from age {inputs.retirementAge} to {inputs.lifeExpectancy},
-                spending indexed at {inputs.inflation}% and growth of {inputs.growth}%.
+                spending indexed at {inputs.inflation}% and growth of {inputs.growth}%. Amounts{" "}
+                {moneyNote}.
               </p>
+
             </div>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -462,10 +532,10 @@ function RetirementPage() {
                   <Legend />
                   {(
                     [
-                      ["RRSP / RRIF", "12 76% 61%"],
-                      ["LIRA / LIF", "173 58% 39%"],
-                      ["TFSA", "197 37% 44%"],
-                      ["Non-Registered", "43 74% 49%"],
+                      ["RRSP / RRIF", "var(--chart-1)"],
+                      ["LIRA / LIF", "var(--chart-2)"],
+                      ["TFSA", "var(--chart-3)"],
+                      ["Non-Registered", "var(--chart-4)"],
                     ] as const
                   ).map(([key, color]) => (
                     <Area
@@ -473,11 +543,12 @@ function RetirementPage() {
                       type="monotone"
                       dataKey={key}
                       stackId="1"
-                      stroke={`hsl(${color})`}
-                      fill={`hsl(${color})`}
+                      stroke={color}
+                      fill={color}
                       fillOpacity={0.45}
                     />
                   ))}
+
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -874,7 +945,9 @@ function RetirementPage() {
               </Table>
             </div>
             <p className="text-xs text-muted-foreground">
-              Planning estimates on projected 2026 tax brackets. RRSPs become a RRIF and LIRAs a LIF
+              All amounts {moneyNote}. Planning estimates on projected 2026 tax brackets. RRSPs
+              become a RRIF and LIRAs a LIF
+
               at 71 with the mandatory minimums; eligible pension income is split with a spouse after
               65 wherever that lowers household tax.
             </p>
@@ -980,7 +1053,7 @@ function BenefitCard({
   return (
     <div className="panel space-y-3 p-5">
       <div className="flex items-center gap-2 text-sm font-medium">
-        <Sparkles className="h-4 w-4" /> {title}
+        <Wallet className="h-4 w-4" /> {title}
       </div>
       <div className="space-y-1 text-sm">
         <div className="flex items-baseline justify-between">
