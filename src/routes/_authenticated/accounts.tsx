@@ -209,7 +209,7 @@ function AccountsPage() {
             })}
             {accounts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                   No accounts yet.
                 </TableCell>
               </TableRow>
