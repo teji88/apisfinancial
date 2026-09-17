@@ -78,6 +78,7 @@ function LedgerPage() {
   const addTransaction = useAddTransaction();
   const deleteTransaction = useDeleteTransaction();
   const lookup = useServerFn(lookupSymbol);
+  const fxOnDate = useServerFn(getFxRateOn);
 
   const [accountId, setAccountId] = useState<string>("");
   const [type, setType] = useState<string>("BUY");
@@ -89,13 +90,40 @@ function LedgerPage() {
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("CAD");
   const [fxRate, setFxRate] = useState("1");
+  const [fxAuto, setFxAuto] = useState(false);
   const [fee, setFee] = useState("0");
   const [date, setDate] = useState(today());
   const [looking, setLooking] = useState(false);
   const [filterAccount, setFilterAccount] = useState<string>("all");
+  const [editing, setEditing] = useState<Transaction | null>(null);
 
   const isCash = CASH_TYPES.includes(type);
   const selectedAccount = accounts.find((a) => a.id === accountId) ?? accounts[0];
+
+  // Historical USD→CAD rate for the chosen trade date.
+  useEffect(() => {
+    let cancelled = false;
+    if (currency !== "USD") {
+      setFxRate("1");
+      setFxAuto(false);
+      return;
+    }
+    void (async () => {
+      const res = await fxOnDate({ data: { date } });
+      if (cancelled) return;
+      if (res.rate) {
+        setFxRate(res.rate.toFixed(4));
+        setFxAuto(true);
+      } else {
+        setFxRate(fxUsdCad.toFixed(4));
+        setFxAuto(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currency, date]);
 
   const rows = useMemo(() => {
     const list =
