@@ -108,6 +108,10 @@ export function usePortfolio(): PortfolioData {
       previousClose: q.previousClose,
       currency: q.currency,
       name: q.name,
+      dividendRate: q.dividendRate,
+      dividendYield: q.dividendYield,
+      exDivDate: q.exDivDate,
+      exDivAmount: q.exDivAmount,
     };
   }
 
