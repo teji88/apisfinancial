@@ -98,7 +98,9 @@ function RetirementPage() {
         quotes,
         fxUsdCad,
       );
-      sums[a.account_type] = (sums[a.account_type] ?? 0) + s.totalValue;
+      // Ignore a negative cash balance (a buy recorded without a matching deposit).
+      const value = s.marketValue + Math.max(0, s.cash);
+      sums[a.account_type] = (sums[a.account_type] ?? 0) + value;
     }
     const pick = (types: string[]) => types.reduce((t, k) => t + (sums[k] ?? 0), 0);
     return {
