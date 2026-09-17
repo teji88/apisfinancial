@@ -84,7 +84,18 @@ export const getQuotes = createServerFn({ method: "POST" })
       );
       for (const q of fetched) {
         if (q.price == null) continue;
-        quotes.set(q.symbol.toUpperCase(), { ...q, symbol: q.symbol.toUpperCase(), asOf });
+        quotes.set(q.symbol.toUpperCase(), {
+          symbol: q.symbol.toUpperCase(),
+          price: q.price,
+          previousClose: q.previousClose,
+          currency: q.currency,
+          name: q.name,
+          asOf,
+          dividendRate: q.dividendRate ?? null,
+          dividendYield: q.dividendYield ?? null,
+          exDivDate: q.exDivDate ?? null,
+          exDivAmount: q.exDivAmount ?? null,
+        });
       }
     }
 
