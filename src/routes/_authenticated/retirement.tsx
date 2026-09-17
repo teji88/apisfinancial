@@ -1051,7 +1051,7 @@ function BenefitCard({
   return (
     <div className="panel space-y-3 p-5">
       <div className="flex items-center gap-2 text-sm font-medium">
-        <Sparkles className="h-4 w-4" /> {title}
+        <Wallet className="h-4 w-4" /> {title}
       </div>
       <div className="space-y-1 text-sm">
         <div className="flex items-baseline justify-between">
