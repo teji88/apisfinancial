@@ -6,7 +6,21 @@
  * All amounts are nominal CAD unless stated otherwise.
  */
 
-import { computeTax, type ProvinceCode } from "./tax";
+import { computeTax, FED_AGE_CLAWBACK_END, type ProvinceCode } from "./tax";
+
+/** Annual TFSA contribution room (2026), used when sweeping surplus cash. */
+export const TFSA_ANNUAL_ROOM = 7_000;
+
+/**
+ * The lowest income cliff worth respecting in a given year: the OAS clawback
+ * threshold, and — from 65 — the age-amount credit clawback ceiling, which
+ * bites first. `tolerance` allows a deliberate, bounded overshoot.
+ */
+export function effectiveCeiling(age: number, tolerance = 0): number {
+  const caps = [OAS_CLAWBACK_THRESHOLD];
+  if (age >= 65) caps.push(FED_AGE_CLAWBACK_END);
+  return Math.min(...caps) + Math.max(0, tolerance);
+}
 
 /* ---------------------------------- CPP / OAS --------------------------------- */
 
