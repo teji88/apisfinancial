@@ -6,6 +6,7 @@ import { usePortfolio } from "@/lib/portfolio";
 import {
   annualise,
   buildValuationSeries,
+  cashTrackingIds,
   computePositions,
   externalFlows,
   formatCad,
