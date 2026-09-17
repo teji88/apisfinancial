@@ -20,7 +20,7 @@ import {
   Landmark,
   PiggyBank,
   ShieldCheck,
-  Sparkles,
+  Wallet,
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
