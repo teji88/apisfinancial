@@ -500,19 +500,20 @@ export function summariseAccount(
   quotes: Record<string, Quote>,
   fxUsdCad: number,
 ): AccountSummary {
+  const cashAccounts = cashTrackingIds([account]);
   const positions = computePositions(holdings, transactions, quotes, fxUsdCad);
   const marketValue = positions.reduce((s, p) => s + p.marketValue, 0);
-  const cash = cashBalance(transactions);
+  const cash = cashBalance(transactions, cashAccounts);
   const totalValue = marketValue + cash;
 
-  const flows = externalFlows(transactions);
+  const flows = externalFlows(transactions, cashAccounts);
   const netDeposits = flows.reduce((s, f) => s - f.amount, 0);
   const mwrr =
     flows.length > 0 && totalValue !== 0
       ? xirr([...flows, { date: new Date(), amount: totalValue }])
       : null;
 
-  const series = buildValuationSeries(transactions, holdings, quotes, fxUsdCad);
+  const series = buildValuationSeries(transactions, holdings, quotes, fxUsdCad, cashAccounts);
 
   return {
     account,
