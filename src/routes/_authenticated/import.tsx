@@ -138,6 +138,16 @@ function ImportPage() {
     }
     setSaving(true);
     let saved = 0;
+    const rateCache = new Map<string, number>();
+    const rateFor = async (currency: string, date: string): Promise<number> => {
+      if (currency !== "USD") return 1;
+      const cached = rateCache.get(date);
+      if (cached) return cached;
+      const res = await fxOnDate({ data: { date } });
+      const rate = res.rate ?? 1;
+      rateCache.set(date, rate);
+      return rate;
+    };
     try {
       for (const row of rows) {
         const units = row.quantity ?? 0;
@@ -155,7 +165,7 @@ function ImportPage() {
             ? cashAmount
             : null,
           currency: row.currency,
-          fxRate: 1,
+          fxRate: await rateFor(row.currency, row.date),
           fee: row.fee ?? 0,
           date: row.date,
         });
