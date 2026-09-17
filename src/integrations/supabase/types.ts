@@ -92,6 +92,10 @@ export type Database = {
         Row: {
           as_of: string | null
           currency: string | null
+          div_amount: number | null
+          div_ex_date: string | null
+          dividend_rate: number | null
+          dividend_yield: number | null
           name: string | null
           previous_close: number | null
           price: number | null
@@ -101,6 +105,10 @@ export type Database = {
         Insert: {
           as_of?: string | null
           currency?: string | null
+          div_amount?: number | null
+          div_ex_date?: string | null
+          dividend_rate?: number | null
+          dividend_yield?: number | null
           name?: string | null
           previous_close?: number | null
           price?: number | null
@@ -110,6 +118,10 @@ export type Database = {
         Update: {
           as_of?: string | null
           currency?: string | null
+          div_amount?: number | null
+          div_ex_date?: string | null
+          dividend_rate?: number | null
+          dividend_yield?: number | null
           name?: string | null
           previous_close?: number | null
           price?: number | null
