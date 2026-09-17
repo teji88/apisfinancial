@@ -13,6 +13,10 @@ export type QuoteResult = {
   currency: string | null;
   name: string | null;
   asOf: string | null;
+  dividendRate: number | null;
+  dividendYield: number | null;
+  exDivDate: string | null;
+  exDivAmount: number | null;
 };
 
 export type QuotesResponse = {
