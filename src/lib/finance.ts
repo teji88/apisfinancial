@@ -45,7 +45,23 @@ export type Account = {
   account_name: string;
   currency: string;
   institution: string | null;
+  /**
+   * When true the account keeps its own cash balance: deposits add cash, buys
+   * spend it. When false (the default) a purchase is treated as money brought
+   * in from outside, so the account value is just the market value of what is held.
+   */
+  track_cash?: boolean;
 };
+
+/** Ids of the accounts that keep an internal cash balance. */
+export function cashTrackingIds(accounts: Account[]): Set<string> {
+  return new Set(accounts.filter((a) => a.track_cash).map((a) => a.id));
+}
+
+function tracksCash(t: Transaction, cashAccounts?: Set<string>): boolean {
+  return !cashAccounts || cashAccounts.has(t.account_id);
+}
+
 
 export type Holding = {
   id: string;
