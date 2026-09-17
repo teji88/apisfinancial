@@ -69,6 +69,10 @@ export const getQuotes = createServerFn({ method: "POST" })
           currency: row.currency,
           name: row.name,
           asOf: row.as_of ?? row.updated_at.slice(0, 10),
+          dividendRate: row.dividend_rate == null ? null : Number(row.dividend_rate),
+          dividendYield: row.dividend_yield == null ? null : Number(row.dividend_yield),
+          exDivDate: row.div_ex_date ?? null,
+          exDivAmount: row.div_amount == null ? null : Number(row.div_amount),
         });
       }
       if (!fresh) stale.push(symbol);
