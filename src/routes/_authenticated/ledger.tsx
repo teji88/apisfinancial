@@ -108,6 +108,8 @@ function LedgerPage() {
       setFxAuto(false);
       return;
     }
+    // A partially typed date ("2026-0") would fail server validation.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     void (async () => {
       const res = await fxOnDate({ data: { date } });
       if (cancelled) return;
@@ -526,6 +528,10 @@ function EditTransactionDialog({
   async function pullRate() {
     if (currency !== "USD") {
       setFxRate("1");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      toast.error("Pick a valid date first.");
       return;
     }
     const res = await fxOnDate({ data: { date } });

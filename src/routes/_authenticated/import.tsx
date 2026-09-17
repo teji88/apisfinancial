@@ -176,6 +176,7 @@ function ImportPage() {
     const rateCache = new Map<string, number>();
     const rateFor = async (currency: string, date: string): Promise<number> => {
       if (currency !== "USD") return 1;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 1;
       const cached = rateCache.get(date);
       if (cached) return cached;
       const res = await fxOnDate({ data: { date } });
