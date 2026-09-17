@@ -5,13 +5,22 @@ const UA =
 
 async function probe(name: string, url: string) {
   try {
-    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "*/*" } });
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA, Accept: "application/json, text/plain, */*" },
+    });
     const text = await res.text();
-    return { name, url, status: res.status, len: text.length, head: text.slice(0, 400) };
+    return { name, url, status: res.status, len: text.length, head: text.slice(0, 500) };
   } catch (e) {
     return { name, url, error: String(e) };
   }
 }
+
+const gqlVars = encodeURIComponent(
+  JSON.stringify({ symbol: "SPY", timeRange: "5Y" }),
+);
+const gqlExt = encodeURIComponent(
+  JSON.stringify({ persistedQuery: { version: 1, sha256Hash: "" } }),
+);
 
 export const Route = createFileRoute("/api/public/hist-probe")({
   server: {
@@ -19,25 +28,33 @@ export const Route = createFileRoute("/api/public/hist-probe")({
       GET: async () => {
         const results = await Promise.all([
           probe(
-            "cnbc-chart-spy",
-            "https://ts-api.cnbc.com/harmonizer/document/chart/symbol/SPY/?events=&intervalType=DAY&intervalSize=1&timeRange=5Y&requestMethod=extended",
+            "nasdaq-spy",
+            "https://api.nasdaq.com/api/quote/SPY/historical?assetclass=etf&fromdate=2024-01-01&todate=2026-09-17&limit=9999",
           ),
           probe(
-            "cnbc-chart2",
-            "https://ts-api.cnbc.com/harmonizer/document/chart/SPY?timeRange=1Y&intervalType=DAY&intervalSize=1",
-          ),
-          probe("stooq-spy", "https://stooq.com/q/d/l/?s=spy.us&i=d"),
-          probe(
-            "yahoo-chart",
-            "https://query1.finance.yahoo.com/v8/finance/chart/SPY?range=2y&interval=1d",
+            "cnbc-gql",
+            `https://webql-redesign.cnbcfm.com/graphql?operationName=getQuoteChartData&variables=${gqlVars}&extensions=${gqlExt}`,
           ),
           probe(
-            "frankfurter-hist",
-            "https://api.frankfurter.app/2025-01-02..2025-01-10?from=USD&to=CAD",
+            "cnbc-chart-api",
+            "https://api.cnbc.com/chart/v1/SPY?interval=1D&range=1Y",
+          ),
+          probe("stooq-q", "https://stooq.pl/q/d/l/?s=spy.us&i=d"),
+          probe(
+            "tmx-xic",
+            "https://app-money.tmx.com/graphql?operationName=getTimeSeriesData&variables=%7B%22symbol%22%3A%22XIC%22%2C%22freq%22%3A%22day%22%2C%22interval%22%3A1%2C%22start%22%3A%222025-01-01%22%2C%22end%22%3A%222026-09-17%22%7D",
           ),
           probe(
-            "tiingo-noauth",
-            "https://www.wsj.com/market-data/quotes/etf/SPY/historical-prices/download?MOD=mw_quote&startDate=01/01/2025&endDate=09/17/2026",
+            "alphavantage-demo",
+            "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=SPY&apikey=demo",
+          ),
+          probe(
+            "twelvedata-demo",
+            "https://api.twelvedata.com/time_series?symbol=SPY&interval=1day&outputsize=30&apikey=demo",
+          ),
+          probe(
+            "investing-free",
+            "https://financialmodelingprep.com/api/v3/historical-price-full/SPY?apikey=demo",
           ),
         ]);
         return Response.json(results);
