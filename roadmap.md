@@ -21,9 +21,9 @@
 ## Phase 4 — benchmarking (done)
 - [x] Cash-flow-matched benchmark simulation vs IVV, XIC.TO, XEQT.TO (direct alpha)
 
-## Phase 5 — Canadian retirement planner
-- [ ] Assumptions + spouse inputs, manual override mode
-- [ ] 2026 federal + provincial tax engine, CPP and OAS (with clawback), pension splitting
-- [ ] RRIF minimums, LIF maximums, age-71 conversions
-- [ ] Engine 1: when can I retire (depletion chart)
-- [ ] Engine 2: tax-efficient drawdown solver + year-by-year matrix
+## Phase 5 — Canadian retirement planner (done)
+- [x] Assumptions + spouse inputs, manual override mode
+- [x] 2026 federal + provincial tax engine, CPP and OAS (with clawback), pension splitting
+- [x] RRIF minimums, LIF maximums, age-71 conversions
+- [x] Engine 1: when can I retire (depletion chart)
+- [x] Engine 2: tax-efficient drawdown solver + year-by-year matrix

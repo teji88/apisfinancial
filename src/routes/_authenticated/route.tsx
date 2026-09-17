@@ -9,6 +9,7 @@ import {
   LogOut,
   Moon,
   Receipt,
+  Landmark,
   RefreshCw,
 
   Sun,
@@ -29,6 +30,7 @@ const NAV = [
   { to: "/ledger", label: "Ledger", icon: Receipt },
   { to: "/dividends", label: "Dividends", icon: Coins },
   { to: "/performance", label: "Performance", icon: BarChart3 },
+  { to: "/retirement", label: "Retirement", icon: Landmark },
   { to: "/accounts", label: "Accounts", icon: Wallet },
   { to: "/import", label: "Import", icon: FileUp },
 ] as const;
