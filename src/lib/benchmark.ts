@@ -259,6 +259,7 @@ export function buildComparison(
   fx: HistoryPoint[],
   fxNow: number,
   portfolioEndValue: number,
+  selection: BenchmarkChoice[] = DEFAULT_BENCHMARKS,
 ): ComparisonResult | null {
   const flows = contributionFlows(transactions);
   if (transactions.length === 0) return null;
