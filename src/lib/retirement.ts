@@ -241,7 +241,7 @@ export function projectRetirement(input: PlannerInputs): Projection {
   };
   const primary = people[0]!;
   for (let age = startAge; age < retireAge; age += 1) {
-    const contribution = input.annualSavings * (1 + infl) ** (age - startAge);
+    const contribution = input.annualSavings;
     primary.tfsa = (primary.tfsa + contribution * share.tfsa) * (1 + growth);
     primary.rrsp = (primary.rrsp + contribution * share.rrsp) * (1 + growth);
     primary.acb += contribution * share.nonreg;
