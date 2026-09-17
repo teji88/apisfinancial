@@ -97,6 +97,10 @@ async function cnbcQuotes(symbols: string[]): Promise<Map<string, ProviderQuote>
         previousClose: num(q.previous_day_closing),
         currency: q.currencyCode ?? null,
         name: q.name ?? null,
+        dividendRate: num(q.dividend),
+        dividendYield: num(q.dividendyield),
+        exDivDate: isoDate(q.EventData?.div_ex_date),
+        exDivAmount: num(q.EventData?.div_amount),
       });
     }
   } catch (err) {
