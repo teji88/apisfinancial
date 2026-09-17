@@ -103,6 +103,9 @@ function RetirementPage() {
   const [form, setForm] = useState<Profile | null>(null);
   /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
   const [clawbackTolerance, setClawbackTolerance] = useState(0);
+  /** RESP/RDSP money counted as retirement savings only when switched on. */
+  const [includeRespRdsp, setIncludeRespRdsp] = useState(false);
+
 
 
   useEffect(() => {
