@@ -112,15 +112,16 @@ function PerformancePage() {
     () => computePositions(holdings, transactions, quotes, fxUsdCad),
     [holdings, transactions, quotes, fxUsdCad],
   );
+  const cashAccounts = useMemo(() => cashTrackingIds(accounts), [accounts]);
   // Cash is floored at zero: a buy recorded without a matching deposit is
   // treated as an implied contribution rather than a negative cash balance.
   const portfolioValue =
     positions.reduce((s, p) => s + p.marketValue, 0) +
-    Math.max(0, cashBalance(transactions));
+    Math.max(0, cashBalance(transactions, cashAccounts));
 
   const valuation = useMemo(
-    () => buildValuationSeries(transactions, holdings, quotes, fxUsdCad),
-    [transactions, holdings, quotes, fxUsdCad],
+    () => buildValuationSeries(transactions, holdings, quotes, fxUsdCad, cashAccounts),
+    [transactions, holdings, quotes, fxUsdCad, cashAccounts],
   );
   const twrrTotal = twrr(valuation);
   const twrrAnnual = twrrTotal == null ? null : annualise(twrrTotal, valuation);
