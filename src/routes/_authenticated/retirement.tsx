@@ -127,27 +127,32 @@ function RetirementPage() {
       lira: pick(LIRA_TYPES),
       fhsa: pick(FHSA_TYPES),
       nonreg: pick(NONREG_TYPES),
+      resp: pick(RESP_TYPES),
+      rdsp: pick(RDSP_TYPES),
     };
   }, [accounts, transactions, holdings, quotes, fxUsdCad]);
 
   const p = form;
 
   const balances = useMemo(() => {
+    // RESP/RDSP are earmarked for education and disability support, so they are
+    // left out of retirement income unless the user opts them in.
+    const extra = includeRespRdsp ? byType.resp + byType.rdsp : 0;
     if (p?.manual_override) {
       return {
         tfsa: p.override_tfsa ?? 0,
         rrsp: (p.override_rrsp ?? 0) + (p.override_fhsa ?? 0),
         lira: p.override_lira ?? 0,
-        nonreg: p.override_nonreg ?? 0,
+        nonreg: (p.override_nonreg ?? 0) + extra,
       };
     }
     return {
       tfsa: byType.tfsa,
       rrsp: byType.rrsp + byType.fhsa,
       lira: byType.lira,
-      nonreg: byType.nonreg,
+      nonreg: byType.nonreg + extra,
     };
-  }, [p, byType]);
+  }, [p, byType, includeRespRdsp]);
 
   const derived = useMemo(() => {
     if (!p) return null;
