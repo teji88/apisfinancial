@@ -99,6 +99,8 @@ function RetirementPage() {
   const updateProfile = useUpdateProfile();
 
   const [form, setForm] = useState<Profile | null>(null);
+  /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
+  const [clawbackTolerance, setClawbackTolerance] = useState(0);
 
 
   useEffect(() => {
