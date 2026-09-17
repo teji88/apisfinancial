@@ -417,6 +417,7 @@ export function buildValuationSeries(
         if (t.holding_id) {
           units.set(t.holding_id, (units.get(t.holding_id) ?? 0) + (t.units || 0));
           if (t.price_per_unit) lastPrice.set(t.holding_id, t.price_per_unit);
+          lastFx.set(t.holding_id, rateFor(t, holdingById.get(t.holding_id)));
         }
         break;
       case "SELL":
@@ -425,6 +426,7 @@ export function buildValuationSeries(
         if (t.holding_id) {
           units.set(t.holding_id, (units.get(t.holding_id) ?? 0) - (t.units || 0));
           if (t.price_per_unit) lastPrice.set(t.holding_id, t.price_per_unit);
+          lastFx.set(t.holding_id, rateFor(t, holdingById.get(t.holding_id)));
         }
         break;
       case "DIVIDEND":
