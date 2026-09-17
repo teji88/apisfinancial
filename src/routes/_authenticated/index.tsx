@@ -122,7 +122,7 @@ function Dashboard() {
       twrrTotal,
       twrrAnnual,
     };
-  }, [summaries, transactions, holdings, quotes, fxUsdCad]);
+  }, [summaries, accounts, transactions, holdings, quotes, fxUsdCad]);
 
   const pieData = summaries
     .filter((s) => s.totalValue > 0)
