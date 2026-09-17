@@ -232,6 +232,63 @@ export function useAddTransaction() {
   });
 }
 
+export type TransactionEdit = {
+  id: string;
+  accountId: string;
+  symbol: string;
+  name?: string | null;
+  assetType: string;
+  transactionType: string;
+  units: number;
+  pricePerUnit: number;
+  amount: number | null;
+  currency: string;
+  fxRate: number;
+  fee: number;
+  date: string;
+};
+
+export function useUpdateTransaction() {
+  const invalidate = useInvalidatePortfolio();
+  return useMutation({
+    mutationFn: async (input: TransactionEdit) => {
+      const { data: auth } = await supabase.auth.getUser();
+      const userId = auth.user?.id;
+      if (!userId) throw new Error("You need to be signed in.");
+
+      let holdingId: string | null = null;
+      if (NEEDS_SYMBOL.includes(input.transactionType) && input.symbol.trim()) {
+        holdingId = await ensureHolding(
+          userId,
+          input.accountId,
+          input.symbol,
+          input.name ?? null,
+          input.assetType,
+          input.currency,
+        );
+      }
+
+      const { error } = await supabase
+        .from("transactions")
+        .update({
+          account_id: input.accountId,
+          holding_id: holdingId,
+          transaction_type: input.transactionType,
+          units: input.units,
+          price_per_unit: input.pricePerUnit,
+          amount: input.amount,
+          currency: input.currency,
+          fx_rate: input.fxRate,
+          fee: input.fee,
+          transaction_date: input.date,
+        })
+        .eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+}
+
 export function useDeleteTransaction() {
   const invalidate = useInvalidatePortfolio();
   return useMutation({
