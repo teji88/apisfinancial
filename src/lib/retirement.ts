@@ -301,6 +301,33 @@ export function projectRetirement(input: PlannerInputs): Projection {
       ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome : 0,
     );
 
+    // Step 4a — melt-down lookahead. Roll each person's registered money forward
+    // at the real growth rate with only the mandatory minimums coming out. If a
+    // future year's forced income breaches the ceiling regardless, the tax bill is
+    // merely being relocated: flag it and allow the bounded tolerance overshoot.
+    const tolerance = Math.max(0, input.clawbackTolerance ?? 0);
+    const meltdown = people.map((p, i) => {
+      let rrsp = p.rrsp;
+      let lira = p.lira;
+      const baseFixed = cpp[i]! + oasGross[i]! + other[i]!;
+      for (let a = ages[i]!; a <= input.lifeExpectancy; a += 1) {
+        const forced = a >= 71 ? (rrsp + lira) * rrifMinFactor(a) : 0;
+        if (baseFixed + forced > effectiveCeiling(a)) return true;
+        if (a >= 71) {
+          const f = rrifMinFactor(a);
+          rrsp -= rrsp * f;
+          lira -= lira * f;
+        }
+        rrsp *= 1 + growth;
+        lira *= 1 + growth;
+      }
+      return false;
+    });
+    const ceilings = people.map((_, i) =>
+      effectiveCeiling(ages[i]!, meltdown[i] ? tolerance : 0),
+    );
+
+
     /** Household tax for a set of draws, choosing the best pension split. */
     const evaluate = (draws: Draw[]) => {
       const pension = people.map((_, i) => draws[i]!.reg + draws[i]!.lif);
