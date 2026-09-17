@@ -241,14 +241,23 @@ function DividendsPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Ex-dividend events to record
           </h2>
-          <span className="text-xs text-muted-foreground">
+          <span className="flex items-center gap-3 text-xs text-muted-foreground">
             {pending.length} not yet in your ledger
+            {hiddenCount > 0 ? (
+              <button
+                type="button"
+                className="underline underline-offset-2 hover:text-foreground"
+                onClick={() => saveDismissed([])}
+              >
+                {hiddenCount} skipped · restore
+              </button>
+            ) : null}
           </span>
         </div>
         {pending.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">
             Nothing outstanding — every reported ex-dividend date for your holdings is already
-            recorded.
+            recorded{hiddenCount > 0 ? " or skipped" : ""}.
           </p>
         ) : (
           <Table className="mt-3">
