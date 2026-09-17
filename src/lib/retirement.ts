@@ -262,22 +262,19 @@ export function projectRetirement(input: PlannerInputs): Projection {
 
   for (let age = retireAge; age <= input.lifeExpectancy; age += 1) {
     const yearsFromNow = age - startAge;
-    const indexation = (1 + infl) ** yearsFromNow;
-    const need = input.desiredIncome * indexation;
+    const need = input.desiredIncome;
     const remainingYears = Math.max(1, input.lifeExpectancy - age + 1);
-    const clawThreshold = OAS_CLAWBACK_THRESHOLD * indexation;
+    const clawThreshold = OAS_CLAWBACK_THRESHOLD;
 
     const ages = people.map((p) => p.spec.age + (age - startAge));
-    const cpp = people.map((p, i) =>
-      ages[i]! >= p.spec.cppStartAge ? adjustedCpp(p.spec) * indexation : 0,
-    );
+    const cpp = people.map((p, i) => (ages[i]! >= p.spec.cppStartAge ? adjustedCpp(p.spec) : 0));
     const oasGross = people.map((p, i) =>
       ages[i]! >= Math.max(65, p.spec.oasStartAge)
-        ? oasAt(p.spec.oasStartAge, p.spec.oasFraction) * indexation
+        ? oasAt(p.spec.oasStartAge, p.spec.oasFraction)
         : 0,
     );
     const other = people.map((p, i) =>
-      ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome * indexation : 0,
+      ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome : 0,
     );
 
     /** Household tax for a set of draws, choosing the best pension split. */
