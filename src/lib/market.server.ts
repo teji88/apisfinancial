@@ -56,7 +56,18 @@ type CnbcQuote = {
   last?: string;
   previous_day_closing?: string;
   currencyCode?: string;
+  dividend?: string;
+  dividendyield?: string;
+  EventData?: { div_ex_date?: string; div_amount?: string };
 };
+
+/** CNBC returns MM/DD/YYYY; store ISO. */
+function isoDate(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const m = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return null;
+  return `${m[3]}-${m[1]}-${m[2]}`;
+}
 
 /** Batched quotes from CNBC (max ~50 symbols per call). */
 async function cnbcQuotes(symbols: string[]): Promise<Map<string, ProviderQuote>> {
