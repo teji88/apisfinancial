@@ -81,9 +81,24 @@ function PerformancePage() {
   }, [transactions]);
   const end = new Date().toISOString().slice(0, 10);
 
+  const [picked, setPicked] = useState<Record<string, string>>(() =>
+    Object.fromEntries(DEFAULT_BENCHMARKS.map((b) => [b.id, b.symbol])),
+  );
+
+  const selection: BenchmarkChoice[] = useMemo(
+    () =>
+      BENCHMARK_GROUPS.map((g) => {
+        const symbol = picked[g.id] ?? g.options[0]!.symbol;
+        const option = g.options.find((o) => o.symbol === symbol) ?? g.options[0]!;
+        return { id: g.id, label: g.label, symbol: option.symbol, note: option.note };
+      }),
+    [picked],
+  );
+
   const symbols = useMemo(() => {
     const own = holdings.map((h) => h.symbol.toUpperCase());
-    return Array.from(new Set([...own, ...BENCHMARKS.map((b) => b.symbol)])).sort();
+    const benches = BENCHMARK_GROUPS.flatMap((g) => g.options.map((o) => o.symbol));
+    return Array.from(new Set([...own, ...benches])).sort();
   }, [holdings]);
 
   const history = useQuery({
