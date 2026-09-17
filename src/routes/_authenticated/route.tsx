@@ -25,6 +25,7 @@ const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/ledger", label: "Ledger", icon: Receipt },
   { to: "/accounts", label: "Accounts", icon: Wallet },
+  { to: "/import", label: "Import", icon: FileUp },
 ] as const;
 
 function AppLayout() {
