@@ -16,6 +16,7 @@ import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedDividendsRouteImport } from './routes/_authenticated/dividends'
 import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
 import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated/ledger'
+import { Route as AuthenticatedPerformanceRouteImport } from './routes/_authenticated/performance'
 import { Route as ApiPublicHistProbeRouteImport } from './routes/api/public/hist-probe'
 import { Route as ApiPublicRefreshPricesRouteImport } from './routes/api/public/refresh-prices'
 
@@ -53,6 +54,12 @@ const AuthenticatedLedgerRoute = AuthenticatedLedgerRouteImport.update({
   path: '/ledger',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPerformanceRoute =
+  AuthenticatedPerformanceRouteImport.update({
+    id: '/performance',
+    path: '/performance',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiPublicHistProbeRoute = ApiPublicHistProbeRouteImport.update({
   id: '/api/public/hist-probe',
   path: '/api/public/hist-probe',
@@ -71,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/dividends': typeof AuthenticatedDividendsRoute
   '/import': typeof AuthenticatedImportRoute
   '/ledger': typeof AuthenticatedLedgerRoute
+  '/performance': typeof AuthenticatedPerformanceRoute
   '/api/public/hist-probe': typeof ApiPublicHistProbeRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
 }
@@ -80,6 +88,7 @@ export interface FileRoutesByTo {
   '/dividends': typeof AuthenticatedDividendsRoute
   '/import': typeof AuthenticatedImportRoute
   '/ledger': typeof AuthenticatedLedgerRoute
+  '/performance': typeof AuthenticatedPerformanceRoute
   '/': typeof AuthenticatedIndexRoute
   '/api/public/hist-probe': typeof ApiPublicHistProbeRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
@@ -92,6 +101,7 @@ export interface FileRoutesById {
   '/_authenticated/dividends': typeof AuthenticatedDividendsRoute
   '/_authenticated/import': typeof AuthenticatedImportRoute
   '/_authenticated/ledger': typeof AuthenticatedLedgerRoute
+  '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/public/hist-probe': typeof ApiPublicHistProbeRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
     | '/dividends'
     | '/import'
     | '/ledger'
+    | '/performance'
     | '/api/public/hist-probe'
     | '/api/public/refresh-prices'
   fileRoutesByTo: FileRoutesByTo
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/dividends'
     | '/import'
     | '/ledger'
+    | '/performance'
     | '/'
     | '/api/public/hist-probe'
     | '/api/public/refresh-prices'
@@ -125,6 +137,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dividends'
     | '/_authenticated/import'
     | '/_authenticated/ledger'
+    | '/_authenticated/performance'
     | '/_authenticated/'
     | '/api/public/hist-probe'
     | '/api/public/refresh-prices'
@@ -188,6 +201,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLedgerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/performance': {
+      id: '/_authenticated/performance'
+      path: '/performance'
+      fullPath: '/performance'
+      preLoaderRoute: typeof AuthenticatedPerformanceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/hist-probe': {
       id: '/api/public/hist-probe'
       path: '/api/public/hist-probe'
@@ -210,6 +230,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDividendsRoute: typeof AuthenticatedDividendsRoute
   AuthenticatedImportRoute: typeof AuthenticatedImportRoute
   AuthenticatedLedgerRoute: typeof AuthenticatedLedgerRoute
+  AuthenticatedPerformanceRoute: typeof AuthenticatedPerformanceRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
@@ -218,6 +239,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDividendsRoute: AuthenticatedDividendsRoute,
   AuthenticatedImportRoute: AuthenticatedImportRoute,
   AuthenticatedLedgerRoute: AuthenticatedLedgerRoute,
+  AuthenticatedPerformanceRoute: AuthenticatedPerformanceRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
 
