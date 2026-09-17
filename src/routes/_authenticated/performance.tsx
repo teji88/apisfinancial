@@ -88,8 +88,11 @@ function PerformancePage() {
     () => computePositions(holdings, transactions, quotes, fxUsdCad),
     [holdings, transactions, quotes, fxUsdCad],
   );
+  // Cash is floored at zero: a buy recorded without a matching deposit is
+  // treated as an implied contribution rather than a negative cash balance.
   const portfolioValue =
-    positions.reduce((s, p) => s + p.marketValue, 0) + cashBalance(transactions);
+    positions.reduce((s, p) => s + p.marketValue, 0) +
+    Math.max(0, cashBalance(transactions));
 
   const valuation = useMemo(
     () => buildValuationSeries(transactions, holdings, quotes, fxUsdCad),
