@@ -488,12 +488,13 @@ function RetirementPage() {
                   />
                   <Tooltip formatter={(v: number) => formatCad(Math.abs(v))} />
                   <Legend />
-                  <Bar dataKey="CPP" stackId="i" fill="hsl(var(--chart-1, 12 76% 61%))" />
-                  <Bar dataKey="OAS" stackId="i" fill="hsl(var(--chart-2, 173 58% 39%))" />
-                  <Bar dataKey="RRIF / LIF" stackId="i" fill="hsl(var(--chart-3, 197 37% 44%))" />
-                  <Bar dataKey="Non-Reg" stackId="i" fill="hsl(var(--chart-4, 43 74% 49%))" />
-                  <Bar dataKey="TFSA" stackId="i" fill="hsl(var(--chart-5, 27 87% 67%))" />
-                  <Bar dataKey="Taxes" stackId="i" fill="hsl(var(--destructive))" />
+                  <Bar dataKey="CPP" stackId="i" fill="var(--chart-1)" />
+                  <Bar dataKey="OAS" stackId="i" fill="var(--chart-2)" />
+                  <Bar dataKey="RRIF / LIF" stackId="i" fill="var(--chart-3)" />
+                  <Bar dataKey="Non-Reg" stackId="i" fill="var(--chart-4)" />
+                  <Bar dataKey="TFSA" stackId="i" fill="var(--chart-5)" />
+                  <Bar dataKey="Taxes" stackId="i" fill="var(--destructive)" />
+
                   <Line
                     type="monotone"
                     dataKey="Spending"
