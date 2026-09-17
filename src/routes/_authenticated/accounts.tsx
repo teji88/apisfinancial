@@ -176,6 +176,15 @@ function AccountsPage() {
                     {a.account_type} · {a.currency}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{a.institution ?? "—"}</TableCell>
+                  <TableCell className="text-center">
+                    <Switch
+                      aria-label={`Keep a cash balance in ${a.account_name}`}
+                      checked={a.track_cash ?? false}
+                      onCheckedChange={(checked) =>
+                        updateAccount.mutate({ id: a.id, trackCash: checked })
+                      }
+                    />
+                  </TableCell>
                   <TableCell className="num text-right">{formatCad(s.totalValue)}</TableCell>
                   <TableCell>
                     <Button
