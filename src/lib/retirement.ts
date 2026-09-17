@@ -599,6 +599,8 @@ export function projectRetirement(input: PlannerInputs): Projection {
       spending: need,
       shortfall,
       pensionSplit: res.split,
+      effectiveCeiling: Math.min(...ceilings),
+      meltdownFlag: meltdown.some(Boolean),
       people: perPerson,
       balances: {
         tfsa: sum((x) => x.balances.tfsa),
