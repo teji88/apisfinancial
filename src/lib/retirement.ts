@@ -6,7 +6,7 @@
  * All amounts are nominal CAD unless stated otherwise.
  */
 
-import { computeTax, nextFederalBracketTop, type ProvinceCode } from "./tax";
+import { computeTax, type ProvinceCode } from "./tax";
 
 /* ---------------------------------- CPP / OAS --------------------------------- */
 
@@ -263,7 +263,6 @@ export function projectRetirement(input: PlannerInputs): Projection {
   for (let age = retireAge; age <= input.lifeExpectancy; age += 1) {
     const yearsFromNow = age - startAge;
     const need = input.desiredIncome;
-    const remainingYears = Math.max(1, input.lifeExpectancy - age + 1);
     const clawThreshold = OAS_CLAWBACK_THRESHOLD;
 
     const ages = people.map((p) => p.spec.age + (age - startAge));
@@ -396,9 +395,6 @@ export function projectRetirement(input: PlannerInputs): Projection {
       apply(solved);
       res = evaluate(draws);
     }
-    // Unused here, kept for the level-meltdown diagnostics.
-    void remainingYears;
-    void nextFederalBracketTop;
 
     // Step 3 — still short? non-registered next.
     if (res.net < need) {
