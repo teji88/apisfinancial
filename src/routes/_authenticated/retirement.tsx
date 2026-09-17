@@ -99,6 +99,8 @@ function RetirementPage() {
   const updateProfile = useUpdateProfile();
 
   const [form, setForm] = useState<Profile | null>(null);
+  /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
+  const [clawbackTolerance, setClawbackTolerance] = useState(0);
 
 
   useEffect(() => {
@@ -231,10 +233,11 @@ function RetirementPage() {
         rrsp: p.save_pct_rrsp ?? 40,
         nonreg: p.save_pct_nonreg ?? 20,
       },
+      clawbackTolerance,
       self,
       spouse,
     };
-  }, [p, derived, balances]);
+  }, [p, derived, balances, clawbackTolerance]);
 
   const projection = useMemo(() => (inputs ? projectRetirement(inputs) : null), [inputs]);
   const earliest = useMemo(() => (inputs ? earliestRetirementAge(inputs) : null), [inputs]);
@@ -355,6 +358,40 @@ function RetirementPage() {
         />
 
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StatCard
+          icon={<Landmark className="h-4 w-4" />}
+          label="Tax owed by your estate"
+          value={formatCad(projection.estateTax)}
+          hint={`${formatCad(projection.estateRegistered)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`}
+          tone={projection.estateTax > 1 ? "warn" : "good"}
+        />
+        <div className="panel space-y-2 p-4">
+          <Label className="text-xs text-muted-foreground">
+            Income cliff and acceptable overshoot
+          </Label>
+          <p className="text-sm text-muted-foreground">
+            Withdrawals stop at {formatCad(firstRow?.effectiveCeiling ?? 0)} of taxable income — the
+            lower of the OAS clawback line and the age-credit clawback ceiling.{" "}
+            {rows.some((r) => r.meltdownFlag)
+              ? "Forced withdrawals after 71 will breach that line anyway, so an early melt-down is worth it."
+              : "Forced withdrawals after 71 stay under that line."}
+          </p>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              className="max-w-[10rem]"
+              value={clawbackTolerance}
+              onChange={(e) => setClawbackTolerance(Math.max(0, Number(e.target.value) || 0))}
+            />
+            <span className="text-xs text-muted-foreground">
+              extra taxable income allowed above the cliff in melt-down years
+            </span>
+          </div>
+        </div>
+      </div>
+
 
       <Tabs defaultValue="plan">
         <TabsList>

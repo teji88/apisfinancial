@@ -6,7 +6,21 @@
  * All amounts are nominal CAD unless stated otherwise.
  */
 
-import { computeTax, type ProvinceCode } from "./tax";
+import { computeTax, FED_AGE_CLAWBACK_END, type ProvinceCode } from "./tax";
+
+/** Annual TFSA contribution room (2026), used when sweeping surplus cash. */
+export const TFSA_ANNUAL_ROOM = 7_000;
+
+/**
+ * The lowest income cliff worth respecting in a given year: the OAS clawback
+ * threshold, and — from 65 — the age-amount credit clawback ceiling, which
+ * bites first. `tolerance` allows a deliberate, bounded overshoot.
+ */
+export function effectiveCeiling(age: number, tolerance = 0): number {
+  const caps = [OAS_CLAWBACK_THRESHOLD];
+  if (age >= 65) caps.push(FED_AGE_CLAWBACK_END);
+  return Math.min(...caps) + Math.max(0, tolerance);
+}
 
 /* ---------------------------------- CPP / OAS --------------------------------- */
 
@@ -131,6 +145,9 @@ export type PlannerInputs = {
   desiredIncome: number; // household after-tax, today's CAD
   annualSavings: number; // today's CAD per year until retirement
   savingsSplit: SavingsSplit; // percentages, normalised internally
+  /** Bounded income overshoot above the effective ceiling allowed when a
+   *  melt-down lookahead shows deferring only relocates the tax bill. */
+  clawbackTolerance?: number;
   self: PersonSpec;
   spouse: PersonSpec | null;
 };
@@ -166,6 +183,10 @@ export type YearRow = {
   spending: number;
   shortfall: number;
   pensionSplit: number;
+  /** Lowest income cliff respected this year (household lowest). */
+  effectiveCeiling: number;
+  /** True when future forced RRIF/LIF minimums will breach the ceiling anyway. */
+  meltdownFlag: boolean;
   people: PersonYear[];
   balances: { tfsa: number; rrsp: number; lira: number; nonreg: number; total: number };
 };
@@ -177,6 +198,10 @@ export type Projection = {
   endingBalance: number;
   totalTaxes: number;
   totalClawback: number;
+  /** Deferred tax on registered money left at death (100% income that year). */
+  estateTax: number;
+  /** Registered balance remaining at life expectancy. */
+  estateRegistered: number;
 };
 
 /* --------------------------------- Helpers ------------------------------------ */
@@ -256,6 +281,8 @@ export function projectRetirement(input: PlannerInputs): Projection {
   }
 
   const rows: YearRow[] = [];
+  /** Unused TFSA contribution room per person, grown each year. */
+  const tfsaRoom = people.map(() => 0);
   let depletionAge: number | null = null;
   let totalTaxes = 0;
   let totalClawback = 0;
@@ -275,6 +302,33 @@ export function projectRetirement(input: PlannerInputs): Projection {
     const other = people.map((p, i) =>
       ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome : 0,
     );
+
+    // Step 4a — melt-down lookahead. Roll each person's registered money forward
+    // at the real growth rate with only the mandatory minimums coming out. If a
+    // future year's forced income breaches the ceiling regardless, the tax bill is
+    // merely being relocated: flag it and allow the bounded tolerance overshoot.
+    const tolerance = Math.max(0, input.clawbackTolerance ?? 0);
+    const meltdown = people.map((p, i) => {
+      let rrsp = p.rrsp;
+      let lira = p.lira;
+      const baseFixed = cpp[i]! + oasGross[i]! + other[i]!;
+      for (let a = ages[i]!; a <= input.lifeExpectancy; a += 1) {
+        const forced = a >= 71 ? (rrsp + lira) * rrifMinFactor(a) : 0;
+        if (baseFixed + forced > effectiveCeiling(a)) return true;
+        if (a >= 71) {
+          const f = rrifMinFactor(a);
+          rrsp -= rrsp * f;
+          lira -= lira * f;
+        }
+        rrsp *= 1 + growth;
+        lira *= 1 + growth;
+      }
+      return false;
+    });
+    const ceilings = people.map((_, i) =>
+      effectiveCeiling(ages[i]!, meltdown[i] ? tolerance : 0),
+    );
+
 
     /** Household tax for a set of draws, choosing the best pension split. */
     const evaluate = (draws: Draw[]) => {
@@ -364,11 +418,13 @@ export function projectRetirement(input: PlannerInputs): Projection {
 
     let res = evaluate(draws);
 
-    // Step 2 — fill the income gap from registered money, but stop at the OAS
-    // clawback line. LIF room is use-it-or-lose-it, so locked-in money comes first.
+    // Step 4 — fill the income gap from registered money, stopping at the
+    // effective ceiling (age-amount clawback, then OAS clawback), widened by the
+    // tolerance when the lookahead flagged a melt-down. LIF room is
+    // use-it-or-lose-it, so locked-in money comes first.
     const regRoom = people.map((p, i) => {
       const baseOrdinary = cpp[i]! + oasGross[i]! + other[i]!;
-      const ceiling = Math.max(0, clawThreshold - baseOrdinary);
+      const ceiling = Math.max(0, ceilings[i]! - baseOrdinary);
       const lifCap = Math.max(0, Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - draws[i]!.lif);
       const regCap = Math.max(0, p.rrsp - draws[i]!.reg);
       const headroom = Math.max(0, ceiling - draws[i]!.reg - draws[i]!.lif);
@@ -479,10 +535,19 @@ export function projectRetirement(input: PlannerInputs): Projection {
       p.lira = Math.max(0, p.lira - d.lif);
       p.nonreg = Math.max(0, p.nonreg - d.nonreg);
       p.tfsa = Math.max(0, p.tfsa - d.tfsa);
-      if (i === 0 && surplus > 0) {
-        p.nonreg += surplus;
-        p.acb += surplus;
-        surplus = 0;
+      // Room accrues yearly and withdrawals are added back the following year.
+      tfsaRoom[i] = tfsaRoom[i]! + TFSA_ANNUAL_ROOM + d.tfsa;
+      if (surplus > 0) {
+        // Step 3 — sweep surplus into the TFSA while room lasts, then non-registered.
+        const toTfsa = Math.min(surplus, Math.max(0, tfsaRoom[i]!));
+        p.tfsa += toTfsa;
+        tfsaRoom[i] = tfsaRoom[i]! - toTfsa;
+        surplus -= toTfsa;
+        if (i === people.length - 1 && surplus > 0) {
+          p.nonreg += surplus;
+          p.acb += surplus;
+          surplus = 0;
+        }
       }
       p.rrsp *= 1 + growth;
       p.lira *= 1 + growth;
@@ -534,6 +599,8 @@ export function projectRetirement(input: PlannerInputs): Projection {
       spending: need,
       shortfall,
       pensionSplit: res.split,
+      effectiveCeiling: Math.min(...ceilings),
+      meltdownFlag: meltdown.some(Boolean),
       people: perPerson,
       balances: {
         tfsa: sum((x) => x.balances.tfsa),
@@ -546,6 +613,30 @@ export function projectRetirement(input: PlannerInputs): Projection {
   }
 
   const last = rows[rows.length - 1];
+
+  // Step 6 — terminal (estate) tax: registered money left at death is fully
+  // included as income in the final year, on top of that year's other income.
+  let estateTax = 0;
+  let estateRegistered = 0;
+  if (last) {
+    for (const person of last.people) {
+      const registered = person.balances.rrsp + person.balances.lira;
+      estateRegistered += registered;
+      if (registered <= 0) continue;
+      const withoutEstate = computeTax({
+        ordinary: person.taxableIncome,
+        province: input.province,
+        age: person.age,
+      }).total;
+      const withEstate = computeTax({
+        ordinary: person.taxableIncome + registered,
+        province: input.province,
+        age: person.age,
+      }).total;
+      estateTax += Math.max(0, withEstate - withoutEstate);
+    }
+  }
+
   return {
     rows,
     depletionAge,
@@ -553,6 +644,8 @@ export function projectRetirement(input: PlannerInputs): Projection {
     endingBalance: last ? last.balances.total : 0,
     totalTaxes,
     totalClawback,
+    estateTax,
+    estateRegistered,
   };
 }
 
