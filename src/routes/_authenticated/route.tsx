@@ -1,8 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  BarChart3,
-  Coins,
   LayoutDashboard,
   Leaf,
   LogOut,
@@ -151,5 +149,3 @@ function AppHeader() {
     </header>
   );
 }
-
-export { BarChart3, Coins };
