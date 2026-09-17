@@ -182,16 +182,7 @@ function AppHeader() {
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Sign out"
-            onClick={() => {
-              void supabase.auth.signOut();
-            }}
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <ProfileMenu />
         </div>
       </div>
 
