@@ -1,15 +1,12 @@
 /**
- * MapleWealth retirement engine.
+ * MapleWealth retirement engine (household edition).
  * Engine 1: forward projection → earliest sustainable retirement age.
- * Engine 2: tax-efficient drawdown → year-by-year withdrawal matrix.
+ * Engine 2: tax-efficient drawdown with RRSP/LIF melt-down to pre-empt the
+ *           age-71 forced-withdrawal spike and OAS clawback.
  * All amounts are nominal CAD unless stated otherwise.
  */
 
-import {
-  computeTax,
-  nextFederalBracketTop,
-  type ProvinceCode,
-} from "./tax";
+import { computeTax, nextFederalBracketTop, type ProvinceCode } from "./tax";
 
 /* ---------------------------------- CPP / OAS --------------------------------- */
 
@@ -17,31 +14,54 @@ export const CPP_MAX_MONTHLY_65 = 1_507.65;
 export const OAS_MAX_MONTHLY_65 = 734.95;
 export const OAS_CLAWBACK_THRESHOLD = 95_323;
 export const OAS_CLAWBACK_RATE = 0.15;
+/** Year's maximum pensionable earnings (2026 estimate). */
+export const YMPE = 71_300;
+/** Contributory years counted after the 17% general drop-out. */
+export const CPP_QUALIFYING_YEARS = 39;
 
-/** Annual CPP at 65 in today's dollars for a given share of the maximum. */
+export type EarningsHistory = {
+  /** Typical annual employment income earned so far, in today's dollars. */
+  pastAverageIncome: number;
+  /** Number of years worked with CPP contributions so far. */
+  yearsWorked: number;
+  /** Expected annual employment income from now until retirement, today's dollars. */
+  futureIncome: number;
+  /** Years remaining of contributions (age → retirement age, capped at 65). */
+  futureYears: number;
+};
+
+/** Share of the CPP maximum (0–100) implied by an earnings history. */
+export function cppPercentFromEarnings(h: EarningsHistory): number {
+  const ratio = (income: number) => Math.min(1, Math.max(0, income) / YMPE);
+  const past = Math.max(0, h.yearsWorked) * ratio(h.pastAverageIncome);
+  const future = Math.max(0, h.futureYears) * ratio(h.futureIncome);
+  const credited = Math.min(CPP_QUALIFYING_YEARS, past + future);
+  return Math.round((credited / CPP_QUALIFYING_YEARS) * 1000) / 10;
+}
+
+/** Annual CPP in today's dollars for a given share of the maximum and start age. */
 export function cppAt(startAge: number, pctOfMax: number): number {
   const base = CPP_MAX_MONTHLY_65 * 12 * (pctOfMax / 100);
-  if (startAge < 65) {
-    const months = (65 - startAge) * 12;
-    return base * (1 - 0.006 * months);
-  }
-  if (startAge > 65) {
-    const months = Math.min(60, (startAge - 65) * 12);
-    return base * (1 + 0.0084 * months);
-  }
+  if (startAge < 65) return base * (1 - 0.006 * (65 - startAge) * 12);
+  if (startAge > 65) return base * (1 + 0.0084 * Math.min(60, (startAge - 65) * 12));
   return base;
 }
 
+/** Share of full OAS (0–1) from years of Canadian residence after age 18. */
+export function oasFractionFromResidence(years: number): number {
+  return Math.min(1, Math.max(0, years) / 40);
+}
+
 /** Annual OAS at the chosen start age, today's dollars, before clawback. */
-export function oasAt(startAge: number): number {
-  const base = OAS_MAX_MONTHLY_65 * 12;
+export function oasAt(startAge: number, fraction = 1): number {
+  const base = OAS_MAX_MONTHLY_65 * 12 * Math.min(1, Math.max(0, fraction));
   const months = Math.min(60, Math.max(0, (startAge - 65) * 12));
   return base * (1 + 0.006 * months);
 }
 
-export function oasClawback(netIncome: number, oasReceived: number): number {
-  if (netIncome <= OAS_CLAWBACK_THRESHOLD) return 0;
-  return Math.min(oasReceived, (netIncome - OAS_CLAWBACK_THRESHOLD) * OAS_CLAWBACK_RATE);
+export function oasClawback(netIncome: number, oasReceived: number, threshold: number): number {
+  if (netIncome <= threshold) return 0;
+  return Math.min(oasReceived, (netIncome - threshold) * OAS_CLAWBACK_RATE);
 }
 
 /* ------------------------------- RRIF / LIF ----------------------------------- */
@@ -74,35 +94,56 @@ export function lifMaxFactor(age: number): number {
 
 /* --------------------------------- Inputs ------------------------------------ */
 
-export type PlannerInputs = {
-  currentAge: number;
+export type PersonSpec = {
+  label: string;
+  age: number;
   retirementAge: number;
-  lifeExpectancy: number;
-  province: ProvinceCode;
-  inflation: number; // %
-  growth: number; // %
-  desiredIncome: number; // after-tax, today's CAD
-  annualSavings: number; // contributions until retirement, today's CAD
   cppStartAge: number;
-  cppPct: number;
+  /** Annual CPP at 65 in today's dollars. */
+  cppAt65: number;
   oasStartAge: number;
-  married: boolean;
-  spouseAge: number | null;
-  spouseRrsp: number;
-  spouseTfsa: number;
-  spouseIncome: number; // expected taxable retirement income
-  balances: {
-    tfsa: number;
-    rrsp: number; // RRSP + spousal RRSP + FHSA
-    lira: number;
-    nonreg: number;
-  };
+  /** Share of full OAS, 0–1, from years of residence. */
+  oasFraction: number;
+  /** Other taxable retirement income (pension, rental…), today's dollars. */
+  otherIncome: number;
+  balances: { tfsa: number; rrsp: number; lira: number; nonreg: number };
   /** Share of the non-registered balance that is unrealized gain. */
   nonregGainRatio: number;
 };
 
-export type YearRow = {
+export type SavingsSplit = { tfsa: number; rrsp: number; nonreg: number };
+
+export type PlannerInputs = {
+  retirementAge: number; // primary person's retirement age (the plan start)
+  lifeExpectancy: number;
+  province: ProvinceCode;
+  inflation: number; // %
+  growth: number; // %
+  desiredIncome: number; // household after-tax, today's CAD
+  annualSavings: number; // today's CAD per year until retirement
+  savingsSplit: SavingsSplit; // percentages, normalised internally
+  self: PersonSpec;
+  spouse: PersonSpec | null;
+};
+
+export type PersonYear = {
+  label: string;
   age: number;
+  rrifDraw: number;
+  lifDraw: number;
+  nonregDraw: number;
+  tfsaDraw: number;
+  cpp: number;
+  oas: number;
+  oasClawback: number;
+  otherIncome: number;
+  taxableIncome: number;
+  taxes: number;
+  balances: { tfsa: number; rrsp: number; lira: number; nonreg: number; total: number };
+};
+
+export type YearRow = {
+  age: number; // primary person's age
   year: number;
   rrifDraw: number;
   lifDraw: number;
@@ -111,9 +152,12 @@ export type YearRow = {
   cpp: number;
   oas: number; // net of clawback
   oasClawback: number;
+  otherIncome: number;
   taxes: number;
   spending: number;
   shortfall: number;
+  pensionSplit: number;
+  people: PersonYear[];
   balances: { tfsa: number; rrsp: number; lira: number; nonreg: number; total: number };
 };
 
@@ -122,16 +166,19 @@ export type Projection = {
   depletionAge: number | null;
   success: boolean;
   endingBalance: number;
+  totalTaxes: number;
+  totalClawback: number;
 };
 
-/* ------------------------------- Drawdown solver ------------------------------ */
+/* --------------------------------- Helpers ------------------------------------ */
 
 function bisect(f: (x: number) => number, lo: number, hi: number): number {
+  if (hi <= lo) return lo;
   if (f(hi) < 0) return hi;
   if (f(lo) > 0) return lo;
   let a = lo;
   let b = hi;
-  for (let i = 0; i < 60; i += 1) {
+  for (let i = 0; i < 50; i += 1) {
     const m = (a + b) / 2;
     if (f(m) < 0) a = m;
     else b = m;
@@ -139,206 +186,344 @@ function bisect(f: (x: number) => number, lo: number, hi: number): number {
   return (a + b) / 2;
 }
 
+type PersonState = {
+  spec: PersonSpec;
+  tfsa: number;
+  rrsp: number;
+  lira: number;
+  nonreg: number;
+  acb: number;
+};
+
+type Draw = { reg: number; lif: number; nonreg: number; tfsa: number };
+
+const zeroDraw = (): Draw => ({ reg: 0, lif: 0, nonreg: 0, tfsa: 0 });
+
+/* -------------------------------- Projection ---------------------------------- */
+
 export function projectRetirement(input: PlannerInputs): Projection {
   const infl = input.inflation / 100;
   const growth = input.growth / 100;
   const thisYear = new Date().getUTCFullYear();
 
-  let tfsa = input.balances.tfsa;
-  let rrsp = input.balances.rrsp;
-  let lira = input.balances.lira;
-  let nonreg = input.balances.nonreg;
-  let nonregAcb = nonreg * (1 - input.nonregGainRatio);
+  const specs: PersonSpec[] = input.spouse ? [input.self, input.spouse] : [input.self];
+  const people: PersonState[] = specs.map((spec) => ({
+    spec,
+    tfsa: spec.balances.tfsa,
+    rrsp: spec.balances.rrsp,
+    lira: spec.balances.lira,
+    nonreg: spec.balances.nonreg,
+    acb: spec.balances.nonreg * (1 - spec.nonregGainRatio),
+  }));
 
-  const retireAge = Math.max(input.retirementAge, input.currentAge);
+  const startAge = input.self.age;
+  const retireAge = Math.max(input.retirementAge, startAge);
 
-  // Accumulation phase.
-  for (let age = input.currentAge; age < retireAge; age += 1) {
-    const years = age - input.currentAge;
-    const contribution = input.annualSavings * (1 + infl) ** years;
-    const total = tfsa + rrsp + lira + nonreg;
-    const share = (b: number) => (total > 0 ? b / total : 0);
-    const toTfsa = contribution * (total > 0 ? share(tfsa) : 0.4);
-    const toRrsp = contribution * (total > 0 ? share(rrsp) : 0.4);
-    const toNonreg = contribution - toTfsa - toRrsp;
-    tfsa = (tfsa + toTfsa) * (1 + growth);
-    rrsp = (rrsp + toRrsp) * (1 + growth);
-    lira = lira * (1 + growth);
-    nonregAcb += toNonreg;
-    nonreg = (nonreg + toNonreg) * (1 + growth);
+  // --- Accumulation: savings go to the primary person's accounts by the chosen split.
+  const splitTotal =
+    Math.max(0, input.savingsSplit.tfsa) +
+    Math.max(0, input.savingsSplit.rrsp) +
+    Math.max(0, input.savingsSplit.nonreg);
+  const share = {
+    tfsa: splitTotal > 0 ? Math.max(0, input.savingsSplit.tfsa) / splitTotal : 0.4,
+    rrsp: splitTotal > 0 ? Math.max(0, input.savingsSplit.rrsp) / splitTotal : 0.4,
+    nonreg: splitTotal > 0 ? Math.max(0, input.savingsSplit.nonreg) / splitTotal : 0.2,
+  };
+  const primary = people[0]!;
+  for (let age = startAge; age < retireAge; age += 1) {
+    const contribution = input.annualSavings * (1 + infl) ** (age - startAge);
+    primary.tfsa = (primary.tfsa + contribution * share.tfsa) * (1 + growth);
+    primary.rrsp = (primary.rrsp + contribution * share.rrsp) * (1 + growth);
+    primary.acb += contribution * share.nonreg;
+    primary.nonreg = (primary.nonreg + contribution * share.nonreg) * (1 + growth);
+    primary.lira *= 1 + growth;
+    for (const p of people.slice(1)) {
+      p.tfsa *= 1 + growth;
+      p.rrsp *= 1 + growth;
+      p.lira *= 1 + growth;
+      p.nonreg *= 1 + growth;
+    }
   }
 
   const rows: YearRow[] = [];
   let depletionAge: number | null = null;
+  let totalTaxes = 0;
+  let totalClawback = 0;
 
   for (let age = retireAge; age <= input.lifeExpectancy; age += 1) {
-    const yearsFromNow = age - input.currentAge;
+    const yearsFromNow = age - startAge;
     const indexation = (1 + infl) ** yearsFromNow;
     const need = input.desiredIncome * indexation;
+    const remainingYears = Math.max(1, input.lifeExpectancy - age + 1);
+    const clawThreshold = OAS_CLAWBACK_THRESHOLD * indexation;
 
-    const cpp = age >= input.cppStartAge ? cppAt(input.cppStartAge, input.cppPct) * indexation : 0;
-    const oasGross = age >= Math.max(65, input.oasStartAge) ? oasAt(input.oasStartAge) * indexation : 0;
+    const ages = people.map((p) => p.spec.age + (age - startAge));
+    const cpp = people.map((p, i) =>
+      ages[i]! >= p.spec.cppStartAge ? adjustedCpp(p.spec) * indexation : 0,
+    );
+    const oasGross = people.map((p, i) =>
+      ages[i]! >= Math.max(65, p.spec.oasStartAge)
+        ? oasAt(p.spec.oasStartAge, p.spec.oasFraction) * indexation
+        : 0,
+    );
+    const other = people.map((p, i) =>
+      ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome * indexation : 0,
+    );
 
-    // Mandatory minimums once converted (RRSP→RRIF, LIRA→LIF at 71 at the latest).
-    const converted = age >= 71;
-    const rrifMin = converted ? rrsp * rrifMinFactor(age) : 0;
-    const lifMin = converted ? lira * rrifMinFactor(age) : 0;
-    const lifCap = converted ? lira * lifMaxFactor(age) : lira * lifMaxFactor(age);
+    /** Household tax for a set of draws, choosing the best pension split. */
+    const evaluate = (draws: Draw[]) => {
+      const pension = people.map((_, i) => draws[i]!.reg + draws[i]!.lif);
+      const base = people.map(
+        (_, i) => cpp[i]! + oasGross[i]! + other[i]! + pension[i]!,
+      );
 
-    const spouseAge = input.spouseAge == null ? age : input.spouseAge + (age - retireAge);
-    const spouseBase = input.married
-      ? computeTax({
-          ordinary: input.spouseIncome * indexation,
-          province: input.province,
-          age: spouseAge,
-          pensionIncome: input.spouseIncome > 0 ? input.spouseIncome * indexation : 0,
-        }).total
-      : 0;
+      let bestSplit = 0;
+      let best: ReturnType<typeof scoreSplit> | null = null;
+      const canSplit =
+        people.length === 2 && ages.some((a) => a >= 65) && pension.some((x) => x > 0);
+      const options = canSplit ? [0, 0.1, 0.2, 0.3, 0.4, 0.5] : [0];
 
-    /** Household tax and net cash for a given set of withdrawals. */
-    const evaluate = (regDraw: number, lifDraw: number, nonregDraw: number, tfsaDraw: number) => {
-      const pension = regDraw + lifDraw;
-      const splittable = input.married && age >= 65 ? pension * 0.5 : 0;
-      const ordinarySelf = cpp + oasGross + pension - splittable;
-      const gainRatio = nonreg > 0 ? Math.max(0, 1 - nonregAcb / nonreg) : 0;
-      const gains = nonregDraw * gainRatio;
+      function scoreSplit(fraction: number) {
+        // Move eligible pension income from the higher-income person to the lower.
+        const hi = base[0]! >= (base[1] ?? -Infinity) ? 0 : 1;
+        const lo = hi === 0 ? 1 : 0;
+        const eligible = ages[hi]! >= 65 ? pension[hi]! : 0;
+        const moved = eligible * fraction;
 
-      const selfTax = computeTax({
-        ordinary: ordinarySelf,
-        capitalGains: gains,
-        province: input.province,
-        age,
-        pensionIncome: age >= 65 ? pension - splittable : 0,
-      });
-      const claw = oasClawback(selfTax.netIncome, oasGross);
-      let spouseTax = 0;
-      if (input.married) {
-        spouseTax =
-          computeTax({
-            ordinary: input.spouseIncome * indexation + splittable,
+        let taxes = 0;
+        let claw = 0;
+        let taxable = 0;
+        const perPerson: {
+          taxes: number;
+          claw: number;
+          taxable: number;
+        }[] = [];
+
+        for (let i = 0; i < people.length; i += 1) {
+          const p = people[i]!;
+          const d = draws[i]!;
+          const adj = i === hi ? -moved : people.length === 2 && i === lo ? moved : 0;
+          const ordinary = base[i]! + adj;
+          const gainRatio = p.nonreg > 0 ? Math.max(0, 1 - p.acb / p.nonreg) : 0;
+          const gains = d.nonreg * gainRatio;
+          const pensionCredit =
+            ages[i]! >= 65 ? Math.max(0, pension[i]! + adj) : 0;
+          const t = computeTax({
+            ordinary,
+            capitalGains: gains,
             province: input.province,
-            age: spouseAge,
-            pensionIncome: splittable,
-          }).total - spouseBase;
+            age: ages[i]!,
+            pensionIncome: pensionCredit,
+          });
+          const c = oasClawback(t.netIncome, oasGross[i]!, clawThreshold);
+          taxes += t.total + c;
+          claw += c;
+          taxable += t.taxableIncome;
+          perPerson.push({ taxes: t.total + c, claw: c, taxable: t.taxableIncome });
+        }
+        return { taxes, claw, taxable, perPerson, moved };
       }
-      const taxes = selfTax.total + Math.max(0, spouseTax) + claw;
-      const cash = cpp + oasGross + pension + nonregDraw + tfsaDraw;
-      return { net: cash - taxes, taxes, claw, gains };
+
+      for (const f of options) {
+        const s = scoreSplit(f);
+        if (!best || s.taxes < best.taxes) {
+          best = s;
+          bestSplit = f === 0 ? 0 : s.moved;
+        }
+      }
+      const result = best!;
+      const cash = people.reduce(
+        (sum, _, i) =>
+          sum +
+          cpp[i]! +
+          oasGross[i]! +
+          other[i]! +
+          draws[i]!.reg +
+          draws[i]!.lif +
+          draws[i]!.nonreg +
+          draws[i]!.tfsa,
+        0,
+      );
+      return { ...result, split: bestSplit, net: cash - result.taxes };
     };
 
-    // Step 1 — mandatory minimums only.
-    let regDraw = rrifMin;
-    let lifDraw = lifMin;
-    let nonregDraw = 0;
-    let tfsaDraw = 0;
-    let res = evaluate(regDraw, lifDraw, nonregDraw, tfsaDraw);
+    const draws: Draw[] = people.map(() => zeroDraw());
 
-    // Step 2 — top up from registered money while staying inside the low brackets
-    // and below the OAS clawback threshold.
-    if (res.net < need) {
-      const baseOrdinary = cpp + oasGross + regDraw + lifDraw;
-      const bracketTop = nextFederalBracketTop(baseOrdinary);
+    // Step 1 — mandatory RRIF / LIF minimums from age 71.
+    people.forEach((p, i) => {
+      const converted = ages[i]! >= 71;
+      draws[i]!.reg = converted ? p.rrsp * rrifMinFactor(ages[i]!) : 0;
+      draws[i]!.lif = converted ? p.lira * rrifMinFactor(ages[i]!) : 0;
+    });
+
+    // Step 2 — melt registered money down evenly, inside the low brackets and
+    // below the OAS clawback line, so later forced withdrawals stay small.
+    people.forEach((p, i) => {
+      const registered = p.rrsp + p.lira;
+      if (registered <= 0) return;
+      const level = registered / remainingYears;
+      const baseOrdinary = cpp[i]! + oasGross[i]! + other[i]!;
       const ceiling = Math.min(
-        bracketTop,
-        oasGross > 0 ? OAS_CLAWBACK_THRESHOLD * indexation ** 0 : Infinity,
+        nextFederalBracketTop(baseOrdinary),
+        ages[i]! >= 60 ? clawThreshold : Infinity,
       );
       const room = Math.max(0, ceiling - baseOrdinary);
-      const extraLif = Math.min(room, Math.max(0, lifCap - lifDraw), lira - lifDraw);
-      const extraReg = Math.min(Math.max(0, room - extraLif), Math.max(0, rrsp - regDraw));
-      const maxExtra = extraLif + extraReg;
-      if (maxExtra > 0) {
+      const target = Math.min(Math.max(level, draws[i]!.reg + draws[i]!.lif), room);
+      const lifCap = Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!));
+      const wantLif = Math.min(Math.max(draws[i]!.lif, target * (p.lira / registered)), lifCap);
+      const wantReg = Math.min(Math.max(draws[i]!.reg, target - wantLif), p.rrsp);
+      draws[i]!.lif = Math.max(draws[i]!.lif, wantLif);
+      draws[i]!.reg = Math.max(draws[i]!.reg, wantReg);
+    });
+
+    let res = evaluate(draws);
+
+    // Step 3 — still short? non-registered next.
+    if (res.net < need) {
+      const pool = people.reduce((s, p) => s + p.nonreg, 0);
+      if (pool > 0) {
+        const apply = (x: number) => {
+          people.forEach((p, i) => {
+            draws[i]!.nonreg = pool > 0 ? (x * p.nonreg) / pool : 0;
+          });
+        };
         const solved = bisect(
           (x) => {
-            const l = Math.min(x, extraLif);
-            const r = x - l;
-            return evaluate(regDraw + r, lifDraw + l, nonregDraw, tfsaDraw).net - need;
+            apply(x);
+            return evaluate(draws).net - need;
           },
           0,
-          maxExtra,
+          pool,
         );
-        const l = Math.min(solved, extraLif);
-        lifDraw += l;
-        regDraw += solved - l;
-        res = evaluate(regDraw, lifDraw, nonregDraw, tfsaDraw);
+        apply(solved);
+        res = evaluate(draws);
       }
     }
 
-    // Step 3 — non-registered.
-    if (res.net < need && nonreg > 0) {
-      nonregDraw = bisect(
-        (x) => evaluate(regDraw, lifDraw, x, tfsaDraw).net - need,
-        0,
-        nonreg,
-      );
-      res = evaluate(regDraw, lifDraw, nonregDraw, tfsaDraw);
-    }
-
-    // Step 4 — TFSA (tax-free, never in clawback income).
-    if (res.net < need && tfsa > 0) {
-      tfsaDraw = Math.min(tfsa, need - res.net);
-      res = evaluate(regDraw, lifDraw, nonregDraw, tfsaDraw);
-    }
-
-    // Step 5 — extra registered beyond the bracket ceiling if still short.
+    // Step 4 — top up with TFSA (tax-free, invisible to the clawback).
     if (res.net < need) {
-      const roomReg = Math.max(0, rrsp - regDraw);
-      const roomLif = Math.max(0, Math.min(lira - lifDraw, lifCap - lifDraw));
-      const maxExtra = roomReg + roomLif;
-      if (maxExtra > 0) {
+      const pool = people.reduce((s, p) => s + p.tfsa, 0);
+      if (pool > 0) {
+        const want = Math.min(pool, need - res.net);
+        people.forEach((p, i) => {
+          draws[i]!.tfsa = (want * p.tfsa) / pool;
+        });
+        res = evaluate(draws);
+      }
+    }
+
+    // Step 5 — last resort: registered money above the bracket ceiling.
+    if (res.net < need) {
+      const room = people.reduce(
+        (s, p, i) =>
+          s +
+          Math.max(0, p.rrsp - draws[i]!.reg) +
+          Math.max(0, Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - draws[i]!.lif),
+        0,
+      );
+      if (room > 0) {
+        const baseline = people.map((_, i) => ({ ...draws[i]! }));
+        const apply = (x: number) => {
+          const f = room > 0 ? x / room : 0;
+          people.forEach((p, i) => {
+            const rReg = Math.max(0, p.rrsp - baseline[i]!.reg);
+            const rLif = Math.max(
+              0,
+              Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - baseline[i]!.lif,
+            );
+            draws[i]!.reg = baseline[i]!.reg + rReg * f;
+            draws[i]!.lif = baseline[i]!.lif + rLif * f;
+          });
+        };
         const solved = bisect(
           (x) => {
-            const l = Math.min(x, roomLif);
-            const r = x - l;
-            return evaluate(regDraw + r, lifDraw + l, nonregDraw, tfsaDraw).net - need;
+            apply(x);
+            return evaluate(draws).net - need;
           },
           0,
-          maxExtra,
+          room,
         );
-        const l = Math.min(solved, roomLif);
-        lifDraw += l;
-        regDraw += solved - l;
-        res = evaluate(regDraw, lifDraw, nonregDraw, tfsaDraw);
+        apply(solved);
+        res = evaluate(draws);
       }
     }
 
     const shortfall = Math.max(0, need - res.net);
 
-    // Apply withdrawals.
-    const gainRatio = nonreg > 0 ? Math.max(0, 1 - nonregAcb / nonreg) : 0;
-    nonregAcb = Math.max(0, nonregAcb - nonregDraw * (1 - gainRatio));
-    rrsp = Math.max(0, rrsp - regDraw);
-    lira = Math.max(0, lira - lifDraw);
-    nonreg = Math.max(0, nonreg - nonregDraw);
-    tfsa = Math.max(0, tfsa - tfsaDraw);
+    // Apply withdrawals, reinvest surplus, then grow.
+    const perPerson: PersonYear[] = [];
+    let surplus = Math.max(0, res.net - need);
+    people.forEach((p, i) => {
+      const d = draws[i]!;
+      const gainRatio = p.nonreg > 0 ? Math.max(0, 1 - p.acb / p.nonreg) : 0;
+      p.acb = Math.max(0, p.acb - d.nonreg * (1 - gainRatio));
+      p.rrsp = Math.max(0, p.rrsp - d.reg);
+      p.lira = Math.max(0, p.lira - d.lif);
+      p.nonreg = Math.max(0, p.nonreg - d.nonreg);
+      p.tfsa = Math.max(0, p.tfsa - d.tfsa);
+      if (i === 0 && surplus > 0) {
+        p.nonreg += surplus;
+        p.acb += surplus;
+        surplus = 0;
+      }
+      p.rrsp *= 1 + growth;
+      p.lira *= 1 + growth;
+      p.tfsa *= 1 + growth;
+      p.nonreg *= 1 + growth;
 
-    // Surplus after-tax cash is reinvested in the non-registered account.
-    const surplus = Math.max(0, res.net - need);
-    nonreg += surplus;
-    nonregAcb += surplus;
+      const info = res.perPerson[i]!;
+      perPerson.push({
+        label: p.spec.label,
+        age: ages[i]!,
+        rrifDraw: d.reg,
+        lifDraw: d.lif,
+        nonregDraw: d.nonreg,
+        tfsaDraw: d.tfsa,
+        cpp: cpp[i]!,
+        oas: Math.max(0, oasGross[i]! - info.claw),
+        oasClawback: info.claw,
+        otherIncome: other[i]!,
+        taxableIncome: info.taxable,
+        taxes: info.taxes,
+        balances: {
+          tfsa: p.tfsa,
+          rrsp: p.rrsp,
+          lira: p.lira,
+          nonreg: p.nonreg,
+          total: p.tfsa + p.rrsp + p.lira + p.nonreg,
+        },
+      });
+    });
 
-    // Growth for the remainder of the year.
-    rrsp *= 1 + growth;
-    lira *= 1 + growth;
-    tfsa *= 1 + growth;
-    nonreg *= 1 + growth;
-
-    const total = rrsp + lira + tfsa + nonreg;
+    const sum = (f: (x: PersonYear) => number) => perPerson.reduce((s, x) => s + f(x), 0);
+    const total = perPerson.reduce((s, x) => s + x.balances.total, 0);
     if (shortfall > 1 && depletionAge == null) depletionAge = age;
+    totalTaxes += res.taxes;
+    totalClawback += res.claw;
 
     rows.push({
       age,
-      year: thisYear + (age - input.currentAge),
-      rrifDraw: regDraw,
-      lifDraw,
-      nonregDraw,
-      tfsaDraw,
-      cpp,
-      oas: Math.max(0, oasGross - res.claw),
+      year: thisYear + yearsFromNow,
+      rrifDraw: sum((x) => x.rrifDraw),
+      lifDraw: sum((x) => x.lifDraw),
+      nonregDraw: sum((x) => x.nonregDraw),
+      tfsaDraw: sum((x) => x.tfsaDraw),
+      cpp: sum((x) => x.cpp),
+      oas: sum((x) => x.oas),
       oasClawback: res.claw,
+      otherIncome: sum((x) => x.otherIncome),
       taxes: res.taxes,
       spending: need,
       shortfall,
-      balances: { tfsa, rrsp, lira, nonreg, total },
+      pensionSplit: res.split,
+      people: perPerson,
+      balances: {
+        tfsa: sum((x) => x.balances.tfsa),
+        rrsp: sum((x) => x.balances.rrsp),
+        lira: sum((x) => x.balances.lira),
+        nonreg: sum((x) => x.balances.nonreg),
+        total,
+      },
     });
   }
 
@@ -348,12 +533,24 @@ export function projectRetirement(input: PlannerInputs): Projection {
     depletionAge,
     success: depletionAge == null,
     endingBalance: last ? last.balances.total : 0,
+    totalTaxes,
+    totalClawback,
   };
 }
 
+function adjustedCpp(spec: PersonSpec): number {
+  const base = spec.cppAt65;
+  if (spec.cppStartAge < 65) return base * (1 - 0.006 * (65 - spec.cppStartAge) * 12);
+  if (spec.cppStartAge > 65)
+    return base * (1 + 0.0084 * Math.min(60, (spec.cppStartAge - 65) * 12));
+  return base;
+}
+
+export { adjustedCpp as cppAdjustedForStartAge };
+
 /** Engine 1 — earliest age at which the plan survives to life expectancy. */
 export function earliestRetirementAge(input: PlannerInputs): number | null {
-  for (let age = Math.max(input.currentAge, 50); age <= 80; age += 1) {
+  for (let age = Math.max(input.self.age, 50); age <= 80; age += 1) {
     const p = projectRetirement({ ...input, retirementAge: age });
     if (p.success) return age;
   }
