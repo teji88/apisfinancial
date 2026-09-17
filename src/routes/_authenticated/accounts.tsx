@@ -135,7 +135,18 @@ function AccountsPage() {
             Add account
           </Button>
         </div>
+        <div className="flex items-start gap-3 md:col-span-5">
+          <Switch id="track-cash" checked={trackCash} onCheckedChange={setTrackCash} />
+          <div className="space-y-0.5">
+            <Label htmlFor="track-cash">Keep a cash balance in this account</Label>
+            <p className="text-xs text-muted-foreground">
+              Off by default: a purchase is treated as money you brought in, so the account is
+              worth what you hold. Turn it on only if you record deposits first and then buy.
+            </p>
+          </div>
+        </div>
       </form>
+
 
       <div className="panel overflow-x-auto">
         <Table>
