@@ -308,6 +308,7 @@ export function useAddAccount() {
       accountName: string;
       currency: string;
       institution: string;
+      trackCash?: boolean;
     }) => {
       const { data: auth } = await supabase.auth.getUser();
       const userId = auth.user?.id;
@@ -318,12 +319,28 @@ export function useAddAccount() {
         account_name: input.accountName,
         currency: input.currency,
         institution: input.institution || null,
+        track_cash: input.trackCash ?? false,
       });
       if (error) throw error;
     },
     onSuccess: invalidate,
   });
 }
+
+export function useUpdateAccount() {
+  const invalidate = useInvalidatePortfolio();
+  return useMutation({
+    mutationFn: async (input: { id: string; trackCash: boolean }) => {
+      const { error } = await supabase
+        .from("accounts")
+        .update({ track_cash: input.trackCash })
+        .eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+}
+
 
 export function useDeleteAccount() {
   const invalidate = useInvalidatePortfolio();
