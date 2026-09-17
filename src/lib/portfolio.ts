@@ -10,7 +10,7 @@ export function useAccounts() {
     queryFn: async (): Promise<Account[]> => {
       const { data, error } = await supabase
         .from("accounts")
-        .select("id, account_type, account_name, currency, institution")
+        .select("id, account_type, account_name, currency, institution, track_cash")
         .order("created_at");
       if (error) throw error;
       return data ?? [];
