@@ -530,6 +530,10 @@ function EditTransactionDialog({
       setFxRate("1");
       return;
     }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      toast.error("Pick a valid date first.");
+      return;
+    }
     const res = await fxOnDate({ data: { date } });
     if (res.rate) setFxRate(res.rate.toFixed(4));
     else toast.error("No published rate for that date.");
