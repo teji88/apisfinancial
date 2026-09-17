@@ -859,6 +859,27 @@ function RetirementPage() {
             </div>
           </div>
 
+          <div className="panel space-y-3 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Count RESP and RDSP money too</p>
+                <p className="text-xs text-muted-foreground">
+                  These are not retirement income — an RESP is for a child's education and an
+                  RDSP for disability support — so they are left out by default.
+                </p>
+              </div>
+              <Switch checked={includeRespRdsp} onCheckedChange={setIncludeRespRdsp} />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="RESP balance">
+                <Input type="number" disabled value={Math.round(byType.resp)} />
+              </Field>
+              <Field label="RDSP balance">
+                <Input type="number" disabled value={Math.round(byType.rdsp)} />
+              </Field>
+            </div>
+          </div>
+
           <div className="flex justify-end">
             <Button onClick={save} disabled={updateProfile.isPending}>
               {updateProfile.isPending ? "Saving…" : "Save plan"}
