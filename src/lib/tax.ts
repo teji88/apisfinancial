@@ -16,9 +16,11 @@ export const FEDERAL_BRACKETS: Bracket[] = [
 export const FEDERAL_BPA = 16_500;
 export const LOWEST_FED_RATE = 0.14;
 
-/** Age amount (65+) and pension income amount, federal. */
-export const FED_AGE_AMOUNT = 9_250;
-export const FED_AGE_CLAWBACK_START = 46_000;
+/** Age amount (65+) and pension income amount, federal — 2026 values. */
+export const FED_AGE_CLAWBACK_START = 44_325;
+/** Net income at which the age amount is fully clawed back. */
+export const FED_AGE_CLAWBACK_END = 86_912;
+export const FED_AGE_AMOUNT = (FED_AGE_CLAWBACK_END - FED_AGE_CLAWBACK_START) * 0.15;
 export const FED_PENSION_AMOUNT = 2_000;
 
 export type ProvinceCode =
