@@ -261,7 +261,7 @@ function RetirementPage() {
                   override_lira: p.override_lira,
                   override_fhsa: p.override_fhsa,
                   override_nonreg: p.override_nonreg,
-                },
+                } as Partial<Profile>,
                 {
                   onSuccess: () => toast.success("Assumptions saved"),
                   onError: (e) => toast.error((e as Error).message),
