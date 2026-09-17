@@ -17,6 +17,14 @@ export type ProviderQuote = {
   previousClose: number | null;
   currency: string | null;
   name: string | null;
+  /** Forward annual dividend per share, in the listing currency. */
+  dividendRate?: number | null;
+  /** Trailing/forward dividend yield in percent. */
+  dividendYield?: number | null;
+  /** Most recent or upcoming ex-dividend date (ISO). */
+  exDivDate?: string | null;
+  /** Per-share amount of that ex-dividend event. */
+  exDivAmount?: number | null;
 };
 
 export interface MarketProvider {
@@ -48,7 +56,18 @@ type CnbcQuote = {
   last?: string;
   previous_day_closing?: string;
   currencyCode?: string;
+  dividend?: string;
+  dividendyield?: string;
+  EventData?: { div_ex_date?: string; div_amount?: string };
 };
+
+/** CNBC returns MM/DD/YYYY; store ISO. */
+function isoDate(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const m = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return null;
+  return `${m[3]}-${m[1]}-${m[2]}`;
+}
 
 /** Batched quotes from CNBC (max ~50 symbols per call). */
 async function cnbcQuotes(symbols: string[]): Promise<Map<string, ProviderQuote>> {
@@ -78,6 +97,10 @@ async function cnbcQuotes(symbols: string[]): Promise<Map<string, ProviderQuote>
         previousClose: num(q.previous_day_closing),
         currency: q.currencyCode ?? null,
         name: q.name ?? null,
+        dividendRate: num(q.dividend),
+        dividendYield: num(q.dividendyield),
+        exDivDate: isoDate(q.EventData?.div_ex_date),
+        exDivAmount: num(q.EventData?.div_amount),
       });
     }
   } catch (err) {
@@ -220,6 +243,10 @@ export async function refreshPrices(symbols: string[]): Promise<{
       previous_close: q.previousClose,
       currency: q.currency,
       name: q.name,
+      dividend_rate: q.dividendRate ?? null,
+      dividend_yield: q.dividendYield ?? null,
+      div_ex_date: q.exDivDate ?? null,
+      div_amount: q.exDivAmount ?? null,
       as_of: asOf,
       updated_at: new Date().toISOString(),
     }));

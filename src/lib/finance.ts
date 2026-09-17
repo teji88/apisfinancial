@@ -76,6 +76,10 @@ export type Quote = {
   previousClose: number | null;
   currency: string | null;
   name?: string | null;
+  dividendRate?: number | null;
+  dividendYield?: number | null;
+  exDivDate?: string | null;
+  exDivAmount?: number | null;
 };
 
 /** CAD gross value of a transaction line (excluding fees). */

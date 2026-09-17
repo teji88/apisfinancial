@@ -13,10 +13,10 @@
 - [x] Lovable AI structured parsing of broker statements (Questrade, Wealthsimple, TD, RBC, IBKR)
 - [x] Verification table with confidence flags before committing to the ledger
 
-## Phase 3 — dividends
-- [ ] Forward annual income, portfolio yield, yield on cost, trailing 12-month received
-- [ ] Ex-dividend calendar + "approve & record" to the ledger
-- [ ] 10-year DRIP compounder projection with growth/contribution controls
+## Phase 3 — dividends (done)
+- [x] Forward annual income, portfolio yield, yield on cost, trailing 12-month received
+- [x] Ex-dividend calendar + "approve & record" to the ledger
+- [x] 10-year DRIP compounder projection with growth/contribution controls
 
 ## Phase 4 — benchmarking
 - [ ] Cash-flow-matched benchmark simulation vs SPY, XIC.TO, XEQT.TO (direct alpha)

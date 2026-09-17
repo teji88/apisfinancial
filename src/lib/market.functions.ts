@@ -13,6 +13,10 @@ export type QuoteResult = {
   currency: string | null;
   name: string | null;
   asOf: string | null;
+  dividendRate: number | null;
+  dividendYield: number | null;
+  exDivDate: string | null;
+  exDivAmount: number | null;
 };
 
 export type QuotesResponse = {
@@ -65,6 +69,10 @@ export const getQuotes = createServerFn({ method: "POST" })
           currency: row.currency,
           name: row.name,
           asOf: row.as_of ?? row.updated_at.slice(0, 10),
+          dividendRate: row.dividend_rate == null ? null : Number(row.dividend_rate),
+          dividendYield: row.dividend_yield == null ? null : Number(row.dividend_yield),
+          exDivDate: row.div_ex_date ?? null,
+          exDivAmount: row.div_amount == null ? null : Number(row.div_amount),
         });
       }
       if (!fresh) stale.push(symbol);
@@ -76,7 +84,18 @@ export const getQuotes = createServerFn({ method: "POST" })
       );
       for (const q of fetched) {
         if (q.price == null) continue;
-        quotes.set(q.symbol.toUpperCase(), { ...q, symbol: q.symbol.toUpperCase(), asOf });
+        quotes.set(q.symbol.toUpperCase(), {
+          symbol: q.symbol.toUpperCase(),
+          price: q.price,
+          previousClose: q.previousClose,
+          currency: q.currency,
+          name: q.name,
+          asOf,
+          dividendRate: q.dividendRate ?? null,
+          dividendYield: q.dividendYield ?? null,
+          exDivDate: q.exDivDate ?? null,
+          exDivAmount: q.exDivAmount ?? null,
+        });
       }
     }
 
