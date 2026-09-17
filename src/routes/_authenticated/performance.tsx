@@ -297,7 +297,7 @@ function PerformancePage() {
               </TableCell>
               <TableCell className="num text-right text-muted-foreground">—</TableCell>
             </TableRow>
-            {(comparison?.benchmarks ?? BENCHMARKS.map((b) => ({ ...b, available: false, endValue: 0, mwrr: null, values: [] }))).map(
+            {(comparison?.benchmarks ?? selection.map((b) => ({ ...b, available: false, endValue: 0, mwrr: null, values: [] }))).map(
               (b) => {
                 const diff = b.available ? portfolioValue - b.endValue : null;
                 return (
