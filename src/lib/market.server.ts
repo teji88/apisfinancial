@@ -243,6 +243,10 @@ export async function refreshPrices(symbols: string[]): Promise<{
       previous_close: q.previousClose,
       currency: q.currency,
       name: q.name,
+      dividend_rate: q.dividendRate ?? null,
+      dividend_yield: q.dividendYield ?? null,
+      div_ex_date: q.exDivDate ?? null,
+      div_amount: q.exDivAmount ?? null,
       as_of: asOf,
       updated_at: new Date().toISOString(),
     }));
