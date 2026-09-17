@@ -529,10 +529,10 @@ function RetirementPage() {
                   <Legend />
                   {(
                     [
-                      ["RRSP / RRIF", "12 76% 61%"],
-                      ["LIRA / LIF", "173 58% 39%"],
-                      ["TFSA", "197 37% 44%"],
-                      ["Non-Registered", "43 74% 49%"],
+                      ["RRSP / RRIF", "var(--chart-1)"],
+                      ["LIRA / LIF", "var(--chart-2)"],
+                      ["TFSA", "var(--chart-3)"],
+                      ["Non-Registered", "var(--chart-4)"],
                     ] as const
                   ).map(([key, color]) => (
                     <Area
@@ -540,11 +540,12 @@ function RetirementPage() {
                       type="monotone"
                       dataKey={key}
                       stackId="1"
-                      stroke={`hsl(${color})`}
-                      fill={`hsl(${color})`}
+                      stroke={color}
+                      fill={color}
                       fillOpacity={0.45}
                     />
                   ))}
+
                 </AreaChart>
               </ResponsiveContainer>
             </div>
