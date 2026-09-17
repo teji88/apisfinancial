@@ -498,7 +498,7 @@ function RetirementPage() {
                   <Line
                     type="monotone"
                     dataKey="Spending"
-                    stroke="hsl(var(--foreground))"
+                    stroke="var(--foreground)"
                     dot={false}
                     strokeWidth={2}
                   />
