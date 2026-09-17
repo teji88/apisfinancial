@@ -1,0 +1,16 @@
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS marital_status text NOT NULL DEFAULT 'Single',
+  ADD COLUMN IF NOT EXISTS spouse_age integer,
+  ADD COLUMN IF NOT EXISTS spouse_rrsp numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS spouse_tfsa numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS spouse_income numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS desired_income numeric NOT NULL DEFAULT 70000,
+  ADD COLUMN IF NOT EXISTS cpp_start_age integer NOT NULL DEFAULT 65,
+  ADD COLUMN IF NOT EXISTS cpp_pct numeric NOT NULL DEFAULT 75,
+  ADD COLUMN IF NOT EXISTS oas_start_age integer NOT NULL DEFAULT 65,
+  ADD COLUMN IF NOT EXISTS manual_override boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS override_tfsa numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS override_rrsp numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS override_lira numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS override_fhsa numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS override_nonreg numeric NOT NULL DEFAULT 0;

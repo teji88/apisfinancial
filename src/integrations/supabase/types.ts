@@ -133,40 +133,85 @@ export type Database = {
       profiles: {
         Row: {
           base_currency: string
+          cpp_pct: number
+          cpp_start_age: number
           created_at: string
           current_age: number | null
+          desired_income: number
           display_name: string | null
           growth_rate: number
           id: string
           inflation_rate: number
           life_expectancy: number
+          manual_override: boolean
+          marital_status: string
+          oas_start_age: number
+          override_fhsa: number
+          override_lira: number
+          override_nonreg: number
+          override_rrsp: number
+          override_tfsa: number
           province: string
+          spouse_age: number | null
+          spouse_income: number
+          spouse_rrsp: number
+          spouse_tfsa: number
           target_retirement_age: number | null
           updated_at: string
         }
         Insert: {
           base_currency?: string
+          cpp_pct?: number
+          cpp_start_age?: number
           created_at?: string
           current_age?: number | null
+          desired_income?: number
           display_name?: string | null
           growth_rate?: number
           id: string
           inflation_rate?: number
           life_expectancy?: number
+          manual_override?: boolean
+          marital_status?: string
+          oas_start_age?: number
+          override_fhsa?: number
+          override_lira?: number
+          override_nonreg?: number
+          override_rrsp?: number
+          override_tfsa?: number
           province?: string
+          spouse_age?: number | null
+          spouse_income?: number
+          spouse_rrsp?: number
+          spouse_tfsa?: number
           target_retirement_age?: number | null
           updated_at?: string
         }
         Update: {
           base_currency?: string
+          cpp_pct?: number
+          cpp_start_age?: number
           created_at?: string
           current_age?: number | null
+          desired_income?: number
           display_name?: string | null
           growth_rate?: number
           id?: string
           inflation_rate?: number
           life_expectancy?: number
+          manual_override?: boolean
+          marital_status?: string
+          oas_start_age?: number
+          override_fhsa?: number
+          override_lira?: number
+          override_nonreg?: number
+          override_rrsp?: number
+          override_tfsa?: number
           province?: string
+          spouse_age?: number | null
+          spouse_income?: number
+          spouse_rrsp?: number
+          spouse_tfsa?: number
           target_retirement_age?: number | null
           updated_at?: string
         }
