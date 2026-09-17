@@ -155,6 +155,7 @@ function AccountsPage() {
               <TableHead>Account</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Institution</TableHead>
+              <TableHead className="text-center">Cash balance</TableHead>
               <TableHead className="text-right">Total value</TableHead>
               <TableHead className="w-10" />
             </TableRow>
