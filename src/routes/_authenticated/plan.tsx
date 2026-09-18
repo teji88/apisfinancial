@@ -53,8 +53,10 @@ function PlanPage() {
     }
   }
 
-  const isPaid = entitlement.tier === "pro";
+  const isOwner = entitlement.plan === "owner";
+  const isPaid = entitlement.tier === "pro" && !isOwner;
   const isInvite = entitlement.tier === "invite";
+
 
   return (
     <div className="space-y-6">
