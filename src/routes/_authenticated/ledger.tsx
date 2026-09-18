@@ -163,7 +163,23 @@ function LedgerPage() {
       toast.error("Add an account first.");
       return;
     }
+    const wouldAddHolding =
+      !isCash &&
+      symbol.trim() !== "" &&
+      !holdings.some(
+        (h) => h.account_id === targetAccount && h.symbol === symbol.trim().toUpperCase(),
+      );
+    if (
+      entitlement.readOnly ||
+      (wouldAddHolding &&
+        entitlement.holdingLimit != null &&
+        holdings.length >= entitlement.holdingLimit)
+    ) {
+      setUpgradeOpen(true);
+      return;
+    }
     try {
+
       await addTransaction.mutateAsync({
         accountId: targetAccount,
         symbol: isCash ? "" : symbol,
