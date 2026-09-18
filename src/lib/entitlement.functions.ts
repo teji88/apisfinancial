@@ -32,26 +32,29 @@ export const getEntitlement = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const now = Date.now();
 
-    const [{ data: subs }, { data: redemptions }, { data: isAdmin }] = await Promise.all([
-      supabase
-        .from("subscriptions")
-        .select("status, price_id, current_period_end, cancel_at_period_end")
-        .eq("user_id", userId)
-        .eq("environment", data.environment)
-        .order("created_at", { ascending: false })
-        .limit(5),
-      supabase
-        .from("invite_redemptions")
-        .select("access_until, redeemed_at")
-        .eq("user_id", userId)
-        .order("redeemed_at", { ascending: false })
-        .limit(5),
-      supabase.rpc("has_role", { _user_id: userId, _role: "admin" }),
-    ]);
+    const [{ data: subs }, { data: redemptions }, { data: isAdmin }, { data: limitState }] =
+      await Promise.all([
+        supabase
+          .from("subscriptions")
+          .select("status, price_id, current_period_end, cancel_at_period_end")
+          .eq("user_id", userId)
+          .eq("environment", data.environment)
+          .order("created_at", { ascending: false })
+          .limit(5),
+        supabase
+          .from("invite_redemptions")
+          .select("access_until, redeemed_at")
+          .eq("user_id", userId)
+          .order("redeemed_at", { ascending: false })
+          .limit(5),
+        supabase.rpc("has_role", { _user_id: userId, _role: "admin" }),
+        supabase.rpc("free_limit_state", { _user_id: userId }),
+      ]);
 
     const base = {
       cancelAtPeriodEnd: false,
       isAdmin: Boolean(isAdmin),
+      readOnlyReason: null as Entitlement["readOnlyReason"],
     };
 
     // The app owner always has full access.
@@ -67,8 +70,6 @@ export const getEntitlement = createServerFn({ method: "POST" })
         holdingLimit: null,
       };
     }
-
-
 
     // Invite-code access wins when it is still valid.
     const invite = (redemptions ?? []).find(
@@ -123,6 +124,7 @@ export const getEntitlement = createServerFn({ method: "POST" })
         ...base,
         tier: "free",
         readOnly: true,
+        readOnlyReason: "lapsed",
         graceUntil: grace.toISOString(),
         accessEndsAt: end.toISOString(),
         plan: null,
@@ -131,16 +133,22 @@ export const getEntitlement = createServerFn({ method: "POST" })
       };
     }
 
+    // On the free plan but carrying more than the free plan allows
+    // (for example straight after cancelling Pro): view-only until they trim down.
+    const overLimit = limitState === "over";
+
     return {
       ...base,
       tier: "free",
-      readOnly: false,
+      readOnly: overLimit,
+      readOnlyReason: overLimit ? "overlimit" : null,
       graceUntil: null,
       accessEndsAt: null,
       plan: null,
       accountLimit: FREE_ACCOUNT_LIMIT,
       holdingLimit: FREE_HOLDING_LIMIT,
     };
+
   });
 
 export const redeemInviteCode = createServerFn({ method: "POST" })
