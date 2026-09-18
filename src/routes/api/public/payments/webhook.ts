@@ -55,6 +55,14 @@ async function markCanceled(subscription: any, env: StripeEnv) {
     .eq("environment", env);
 }
 
+async function refreshFromStripe(subscriptionId: string | null | undefined, env: StripeEnv) {
+  if (!subscriptionId) return;
+  const { createStripeClient } = await import("@/lib/stripe.server");
+  const stripe = createStripeClient(env);
+  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  await upsertSubscription(sub as any, env);
+}
+
 async function handleWebhook(req: Request, env: StripeEnv) {
   const event = await verifyWebhook(req, env);
 
@@ -66,10 +74,35 @@ async function handleWebhook(req: Request, env: StripeEnv) {
     case "customer.subscription.deleted":
       await markCanceled(event.data.object, env);
       break;
+    case "checkout.session.completed": {
+      // Fast path: record access as soon as checkout finishes.
+      const session: any = event.data.object;
+      if (session.payment_status !== "unpaid") {
+        await refreshFromStripe(
+          typeof session.subscription === "string" ? session.subscription : session.subscription?.id,
+          env,
+        );
+      }
+      break;
+    }
+    case "invoice.paid":
+    case "invoice.payment_failed":
+    case "invoice.payment_succeeded": {
+      // Renewals and failed renewals: re-read the subscription so dates and status stay right.
+      const invoice: any = event.data.object;
+      const subId =
+        (typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id) ??
+        invoice.parent?.subscription_details?.subscription ??
+        invoice.lines?.data?.[0]?.parent?.subscription_item_details?.subscription ??
+        null;
+      await refreshFromStripe(typeof subId === "string" ? subId : subId?.id, env);
+      break;
+    }
     default:
       console.log("Unhandled event:", event.type);
   }
 }
+
 
 export const Route = createFileRoute("/api/public/payments/webhook")({
   server: {
