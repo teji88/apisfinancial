@@ -83,12 +83,28 @@ function AppLayout() {
   return (
     <div className="min-h-screen bg-surface">
       <AppHeader />
+      <ReadOnlyBanner />
       <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">
         <Outlet />
       </main>
     </div>
   );
 }
+
+function ReadOnlyBanner() {
+  const { entitlement } = useEntitlement();
+  if (!entitlement.readOnly) return null;
+  return (
+    <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-sm text-destructive">
+      Your plan ended on {formatDate(entitlement.accessEndsAt)} — MapleWealth is view-only. Nothing
+      has been deleted.{" "}
+      <Link to="/plan" className="font-medium underline">
+        Restart Pro
+      </Link>
+    </div>
+  );
+}
+
 
 function AppHeader() {
   const {
