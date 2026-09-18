@@ -1,17 +1,25 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CreditCard, ShieldCheck } from "lucide-react";
+import { CreditCard, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { PlanUpgrade } from "@/components/PlanUpgrade";
 import { useEntitlement, formatDate } from "@/lib/entitlement";
-import { getStripeEnvironment } from "@/lib/stripe";
-import { createPortalSession } from "@/utils/payments.functions";
+import { getStripeEnvironment, PRO_PRICES } from "@/lib/stripe";
+import {
+  createPortalSession,
+  syncSubscription,
+  changeSubscriptionPlan,
+  setSubscriptionCancel,
+} from "@/utils/payments.functions";
 
 export const Route = createFileRoute("/_authenticated/plan")({
+  validateSearch: (search: Record<string, unknown>): { session_id?: string } =>
+    typeof search['session_id'] === "string" ? { session_id: search['session_id'] } : {},
   head: () => ({
     meta: [
       { title: "Your plan — MapleWealth" },
@@ -34,12 +42,76 @@ export const Route = createFileRoute("/_authenticated/plan")({
 
 function PlanPage() {
   const { entitlement, refetch } = useEntitlement();
+  const { session_id: sessionId } = Route.useSearch();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+
   const portal = useServerFn(createPortalSession);
+  const sync = useServerFn(syncSubscription);
+  const changePlan = useServerFn(changeSubscriptionPlan);
+  const setCancel = useServerFn(setSubscriptionCancel);
+
+  const [busy, setBusy] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const isOwner = entitlement.plan === "owner";
+  const isPaid = entitlement.tier === "pro" && !isOwner;
+  const isInvite = entitlement.tier === "invite";
+  const billing = entitlement.plan === PRO_PRICES.monthly.id ? "monthly" : "yearly";
+
+  async function refreshFromProvider(quiet = false) {
+    const result = await sync({ data: { environment: getStripeEnvironment() } });
+    await qc.invalidateQueries({ queryKey: ["entitlement"] });
+    const next = await refetch();
+    if (!quiet && result && "error" in result) toast.error(result.error);
+    return next.data;
+  }
+
+  // Coming back from the payment window: wait for the payment to register.
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    setConfirming(true);
+    (async () => {
+      for (let attempt = 0; attempt < 8 && !cancelled; attempt++) {
+        const data = await refreshFromProvider(true);
+        if (data && data.tier === "pro") {
+          toast.success("Payment received — Pro is active. Thank you!");
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!cancelled) {
+        setConfirming(false);
+        void navigate({ to: "/plan", search: {}, replace: true });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   useEffect(() => {
     void refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function run(key: string, fn: () => Promise<{ ok?: true } | { error: string } | void>) {
+    setBusy(key);
+    try {
+      const result = await fn();
+      if (result && "error" in result) {
+        toast.error(result.error);
+        return;
+      }
+      await refreshFromProvider(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function openPortal() {
     try {
@@ -53,11 +125,6 @@ function PlanPage() {
     }
   }
 
-  const isOwner = entitlement.plan === "owner";
-  const isPaid = entitlement.tier === "pro" && !isOwner;
-  const isInvite = entitlement.tier === "invite";
-
-
   return (
     <div className="space-y-6">
       <PaymentTestModeBanner />
@@ -69,31 +136,51 @@ function PlanPage() {
         </p>
       </div>
 
+      {confirming && (
+        <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 text-sm">
+          Confirming your payment… this usually takes a few seconds.
+        </div>
+      )}
+
       <div className="rounded-lg border p-4">
         <div className="flex flex-wrap items-center gap-3">
           <ShieldCheck className="h-5 w-5 text-primary" />
           <p className="font-medium">
-            {isOwner ? "Owner — full access" : isPaid ? "Pro" : isInvite ? "Pro — invite code" : "Free"}
+            {isOwner
+              ? "Owner — full access"
+              : isPaid
+                ? `Pro — ${billing === "monthly" ? "$1 a month" : "$10 a year"}`
+                : isInvite
+                  ? "Pro — invite code"
+                  : "Free"}
           </p>
-
           {entitlement.readOnly && <Badge variant="destructive">View only</Badge>}
           {entitlement.cancelAtPeriodEnd && <Badge variant="secondary">Ends at period end</Badge>}
-          {isPaid && (
-            <Button variant="outline" size="sm" className="ml-auto" onClick={() => void openPortal()}>
-              <CreditCard className="mr-2 h-4 w-4" />
-              Manage subscription
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            disabled={busy === "sync"}
+            onClick={() => void run("sync", async () => void (await refreshFromProvider()))}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
         </div>
 
         {entitlement.readOnly ? (
           <p className="mt-3 text-sm text-muted-foreground">
-            Your access ended on {formatDate(entitlement.accessEndsAt)}. Your data stays safe and
-            readable — nothing is deleted. You can start Pro again at any time to make changes.
+            {entitlement.readOnlyReason === "overlimit"
+              ? "You are carrying more than the free plan allows (1 account, 10 holdings). Everything stays visible, and you can delete the extras to start editing again — or restart Pro to keep it all."
+              : `Your access ended on ${formatDate(entitlement.accessEndsAt)}. Your data stays safe and readable — nothing is deleted. Restart Pro at any time to make changes again.`}
           </p>
         ) : entitlement.accessEndsAt ? (
           <p className="mt-3 text-sm text-muted-foreground">
-            {isInvite ? "Free access runs until" : "Renews on"} {formatDate(entitlement.accessEndsAt)}.
+            {isInvite
+              ? `Free access runs until ${formatDate(entitlement.accessEndsAt)}.`
+              : entitlement.cancelAtPeriodEnd
+                ? `Pro stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
+                : `Renews on ${formatDate(entitlement.accessEndsAt)}.`}
           </p>
         ) : isInvite ? (
           <p className="mt-3 text-sm text-muted-foreground">Free access with no end date.</p>
@@ -106,10 +193,65 @@ function PlanPage() {
             You are on the free plan: 1 account and up to 10 holdings.
           </p>
         )}
+
+        {isPaid && (
+          <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy !== null}
+              onClick={() =>
+                void run("switch", () =>
+                  changePlan({
+                    data: {
+                      priceId:
+                        billing === "monthly" ? PRO_PRICES.yearly.id : PRO_PRICES.monthly.id,
+                      environment: getStripeEnvironment(),
+                    },
+                  }),
+                )
+              }
+            >
+              {billing === "monthly" ? "Switch to yearly ($10)" : "Switch to monthly ($1)"}
+            </Button>
+
+            {entitlement.cancelAtPeriodEnd ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy !== null}
+                onClick={() =>
+                  void run("resume", () =>
+                    setCancel({ data: { cancel: false, environment: getStripeEnvironment() } }),
+                  )
+                }
+              >
+                Keep Pro running
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy !== null}
+                onClick={() =>
+                  void run("cancel", () =>
+                    setCancel({ data: { cancel: true, environment: getStripeEnvironment() } }),
+                  )
+                }
+              >
+                Cancel at period end
+              </Button>
+            )}
+
+            <Button variant="ghost" size="sm" onClick={() => void openPortal()}>
+              <CreditCard className="mr-2 h-4 w-4" />
+              Card &amp; receipts
+            </Button>
+          </div>
+        )}
       </div>
 
       {!isPaid && !isInvite && !isOwner && <PlanUpgrade />}
-
     </div>
   );
 }
