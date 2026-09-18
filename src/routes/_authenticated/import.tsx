@@ -13,8 +13,11 @@ import {
 import { toast } from "sonner";
 import { parseStatement, type ParsedTransaction } from "@/lib/import.functions";
 import { getFxRateOn } from "@/lib/history.functions";
-import { useAccounts, useAddTransaction } from "@/lib/portfolio";
+import { useAccounts, useHoldings, useAddTransaction } from "@/lib/portfolio";
+import { useEntitlement } from "@/lib/entitlement";
+import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { ACCOUNT_TYPES, TRANSACTION_TYPES } from "@/lib/finance";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
