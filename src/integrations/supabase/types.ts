@@ -492,6 +492,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      plan_state: { Args: { _user_id: string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "user"
