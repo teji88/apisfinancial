@@ -9,7 +9,17 @@ import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
  */
 async function handleRefresh(request: Request): Promise<Response> {
   const authFailure = await authenticateCronRequest(request);
-  if (authFailure) return authFailure;
+  if (authFailure) {
+    // Also accept the dedicated refresh key used by the database-scheduled job,
+    // compared timing-safe. Never accept public publishable/anon keys.
+    const match = /^Bearer ([^\s,]+)$/.exec(request.headers.get("authorization") ?? "");
+    const token = match?.[1];
+    const refreshKey = process.env["PRICE_REFRESH_CRON_KEY"];
+    if (!token || !refreshKey) return authFailure;
+    const { createHash, timingSafeEqual } = await import("node:crypto");
+    const digest = (v: string) => createHash("sha256").update(v, "utf8").digest();
+    if (!timingSafeEqual(digest(token), digest(refreshKey))) return authFailure;
+  }
 
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
