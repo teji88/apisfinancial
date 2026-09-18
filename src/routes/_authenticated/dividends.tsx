@@ -14,6 +14,9 @@ import {
 import { CalendarClock, Coins, Percent, Sprout } from "lucide-react";
 import { toast } from "sonner";
 import { usePortfolio, useAddTransaction } from "@/lib/portfolio";
+import { useEntitlement } from "@/lib/entitlement";
+import { UpgradeDialog } from "@/components/PlanUpgrade";
+
 import { computePositions, formatCad, formatPct, formatUnits } from "@/lib/finance";
 import {
   buildDividendRows,
