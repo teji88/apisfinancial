@@ -155,7 +155,12 @@ function DividendsPage() {
   };
 
   const record = async (p: (typeof pending)[number]) => {
+    if (entitlement.readOnly) {
+      setUpgradeOpen(true);
+      return;
+    }
     setRecording(p.holdingId + p.exDivDate);
+
     try {
       const holding = holdings.find((h) => h.id === p.holdingId);
       await addTransaction.mutateAsync({
