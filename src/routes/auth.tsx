@@ -33,14 +33,27 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Arriving from a password-reset email: let them set a new password.
   useEffect(() => {
-    if (!loading && session) void navigate({ to: "/" });
-  }, [loading, session, navigate]);
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setMode("reset");
+    });
+    if (typeof window !== "undefined" && window.location.hash.includes("type=recovery")) {
+      setMode("reset");
+    }
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!loading && session && mode !== "reset") void navigate({ to: "/" });
+  }, [loading, session, navigate, mode]);
+
+
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
