@@ -17,8 +17,11 @@ import {
   useUpdateTransaction,
   usePortfolio,
 } from "@/lib/portfolio";
+import { useEntitlement } from "@/lib/entitlement";
+import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { lookupSymbol } from "@/lib/market.functions";
 import { getFxRateOn } from "@/lib/history.functions";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,7 +78,10 @@ function today() {
 
 function LedgerPage() {
   const { accounts, holdings, transactions, fxUsdCad } = usePortfolio();
+  const { entitlement } = useEntitlement();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const addTransaction = useAddTransaction();
+
   const deleteTransaction = useDeleteTransaction();
   const lookup = useServerFn(lookupSymbol);
   const fxOnDate = useServerFn(getFxRateOn);
@@ -163,7 +169,23 @@ function LedgerPage() {
       toast.error("Add an account first.");
       return;
     }
+    const wouldAddHolding =
+      !isCash &&
+      symbol.trim() !== "" &&
+      !holdings.some(
+        (h) => h.account_id === targetAccount && h.symbol === symbol.trim().toUpperCase(),
+      );
+    if (
+      entitlement.readOnly ||
+      (wouldAddHolding &&
+        entitlement.holdingLimit != null &&
+        holdings.length >= entitlement.holdingLimit)
+    ) {
+      setUpgradeOpen(true);
+      return;
+    }
     try {
+
       await addTransaction.mutateAsync({
         accountId: targetAccount,
         symbol: isCash ? "" : symbol,
@@ -210,6 +232,29 @@ function LedgerPage() {
           you record.
         </p>
       </div>
+
+      {entitlement.holdingLimit != null && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+          <span>
+            Free plan: {holdings.length} of {entitlement.holdingLimit} holdings used.
+          </span>
+          <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setUpgradeOpen(true)}>
+            Upgrade to Pro
+          </Button>
+        </div>
+      )}
+
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        reason={
+          entitlement.readOnly
+            ? "Your plan has ended, so MapleWealth is view-only. Restart Pro to make changes."
+            : "The free plan includes ten holdings. Pro removes the limit."
+        }
+      />
+
+
 
       <form onSubmit={handleSubmit} className="panel space-y-4 p-5">
         <div className="grid gap-4 md:grid-cols-4">

@@ -3,12 +3,15 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ACCOUNT_TYPES, formatCad, summariseAccount } from "@/lib/finance";
+import { useEntitlement } from "@/lib/entitlement";
+import { UpgradeDialog } from "@/components/PlanUpgrade";
 import {
   useAddAccount,
   useDeleteAccount,
   usePortfolio,
   useUpdateAccount,
 } from "@/lib/portfolio";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,15 +58,25 @@ function AccountsPage() {
   const addAccount = useAddAccount();
   const updateAccount = useUpdateAccount();
   const deleteAccount = useDeleteAccount();
+  const { entitlement } = useEntitlement();
 
   const [accountType, setAccountType] = useState<string>("TFSA");
   const [accountName, setAccountName] = useState("");
   const [currency, setCurrency] = useState("CAD");
   const [institution, setInstitution] = useState("");
   const [trackCash, setTrackCash] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  const accountLimit = entitlement.accountLimit;
+  const atAccountLimit = accountLimit != null && accounts.length >= accountLimit;
+  const holdingLimit = entitlement.holdingLimit;
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
+    if (atAccountLimit || entitlement.readOnly) {
+      setUpgradeOpen(true);
+      return;
+    }
     try {
       await addAccount.mutateAsync({ accountType, accountName, currency, institution, trackCash });
       toast.success(`${accountName} added`);
@@ -82,6 +95,29 @@ function AccountsPage() {
           Registered and taxable accounts. Balances are converted to CAD.
         </p>
       </div>
+
+      {accountLimit != null && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+          <span>
+            Free plan: {accounts.length} of {accountLimit} account
+            {accountLimit === 1 ? "" : "s"} · {holdings.length} of {holdingLimit} holdings used.
+          </span>
+          <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setUpgradeOpen(true)}>
+            Upgrade to Pro
+          </Button>
+        </div>
+      )}
+
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        reason={
+          entitlement.readOnly
+            ? "Your plan has ended, so MapleWealth is view-only. Restart Pro to make changes."
+            : "The free plan includes one account. Pro removes the limit."
+        }
+      />
+
 
       <form onSubmit={handleAdd} className="panel grid gap-4 p-5 md:grid-cols-5">
         <div className="space-y-1.5">

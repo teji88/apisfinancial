@@ -15,10 +15,13 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
 import { Route as AuthenticatedDividendsRouteImport } from './routes/_authenticated/dividends'
 import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
+import { Route as AuthenticatedInvitesRouteImport } from './routes/_authenticated/invites'
 import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated/ledger'
 import { Route as AuthenticatedPerformanceRouteImport } from './routes/_authenticated/performance'
+import { Route as AuthenticatedPlanRouteImport } from './routes/_authenticated/plan'
 import { Route as AuthenticatedRetirementRouteImport } from './routes/_authenticated/retirement'
 import { Route as ApiPublicRefreshPricesRouteImport } from './routes/api/public/refresh-prices'
+import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -49,6 +52,11 @@ const AuthenticatedImportRoute = AuthenticatedImportRouteImport.update({
   path: '/import',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedInvitesRoute = AuthenticatedInvitesRouteImport.update({
+  id: '/invites',
+  path: '/invites',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedLedgerRoute = AuthenticatedLedgerRouteImport.update({
   id: '/ledger',
   path: '/ledger',
@@ -60,6 +68,11 @@ const AuthenticatedPerformanceRoute =
     path: '/performance',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedPlanRoute = AuthenticatedPlanRouteImport.update({
+  id: '/plan',
+  path: '/plan',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedRetirementRoute = AuthenticatedRetirementRouteImport.update({
   id: '/retirement',
   path: '/retirement',
@@ -70,6 +83,12 @@ const ApiPublicRefreshPricesRoute = ApiPublicRefreshPricesRouteImport.update({
   path: '/api/public/refresh-prices',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicPaymentsWebhookRoute =
+  ApiPublicPaymentsWebhookRouteImport.update({
+    id: '/api/public/payments/webhook',
+    path: '/api/public/payments/webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -77,21 +96,27 @@ export interface FileRoutesByFullPath {
   '/accounts': typeof AuthenticatedAccountsRoute
   '/dividends': typeof AuthenticatedDividendsRoute
   '/import': typeof AuthenticatedImportRoute
+  '/invites': typeof AuthenticatedInvitesRoute
   '/ledger': typeof AuthenticatedLedgerRoute
   '/performance': typeof AuthenticatedPerformanceRoute
+  '/plan': typeof AuthenticatedPlanRoute
   '/retirement': typeof AuthenticatedRetirementRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
+  '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/dividends': typeof AuthenticatedDividendsRoute
   '/import': typeof AuthenticatedImportRoute
+  '/invites': typeof AuthenticatedInvitesRoute
   '/ledger': typeof AuthenticatedLedgerRoute
   '/performance': typeof AuthenticatedPerformanceRoute
+  '/plan': typeof AuthenticatedPlanRoute
   '/retirement': typeof AuthenticatedRetirementRoute
   '/': typeof AuthenticatedIndexRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
+  '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -100,11 +125,14 @@ export interface FileRoutesById {
   '/_authenticated/accounts': typeof AuthenticatedAccountsRoute
   '/_authenticated/dividends': typeof AuthenticatedDividendsRoute
   '/_authenticated/import': typeof AuthenticatedImportRoute
+  '/_authenticated/invites': typeof AuthenticatedInvitesRoute
   '/_authenticated/ledger': typeof AuthenticatedLedgerRoute
   '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
+  '/_authenticated/plan': typeof AuthenticatedPlanRoute
   '/_authenticated/retirement': typeof AuthenticatedRetirementRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
+  '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -114,21 +142,27 @@ export interface FileRouteTypes {
     | '/accounts'
     | '/dividends'
     | '/import'
+    | '/invites'
     | '/ledger'
     | '/performance'
+    | '/plan'
     | '/retirement'
     | '/api/public/refresh-prices'
+    | '/api/public/payments/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
     | '/accounts'
     | '/dividends'
     | '/import'
+    | '/invites'
     | '/ledger'
     | '/performance'
+    | '/plan'
     | '/retirement'
     | '/'
     | '/api/public/refresh-prices'
+    | '/api/public/payments/webhook'
   id:
     | '__root__'
     | '/_authenticated'
@@ -136,17 +170,21 @@ export interface FileRouteTypes {
     | '/_authenticated/accounts'
     | '/_authenticated/dividends'
     | '/_authenticated/import'
+    | '/_authenticated/invites'
     | '/_authenticated/ledger'
     | '/_authenticated/performance'
+    | '/_authenticated/plan'
     | '/_authenticated/retirement'
     | '/_authenticated/'
     | '/api/public/refresh-prices'
+    | '/api/public/payments/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ApiPublicRefreshPricesRoute: typeof ApiPublicRefreshPricesRoute
+  ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -193,6 +231,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedImportRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/invites': {
+      id: '/_authenticated/invites'
+      path: '/invites'
+      fullPath: '/invites'
+      preLoaderRoute: typeof AuthenticatedInvitesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/ledger': {
       id: '/_authenticated/ledger'
       path: '/ledger'
@@ -205,6 +250,13 @@ declare module '@tanstack/react-router' {
       path: '/performance'
       fullPath: '/performance'
       preLoaderRoute: typeof AuthenticatedPerformanceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plan': {
+      id: '/_authenticated/plan'
+      path: '/plan'
+      fullPath: '/plan'
+      preLoaderRoute: typeof AuthenticatedPlanRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/retirement': {
@@ -221,6 +273,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicRefreshPricesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/payments/webhook': {
+      id: '/api/public/payments/webhook'
+      path: '/api/public/payments/webhook'
+      fullPath: '/api/public/payments/webhook'
+      preLoaderRoute: typeof ApiPublicPaymentsWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -228,8 +287,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRoute
   AuthenticatedDividendsRoute: typeof AuthenticatedDividendsRoute
   AuthenticatedImportRoute: typeof AuthenticatedImportRoute
+  AuthenticatedInvitesRoute: typeof AuthenticatedInvitesRoute
   AuthenticatedLedgerRoute: typeof AuthenticatedLedgerRoute
   AuthenticatedPerformanceRoute: typeof AuthenticatedPerformanceRoute
+  AuthenticatedPlanRoute: typeof AuthenticatedPlanRoute
   AuthenticatedRetirementRoute: typeof AuthenticatedRetirementRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
@@ -238,8 +299,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccountsRoute: AuthenticatedAccountsRoute,
   AuthenticatedDividendsRoute: AuthenticatedDividendsRoute,
   AuthenticatedImportRoute: AuthenticatedImportRoute,
+  AuthenticatedInvitesRoute: AuthenticatedInvitesRoute,
   AuthenticatedLedgerRoute: AuthenticatedLedgerRoute,
   AuthenticatedPerformanceRoute: AuthenticatedPerformanceRoute,
+  AuthenticatedPlanRoute: AuthenticatedPlanRoute,
   AuthenticatedRetirementRoute: AuthenticatedRetirementRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
@@ -251,6 +314,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ApiPublicRefreshPricesRoute: ApiPublicRefreshPricesRoute,
+  ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

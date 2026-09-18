@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   Coins,
+  CreditCard,
+  Gift,
   LayoutDashboard,
   FileUp,
   Leaf,
@@ -16,13 +18,16 @@ import {
   User,
   Wallet,
 } from "lucide-react";
+
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/lib/portfolio";
 import { useProfile, useUpdateProfile } from "@/lib/profile";
+import { useEntitlement, formatDate } from "@/lib/entitlement";
 import { PROVINCES, PROVINCE_CODES } from "@/lib/tax";
 import { formatCad, formatPct, summariseAccount } from "@/lib/finance";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -83,12 +88,28 @@ function AppLayout() {
   return (
     <div className="min-h-screen bg-surface">
       <AppHeader />
+      <ReadOnlyBanner />
       <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">
         <Outlet />
       </main>
     </div>
   );
 }
+
+function ReadOnlyBanner() {
+  const { entitlement } = useEntitlement();
+  if (!entitlement.readOnly) return null;
+  return (
+    <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-sm text-destructive">
+      Your plan ended on {formatDate(entitlement.accessEndsAt)} — MapleWealth is view-only. Nothing
+      has been deleted.{" "}
+      <Link to="/plan" className="font-medium underline">
+        Restart Pro
+      </Link>
+    </div>
+  );
+}
+
 
 function AppHeader() {
   const {
@@ -207,12 +228,16 @@ function AppHeader() {
 function ProfileMenu() {
   const profileQuery = useProfile();
   const updateProfile = useUpdateProfile();
+  const { entitlement } = useEntitlement();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [province, setProvince] = useState("AB");
   const [currency, setCurrency] = useState("CAD");
 
   const profile = profileQuery.data;
+  const planLabel =
+    entitlement.tier === "pro" ? "Pro" : entitlement.tier === "invite" ? "Pro (invite)" : "Free";
+
 
   function openSettings() {
     setName(profile?.display_name ?? "");
@@ -247,14 +272,29 @@ function ProfileMenu() {
           <DropdownMenuLabel>
             <p className="text-sm font-medium">{profile?.display_name ?? "Your profile"}</p>
             <p className="text-xs font-normal text-muted-foreground">
-              {profile?.province ?? "AB"} · {profile?.base_currency ?? "CAD"}
+              {profile?.province ?? "AB"} · {profile?.base_currency ?? "CAD"} · {planLabel}
             </p>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link to="/plan">
+              <CreditCard className="mr-2 h-4 w-4" />
+              Your plan
+            </Link>
+          </DropdownMenuItem>
+          {entitlement.isAdmin && (
+            <DropdownMenuItem asChild>
+              <Link to="/invites">
+                <Gift className="mr-2 h-4 w-4" />
+                Invite codes
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onSelect={() => setTimeout(openSettings, 0)}>
             <Settings className="mr-2 h-4 w-4" />
             Profile settings
           </DropdownMenuItem>
+
           <DropdownMenuItem
             onSelect={() => {
               void supabase.auth.signOut();
