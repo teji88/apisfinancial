@@ -14,6 +14,9 @@ import {
 import { CalendarClock, Coins, Percent, Sprout } from "lucide-react";
 import { toast } from "sonner";
 import { usePortfolio, useAddTransaction } from "@/lib/portfolio";
+import { useEntitlement } from "@/lib/entitlement";
+import { UpgradeDialog } from "@/components/PlanUpgrade";
+
 import { computePositions, formatCad, formatPct, formatUnits } from "@/lib/finance";
 import {
   buildDividendRows,
@@ -72,8 +75,11 @@ function DividendsPage() {
   const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
     usePortfolio();
   const addTransaction = useAddTransaction();
+  const { entitlement } = useEntitlement();
   const [recording, setRecording] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<string[]>([]);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
 
   useEffect(() => {
     setDismissed(loadDismissed());
@@ -149,7 +155,12 @@ function DividendsPage() {
   };
 
   const record = async (p: (typeof pending)[number]) => {
+    if (entitlement.readOnly) {
+      setUpgradeOpen(true);
+      return;
+    }
     setRecording(p.holdingId + p.exDivDate);
+
     try {
       const holding = holdings.find((h) => h.id === p.holdingId);
       await addTransaction.mutateAsync({
@@ -462,7 +473,14 @@ function DividendsPage() {
           {formatPct(totals.yieldPct, 2)}. A projection, not a forecast.
         </p>
       </div>
+
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        reason="MapleWealth is view-only right now, so dividends cannot be recorded. Restart Pro to make changes again."
+      />
     </div>
+
   );
 }
 

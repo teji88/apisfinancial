@@ -33,14 +33,27 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Arriving from a password-reset email: let them set a new password.
   useEffect(() => {
-    if (!loading && session) void navigate({ to: "/" });
-  }, [loading, session, navigate]);
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setMode("reset");
+    });
+    if (typeof window !== "undefined" && window.location.hash.includes("type=recovery")) {
+      setMode("reset");
+    }
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!loading && session && mode !== "reset") void navigate({ to: "/" });
+  }, [loading, session, navigate, mode]);
+
+
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,6 +68,18 @@ function AuthPage() {
         if (error) throw error;
         toast.success("Account created. Check your email to confirm, then sign in.");
         setMode("signin");
+      } else if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth`,
+        });
+        if (error) throw error;
+        toast.success("Check your email for a link to set a new password.");
+        setMode("signin");
+      } else if (mode === "reset") {
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        toast.success("Your password is updated.");
+        void navigate({ to: "/" });
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -66,6 +91,7 @@ function AuthPage() {
       setBusy(false);
     }
   }
+
 
   async function handleGoogle() {
     const result = await lovable.auth.signInWithOAuth("google", {
@@ -94,61 +120,100 @@ function AuthPage() {
 
         <div className="panel p-6">
           <h2 className="text-xl font-semibold">
-            {mode === "signin" ? "Sign in" : "Create your account"}
+            {mode === "signin"
+              ? "Sign in"
+              : mode === "signup"
+                ? "Create your account"
+                : mode === "forgot"
+                  ? "Reset your password"
+                  : "Set a new password"}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Track TFSA, RRSP, FHSA and taxable accounts in CAD.
+            {mode === "forgot"
+              ? "We will email you a link to choose a new password."
+              : mode === "reset"
+                ? "Choose a new password for your account."
+                : "Track TFSA, RRSP, FHSA and taxable accounts in CAD."}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
-              />
-            </div>
+            {mode !== "reset" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                />
+              </div>
+            )}
+            {mode !== "forgot" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="password">
+                  {mode === "reset" ? "New password" : "Password"}
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                />
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
+              {busy
+                ? "Please wait…"
+                : mode === "signin"
+                  ? "Sign in"
+                  : mode === "signup"
+                    ? "Create account"
+                    : mode === "forgot"
+                      ? "Email me a reset link"
+                      : "Save new password"}
             </Button>
           </form>
 
-          <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />
-            or
-            <span className="h-px flex-1 bg-border" />
-          </div>
+          {mode !== "reset" && (
+            <>
+              <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />
+                or
+                <span className="h-px flex-1 bg-border" />
+              </div>
 
-          <Button variant="outline" className="w-full" onClick={handleGoogle}>
-            Continue with Google
-          </Button>
+              <Button variant="outline" className="w-full" onClick={handleGoogle}>
+                Continue with Google
+              </Button>
 
-          <button
-            type="button"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-            className="mt-5 w-full text-sm text-muted-foreground underline-offset-4 hover:underline"
-          >
-            {mode === "signin"
-              ? "No account yet? Create one"
-              : "Already have an account? Sign in"}
-          </button>
+              <button
+                type="button"
+                onClick={() => setMode(mode === "signup" ? "signin" : mode === "forgot" ? "signin" : "signup")}
+                className="mt-5 w-full text-sm text-muted-foreground underline-offset-4 hover:underline"
+              >
+                {mode === "signin"
+                  ? "No account yet? Create one"
+                  : "Already have an account? Sign in"}
+              </button>
+
+              {mode === "signin" && (
+                <button
+                  type="button"
+                  onClick={() => setMode("forgot")}
+                  className="mt-2 w-full text-sm text-muted-foreground underline-offset-4 hover:underline"
+                >
+                  Forgot your password?
+                </button>
+              )}
+            </>
+          )}
         </div>
+
       </div>
     </div>
   );

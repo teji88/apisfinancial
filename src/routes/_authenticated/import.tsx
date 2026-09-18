@@ -13,8 +13,11 @@ import {
 import { toast } from "sonner";
 import { parseStatement, type ParsedTransaction } from "@/lib/import.functions";
 import { getFxRateOn } from "@/lib/history.functions";
-import { useAccounts, useAddTransaction } from "@/lib/portfolio";
+import { useAccounts, useHoldings, useAddTransaction } from "@/lib/portfolio";
+import { useEntitlement } from "@/lib/entitlement";
+import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { ACCOUNT_TYPES, TRANSACTION_TYPES } from "@/lib/finance";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -79,6 +82,8 @@ function readFile(file: File): Promise<{ dataUrl: string | null; text: string | 
 
 function ImportPage() {
   const accounts = useAccounts();
+  const holdingsQuery = useHoldings();
+  const { entitlement } = useEntitlement();
   const addTransaction = useAddTransaction();
   const parse = useServerFn(parseStatement);
   const fxOnDate = useServerFn(getFxRateOn);
@@ -89,6 +94,9 @@ function ImportPage() {
   const [broker, setBroker] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [saving, setSaving] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const holdings = holdingsQuery.data ?? [];
+
 
   const accountList = accounts.data ?? [];
 
@@ -166,11 +174,21 @@ function ImportPage() {
 
   async function commit() {
     if (rows.length === 0) return;
+    if (entitlement.readOnly || entitlement.holdingLimit !== null) {
+      // Free or view-only: adding a batch can easily go past the free limits.
+      const existing = new Set(holdings.map((h) => h.symbol.toUpperCase()));
+      rows.forEach((r) => r.symbol && existing.add(r.symbol.toUpperCase()));
+      if (entitlement.readOnly || existing.size > (entitlement.holdingLimit ?? Infinity)) {
+        setUpgradeOpen(true);
+        return;
+      }
+    }
     const missing = rows.filter((r) => !r.accountId);
     if (missing.length > 0) {
       toast.error("Pick an account for every row first.");
       return;
     }
+
     setSaving(true);
     let saved = 0;
     const rateCache = new Map<string, number>();
@@ -489,6 +507,17 @@ function ImportPage() {
           </p>
         </div>
       ) : null}
+
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        reason={
+          entitlement.readOnly
+            ? "Your plan has ended, so MapleWealth is view-only. Restart Pro to import again."
+            : "This import goes past the free plan's ten holdings. Pro removes the limit."
+        }
+      />
     </div>
+
   );
 }

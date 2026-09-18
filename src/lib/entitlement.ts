@@ -9,6 +9,7 @@ export type { Entitlement };
 const FREE_FALLBACK: Entitlement = {
   tier: "free",
   readOnly: false,
+  readOnlyReason: null,
   graceUntil: null,
   accessEndsAt: null,
   cancelAtPeriodEnd: false,
@@ -17,6 +18,7 @@ const FREE_FALLBACK: Entitlement = {
   holdingLimit: 10,
   isAdmin: false,
 };
+
 
 export function useEntitlement() {
   const fetchEntitlement = useServerFn(getEntitlement);
