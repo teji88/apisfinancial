@@ -272,14 +272,29 @@ function ProfileMenu() {
           <DropdownMenuLabel>
             <p className="text-sm font-medium">{profile?.display_name ?? "Your profile"}</p>
             <p className="text-xs font-normal text-muted-foreground">
-              {profile?.province ?? "AB"} · {profile?.base_currency ?? "CAD"}
+              {profile?.province ?? "AB"} · {profile?.base_currency ?? "CAD"} · {planLabel}
             </p>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link to="/plan">
+              <CreditCard className="mr-2 h-4 w-4" />
+              Your plan
+            </Link>
+          </DropdownMenuItem>
+          {entitlement.isAdmin && (
+            <DropdownMenuItem asChild>
+              <Link to="/invites">
+                <Gift className="mr-2 h-4 w-4" />
+                Invite codes
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onSelect={() => setTimeout(openSettings, 0)}>
             <Settings className="mr-2 h-4 w-4" />
             Profile settings
           </DropdownMenuItem>
+
           <DropdownMenuItem
             onSelect={() => {
               void supabase.auth.signOut();
