@@ -229,20 +229,24 @@ function ProfileMenu() {
   const profileQuery = useProfile();
   const updateProfile = useUpdateProfile();
   const { entitlement } = useEntitlement();
+  const removeAccount = useServerFn(deleteMyAccount);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [province, setProvince] = useState("AB");
   const [currency, setCurrency] = useState("CAD");
+  const [newPassword, setNewPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const profile = profileQuery.data;
   const planLabel =
     entitlement.tier === "pro" ? "Pro" : entitlement.tier === "invite" ? "Pro (invite)" : "Free";
 
-
   function openSettings() {
     setName(profile?.display_name ?? "");
     setProvince(profile?.province ?? "AB");
     setCurrency(profile?.base_currency ?? "CAD");
+    setNewPassword("");
     setOpen(true);
   }
 
@@ -259,6 +263,43 @@ function ProfileMenu() {
       toast.error(err instanceof Error ? err.message : "Could not save your profile");
     }
   }
+
+  async function changePassword() {
+    setSavingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast.success("Your password is updated.");
+      setNewPassword("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not change your password");
+    } finally {
+      setSavingPassword(false);
+    }
+  }
+
+  async function deleteAccount() {
+    if (
+      !window.confirm(
+        "This permanently deletes your MapleWealth account and all of your accounts, holdings and transactions. This cannot be undone. Continue?",
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      const result = await removeAccount({ data: { environment: getStripeEnvironment() } });
+      if ("error" in result) throw new Error(result.error);
+      toast.success("Your account is deleted.");
+      await supabase.auth.signOut();
+      window.location.href = "/auth";
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete your account");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
 
   return (
     <>
