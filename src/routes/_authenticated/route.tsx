@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   Coins,
+  CreditCard,
+  Gift,
   LayoutDashboard,
   FileUp,
   Leaf,
@@ -16,13 +18,16 @@ import {
   User,
   Wallet,
 } from "lucide-react";
+
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/lib/portfolio";
 import { useProfile, useUpdateProfile } from "@/lib/profile";
+import { useEntitlement, formatDate } from "@/lib/entitlement";
 import { PROVINCES, PROVINCE_CODES } from "@/lib/tax";
 import { formatCad, formatPct, summariseAccount } from "@/lib/finance";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
