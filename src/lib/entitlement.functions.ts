@@ -51,6 +51,22 @@ export const getEntitlement = createServerFn({ method: "POST" })
       isAdmin: Boolean(isAdmin),
     };
 
+    // The app owner always has full access.
+    if (base.isAdmin) {
+      return {
+        ...base,
+        tier: "pro",
+        readOnly: false,
+        graceUntil: null,
+        accessEndsAt: null,
+        plan: "owner",
+        accountLimit: null,
+        holdingLimit: null,
+      };
+    }
+
+
+
     // Invite-code access wins when it is still valid.
     const invite = (redemptions ?? []).find(
       (r) => r.access_until == null || new Date(r.access_until).getTime() > now,
