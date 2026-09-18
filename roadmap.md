@@ -34,3 +34,10 @@
 - Full spouse profile (earnings, residence, CPP/OAS timing, balances) with pension splitting
 - Early registered meltdown to limit forced RRIF income and OAS clawback
 - Rebuilt page: summary cards, income sources chart, balances chart, year-by-year and per-person tables
+
+## Phase 7 — Plans and payments (done)
+- Free: 1 account, 10 holdings; Pro: unlimited, $1/month or $10/year
+- Limits enforced in the database as well as the interface
+- Lapsed plan → view-only, nothing deleted
+- Invite codes for free access (owner-only screen at /invites)
+- Your plan page at /plan with checkout, invite-code redemption and billing management

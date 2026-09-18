@@ -53,8 +53,10 @@ function PlanPage() {
     }
   }
 
-  const isPaid = entitlement.tier === "pro";
+  const isOwner = entitlement.plan === "owner";
+  const isPaid = entitlement.tier === "pro" && !isOwner;
   const isInvite = entitlement.tier === "invite";
+
 
   return (
     <div className="space-y-6">
@@ -71,8 +73,9 @@ function PlanPage() {
         <div className="flex flex-wrap items-center gap-3">
           <ShieldCheck className="h-5 w-5 text-primary" />
           <p className="font-medium">
-            {isPaid ? "Pro" : isInvite ? "Pro — invite code" : "Free"}
+            {isOwner ? "Owner — full access" : isPaid ? "Pro" : isInvite ? "Pro — invite code" : "Free"}
           </p>
+
           {entitlement.readOnly && <Badge variant="destructive">View only</Badge>}
           {entitlement.cancelAtPeriodEnd && <Badge variant="secondary">Ends at period end</Badge>}
           {isPaid && (
@@ -94,6 +97,10 @@ function PlanPage() {
           </p>
         ) : isInvite ? (
           <p className="mt-3 text-sm text-muted-foreground">Free access with no end date.</p>
+        ) : isOwner ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            You own MapleWealth, so no limits apply to your own account.
+          </p>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">
             You are on the free plan: 1 account and up to 10 holdings.
@@ -101,7 +108,8 @@ function PlanPage() {
         )}
       </div>
 
-      {!isPaid && !isInvite && <PlanUpgrade />}
+      {!isPaid && !isInvite && !isOwner && <PlanUpgrade />}
+
     </div>
   );
 }
