@@ -166,11 +166,21 @@ function ImportPage() {
 
   async function commit() {
     if (rows.length === 0) return;
+    if (entitlement.readOnly || entitlement.holdingLimit !== null) {
+      // Free or view-only: adding a batch can easily go past the free limits.
+      const existing = new Set(holdings.map((h) => h.symbol.toUpperCase()));
+      rows.forEach((r) => r.symbol && existing.add(r.symbol.toUpperCase()));
+      if (entitlement.readOnly || existing.size > (entitlement.holdingLimit ?? Infinity)) {
+        setUpgradeOpen(true);
+        return;
+      }
+    }
     const missing = rows.filter((r) => !r.accountId);
     if (missing.length > 0) {
       toast.error("Pick an account for every row first.");
       return;
     }
+
     setSaving(true);
     let saved = 0;
     const rateCache = new Map<string, number>();
