@@ -473,7 +473,14 @@ function DividendsPage() {
           {formatPct(totals.yieldPct, 2)}. A projection, not a forecast.
         </p>
       </div>
+
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        reason="MapleWealth is view-only right now, so dividends cannot be recorded. Restart Pro to make changes again."
+      />
     </div>
+
   );
 }
 
