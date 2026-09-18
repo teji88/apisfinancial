@@ -6,6 +6,8 @@ export type Tier = "free" | "pro" | "invite";
 export type Entitlement = {
   tier: Tier;
   readOnly: boolean;
+  /** Why the app is view-only, when it is. */
+  readOnlyReason: "lapsed" | "overlimit" | null;
   /** ISO date when a lapsed plan's one month of read-only viewing ends. */
   graceUntil: string | null;
   /** ISO date the paid or invited access ended / will end. */
@@ -16,6 +18,7 @@ export type Entitlement = {
   holdingLimit: number | null;
   isAdmin: boolean;
 };
+
 
 export const FREE_ACCOUNT_LIMIT = 1;
 export const FREE_HOLDING_LIMIT = 10;
