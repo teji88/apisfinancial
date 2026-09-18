@@ -75,7 +75,10 @@ function today() {
 
 function LedgerPage() {
   const { accounts, holdings, transactions, fxUsdCad } = usePortfolio();
+  const { entitlement } = useEntitlement();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const addTransaction = useAddTransaction();
+
   const deleteTransaction = useDeleteTransaction();
   const lookup = useServerFn(lookupSymbol);
   const fxOnDate = useServerFn(getFxRateOn);
