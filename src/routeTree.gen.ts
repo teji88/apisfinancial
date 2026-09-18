@@ -19,6 +19,7 @@ import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedPerformanceRouteImport } from './routes/_authenticated/performance'
 import { Route as AuthenticatedRetirementRouteImport } from './routes/_authenticated/retirement'
 import { Route as ApiPublicRefreshPricesRouteImport } from './routes/api/public/refresh-prices'
+import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -70,6 +71,12 @@ const ApiPublicRefreshPricesRoute = ApiPublicRefreshPricesRouteImport.update({
   path: '/api/public/refresh-prices',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicPaymentsWebhookRoute =
+  ApiPublicPaymentsWebhookRouteImport.update({
+    id: '/api/public/payments/webhook',
+    path: '/api/public/payments/webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -81,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/performance': typeof AuthenticatedPerformanceRoute
   '/retirement': typeof AuthenticatedRetirementRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
+  '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -92,6 +100,7 @@ export interface FileRoutesByTo {
   '/retirement': typeof AuthenticatedRetirementRoute
   '/': typeof AuthenticatedIndexRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
+  '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -105,6 +114,7 @@ export interface FileRoutesById {
   '/_authenticated/retirement': typeof AuthenticatedRetirementRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
+  '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -118,6 +128,7 @@ export interface FileRouteTypes {
     | '/performance'
     | '/retirement'
     | '/api/public/refresh-prices'
+    | '/api/public/payments/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -129,6 +140,7 @@ export interface FileRouteTypes {
     | '/retirement'
     | '/'
     | '/api/public/refresh-prices'
+    | '/api/public/payments/webhook'
   id:
     | '__root__'
     | '/_authenticated'
@@ -141,12 +153,14 @@ export interface FileRouteTypes {
     | '/_authenticated/retirement'
     | '/_authenticated/'
     | '/api/public/refresh-prices'
+    | '/api/public/payments/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ApiPublicRefreshPricesRoute: typeof ApiPublicRefreshPricesRoute
+  ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -221,6 +235,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicRefreshPricesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/payments/webhook': {
+      id: '/api/public/payments/webhook'
+      path: '/api/public/payments/webhook'
+      fullPath: '/api/public/payments/webhook'
+      preLoaderRoute: typeof ApiPublicPaymentsWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -251,6 +272,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ApiPublicRefreshPricesRoute: ApiPublicRefreshPricesRoute,
+  ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
