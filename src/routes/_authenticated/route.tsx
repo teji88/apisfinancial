@@ -228,12 +228,16 @@ function AppHeader() {
 function ProfileMenu() {
   const profileQuery = useProfile();
   const updateProfile = useUpdateProfile();
+  const { entitlement } = useEntitlement();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [province, setProvince] = useState("AB");
   const [currency, setCurrency] = useState("CAD");
 
   const profile = profileQuery.data;
+  const planLabel =
+    entitlement.tier === "pro" ? "Pro" : entitlement.tier === "invite" ? "Pro (invite)" : "Free";
+
 
   function openSettings() {
     setName(profile?.display_name ?? "");
