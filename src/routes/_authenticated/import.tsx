@@ -82,6 +82,8 @@ function readFile(file: File): Promise<{ dataUrl: string | null; text: string | 
 
 function ImportPage() {
   const accounts = useAccounts();
+  const holdingsQuery = useHoldings();
+  const { entitlement } = useEntitlement();
   const addTransaction = useAddTransaction();
   const parse = useServerFn(parseStatement);
   const fxOnDate = useServerFn(getFxRateOn);
@@ -92,6 +94,9 @@ function ImportPage() {
   const [broker, setBroker] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [saving, setSaving] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const holdings = holdingsQuery.data ?? [];
+
 
   const accountList = accounts.data ?? [];
 
