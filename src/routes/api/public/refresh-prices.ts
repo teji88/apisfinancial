@@ -1,24 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
 
 /**
  * Daily end-of-day price refresh. Called once per weekday by the scheduled job
- * after the North American close. Protected by a shared secret because the
- * /api/public prefix bypasses site auth.
+ * after the North American close. Protected by the private cron secret only
+ * (timing-safe comparison) because the /api/public prefix bypasses site auth.
+ * Public publishable keys are NOT accepted — they ship in the client bundle.
  */
 async function handleRefresh(request: Request): Promise<Response> {
-  const accepted = [
-    process.env["LOVABLE_CRON_SECRET"],
-    process.env["SUPABASE_PUBLISHABLE_KEY"],
-    process.env["SUPABASE_ANON_KEY"],
-  ].filter((v): v is string => Boolean(v));
-  const provided =
-    request.headers.get("x-cron-secret") ??
-    request.headers.get("apikey") ??
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    "";
-  if (!provided || !accepted.includes(provided)) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  const authFailure = await authenticateCronRequest(request);
+  if (authFailure) return authFailure;
 
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
