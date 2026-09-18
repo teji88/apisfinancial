@@ -75,8 +75,11 @@ function DividendsPage() {
   const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
     usePortfolio();
   const addTransaction = useAddTransaction();
+  const { entitlement } = useEntitlement();
   const [recording, setRecording] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<string[]>([]);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
 
   useEffect(() => {
     setDismissed(loadDismissed());
