@@ -20,13 +20,17 @@ import {
 } from "lucide-react";
 
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/lib/portfolio";
 import { useProfile, useUpdateProfile } from "@/lib/profile";
 import { useEntitlement, formatDate } from "@/lib/entitlement";
+import { deleteMyAccount } from "@/lib/account.functions";
+import { getStripeEnvironment } from "@/lib/stripe";
 import { PROVINCES, PROVINCE_CODES } from "@/lib/tax";
 import { formatCad, formatPct, summariseAccount } from "@/lib/finance";
+
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -392,7 +396,46 @@ function ProfileMenu() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-1.5 border-t pt-4">
+              <Label htmlFor="new-password">New password</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="new-password"
+                  type="password"
+                  minLength={6}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                  autoComplete="new-password"
+                />
+                <Button
+                  variant="secondary"
+                  disabled={newPassword.length < 6 || savingPassword}
+                  onClick={() => void changePassword()}
+                >
+                  Change
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 border-t pt-4">
+              <p className="text-sm font-medium text-destructive">Delete account</p>
+              <p className="text-xs text-muted-foreground">
+                Removes your login and every account, holding and transaction. This cannot be
+                undone.
+              </p>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deleting}
+                onClick={() => void deleteAccount()}
+              >
+                Delete my account
+              </Button>
+            </div>
           </div>
+
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Cancel
