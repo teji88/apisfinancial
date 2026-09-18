@@ -68,6 +68,18 @@ function AuthPage() {
         if (error) throw error;
         toast.success("Account created. Check your email to confirm, then sign in.");
         setMode("signin");
+      } else if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth`,
+        });
+        if (error) throw error;
+        toast.success("Check your email for a link to set a new password.");
+        setMode("signin");
+      } else if (mode === "reset") {
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        toast.success("Your password is updated.");
+        void navigate({ to: "/" });
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -79,6 +91,7 @@ function AuthPage() {
       setBusy(false);
     }
   }
+
 
   async function handleGoogle() {
     const result = await lovable.auth.signInWithOAuth("google", {
