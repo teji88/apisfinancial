@@ -58,10 +58,14 @@ export function PlanUpgrade({ onDone }: { onDone?: () => void }) {
         <Button variant="ghost" size="sm" onClick={() => setCheckout(null)}>
           ← Back to plans
         </Button>
-        <StripeEmbeddedCheckout priceId={checkout} />
+        <StripeEmbeddedCheckout
+          priceId={checkout}
+          returnUrl={`${window.location.origin}/plan?session_id={CHECKOUT_SESSION_ID}`}
+        />
       </div>
     );
   }
+
 
   return (
     <div className="space-y-5">
