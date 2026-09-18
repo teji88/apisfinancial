@@ -3,12 +3,15 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ACCOUNT_TYPES, formatCad, summariseAccount } from "@/lib/finance";
+import { useEntitlement } from "@/lib/entitlement";
+import { UpgradeDialog } from "@/components/PlanUpgrade";
 import {
   useAddAccount,
   useDeleteAccount,
   usePortfolio,
   useUpdateAccount,
 } from "@/lib/portfolio";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
