@@ -17,8 +17,11 @@ import {
   useUpdateTransaction,
   usePortfolio,
 } from "@/lib/portfolio";
+import { useEntitlement } from "@/lib/entitlement";
+import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { lookupSymbol } from "@/lib/market.functions";
 import { getFxRateOn } from "@/lib/history.functions";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
