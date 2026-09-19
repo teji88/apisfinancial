@@ -29,6 +29,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -58,6 +66,18 @@ export const Route = createFileRoute("/_authenticated/dividends")({
   component: DividendsPage,
 });
 
+type ReviewDraft = {
+  key: string;
+  holdingId: string;
+  accountId: string;
+  symbol: string;
+  currency: string;
+  date: string;
+  units: number;
+  perShare: number;
+  amount: number;
+};
+
 const DISMISSED_KEY = "maplewealth.dismissedDividends";
 
 function loadDismissed(): string[] {
@@ -77,6 +97,7 @@ function DividendsPage() {
   const addTransaction = useAddTransaction();
   const { entitlement } = useEntitlement();
   const [recording, setRecording] = useState<string | null>(null);
+  const [review, setReview] = useState<ReviewDraft | null>(null);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
@@ -154,30 +175,44 @@ function DividendsPage() {
     return a ? `${a.account_type} · ${a.account_name}` : "—";
   };
 
-  const record = async (p: (typeof pending)[number]) => {
+  const openReview = (p: (typeof pending)[number]) => {
     if (entitlement.readOnly) {
       setUpgradeOpen(true);
       return;
     }
-    setRecording(p.holdingId + p.exDivDate);
+    setReview({
+      key: p.holdingId + p.exDivDate,
+      holdingId: p.holdingId,
+      accountId: p.accountId,
+      symbol: p.symbol,
+      currency: p.currency,
+      date: p.exDivDate,
+      units: p.units,
+      perShare: p.perShare,
+      amount: Number(p.amount.toFixed(2)),
+    });
+  };
 
+  const record = async (draft: ReviewDraft) => {
+    setRecording(draft.key);
     try {
-      const holding = holdings.find((h) => h.id === p.holdingId);
+      const holding = holdings.find((h) => h.id === draft.holdingId);
       await addTransaction.mutateAsync({
-        accountId: p.accountId,
-        symbol: p.symbol,
+        accountId: draft.accountId,
+        symbol: draft.symbol,
         name: holding?.name ?? null,
         assetType: holding?.asset_type ?? "Stock",
         transactionType: "DIVIDEND",
         units: 0,
         pricePerUnit: 0,
-        amount: Number(p.amount.toFixed(2)),
-        currency: p.currency,
-        fxRate: p.currency === "USD" ? fxUsdCad : 1,
+        amount: Number(draft.amount.toFixed(2)),
+        currency: draft.currency,
+        fxRate: draft.currency === "USD" ? fxUsdCad : 1,
         fee: 0,
-        date: p.exDivDate,
+        date: draft.date,
       });
-      toast.success(`Recorded ${formatCad(p.amount)} of ${p.symbol} dividends`);
+      toast.success(`Recorded ${formatCad(draft.amount)} of ${draft.symbol} dividends`);
+      setReview(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not record that dividend");
     } finally {
@@ -303,9 +338,9 @@ function DividendsPage() {
                       <Button
                         size="sm"
                         disabled={recording === p.holdingId + p.exDivDate}
-                        onClick={() => void record(p)}
+                        onClick={() => openReview(p)}
                       >
-                        Approve &amp; record
+                        Review &amp; record
                       </Button>
                       <Button
                         size="sm"
@@ -473,6 +508,85 @@ function DividendsPage() {
           {formatPct(totals.yieldPct, 2)}. A projection, not a forecast.
         </p>
       </div>
+
+      <Dialog open={review !== null} onOpenChange={(o) => !o && setReview(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Check this dividend before it is saved</DialogTitle>
+            <DialogDescription>
+              {review ? `${review.symbol} · ${accountName(review.accountId)}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {review ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="div-date">Payment date</Label>
+                <Input
+                  id="div-date"
+                  type="date"
+                  value={review.date}
+                  onChange={(e) => setReview({ ...review, date: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="div-units">Units held</Label>
+                <Input
+                  id="div-units"
+                  type="number"
+                  step="0.0001"
+                  value={review.units}
+                  onChange={(e) => {
+                    const units = Number(e.target.value);
+                    setReview({
+                      ...review,
+                      units,
+                      amount: Number((units * review.perShare).toFixed(2)),
+                    });
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="div-per">Amount per share ({review.currency})</Label>
+                <Input
+                  id="div-per"
+                  type="number"
+                  step="0.0001"
+                  value={review.perShare}
+                  onChange={(e) => {
+                    const perShare = Number(e.target.value);
+                    setReview({
+                      ...review,
+                      perShare,
+                      amount: Number((review.units * perShare).toFixed(2)),
+                    });
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="div-total">Total ({review.currency})</Label>
+                <Input
+                  id="div-total"
+                  type="number"
+                  step="0.01"
+                  value={review.amount}
+                  onChange={(e) => setReview({ ...review, amount: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReview(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!review || recording === review.key || !review.amount}
+              onClick={() => review && void record(review)}
+            >
+              Record dividend
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <UpgradeDialog
         open={upgradeOpen}

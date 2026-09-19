@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   FileUp,
   Loader2,
+  Lock,
   PencilLine,
   Sparkles,
   Trash2,
@@ -96,6 +97,8 @@ function ImportPage() {
   const [saving, setSaving] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const holdings = holdingsQuery.data ?? [];
+  const isPro = entitlement.tier !== "free";
+  const [upgradeReason, setUpgradeReason] = useState<string | null>(null);
 
 
   const accountList = accounts.data ?? [];
@@ -133,6 +136,13 @@ function ImportPage() {
   }
 
   async function handleFile(file: File) {
+    if (!isPro) {
+      setUpgradeReason(
+        "Reading statements with AI is part of Pro. You can still type transactions in by hand.",
+      );
+      setUpgradeOpen(true);
+      return;
+    }
     if (file.size > 20 * 1024 * 1024) {
       toast.error("That file is larger than 20 MB.");
       return;
@@ -284,10 +294,31 @@ function ImportPage() {
               <FileUp className="h-5 w-5" />
             </span>
             <p className="text-sm font-medium">Drag a file here</p>
-            <p className="text-xs text-muted-foreground">CSV, PDF, PNG or JPEG · up to 20 MB</p>
+            <p className="text-xs text-muted-foreground">
+              {isPro
+                ? "CSV, PDF, PNG or JPEG · up to 20 MB"
+                : "Reading files with AI is a Pro feature — hand entry stays free"}
+            </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
-                <Sparkles className="mr-1.5 h-4 w-4" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!isPro) {
+                    setUpgradeReason(
+                      "Reading statements with AI is part of Pro. You can still type transactions in by hand.",
+                    );
+                    setUpgradeOpen(true);
+                    return;
+                  }
+                  inputRef.current?.click();
+                }}
+              >
+                {isPro ? (
+                  <Sparkles className="mr-1.5 h-4 w-4" />
+                ) : (
+                  <Lock className="mr-1.5 h-4 w-4" />
+                )}
                 Choose a file
               </Button>
               <Button
@@ -510,9 +541,14 @@ function ImportPage() {
 
       <UpgradeDialog
         open={upgradeOpen}
-        onOpenChange={setUpgradeOpen}
+        onOpenChange={(o) => {
+          setUpgradeOpen(o);
+          if (!o) setUpgradeReason(null);
+        }}
         reason={
-          entitlement.readOnly
+          upgradeReason
+            ? upgradeReason
+            : entitlement.readOnly
             ? "Your plan has ended, so MapleWealth is view-only. Restart Pro to import again."
             : "This import goes past the free plan's ten holdings. Pro removes the limit."
         }

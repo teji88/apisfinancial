@@ -50,7 +50,7 @@ function AuthPage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && session && mode !== "reset") void navigate({ to: "/" });
+    if (!loading && session && mode !== "reset") void navigate({ to: "/dashboard" });
   }, [loading, session, navigate, mode]);
 
 
@@ -79,11 +79,11 @@ function AuthPage() {
         const { error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
         toast.success("Your password is updated.");
-        void navigate({ to: "/" });
+        void navigate({ to: "/dashboard" });
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        void navigate({ to: "/" });
+        void navigate({ to: "/dashboard" });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
@@ -102,7 +102,7 @@ function AuthPage() {
       return;
     }
     if (result.redirected) return;
-    void navigate({ to: "/" });
+    void navigate({ to: "/dashboard" });
   }
 
   return (
