@@ -98,14 +98,15 @@ function PerformancePage() {
 
   const symbols = useMemo(() => {
     const own = holdings.map((h) => h.symbol.toUpperCase());
-    const benches = BENCHMARK_GROUPS.flatMap((g) => g.options.map((o) => o.symbol));
+    const benches = selection.map((b) => b.symbol);
     return Array.from(new Set([...own, ...benches])).sort();
-  }, [holdings]);
+  }, [holdings, selection]);
 
   const history = useQuery({
     queryKey: ["history", symbols, start, end],
     enabled: transactions.length > 0,
     staleTime: 6 * 60 * 60 * 1000,
+    retry: 1,
     queryFn: async () => fetchHistory({ data: { symbols, start, end } }),
   });
 
