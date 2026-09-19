@@ -250,10 +250,17 @@ function PerformancePage() {
           <p className="mt-4 text-sm text-muted-foreground">
             Add some transactions and this chart will compare them against the index.
           </p>
-        ) : history.isError ? (
-          <p className="mt-4 text-sm text-destructive">
-            Market history could not be loaded right now. Try again in a moment.
-          </p>
+        ) : history.isError || !history.data ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-sm text-destructive">
+              {history.error instanceof Error && history.error.message
+                ? history.error.message
+                : "Market history could not be loaded right now."}
+            </p>
+            <Button size="sm" variant="secondary" onClick={() => history.refetch()}>
+              Try again
+            </Button>
+          </div>
         ) : (
           <div className="mt-4 h-80">
             <ResponsiveContainer width="100%" height="100%">
