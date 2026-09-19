@@ -161,7 +161,7 @@ function AppHeader() {
             <Link
               key={item.to}
               to={item.to}
-              activeOptions={{ exact: item.to === "/" }}
+              activeOptions={{ exact: true }}
               className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
               activeProps={{ className: "bg-card text-foreground shadow-sm" }}
             >
@@ -216,7 +216,7 @@ function AppHeader() {
           <Link
             key={item.to}
             to={item.to}
-            activeOptions={{ exact: item.to === "/" }}
+            activeOptions={{ exact: true }}
             className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground"
             activeProps={{ className: "bg-muted text-foreground" }}
           >
