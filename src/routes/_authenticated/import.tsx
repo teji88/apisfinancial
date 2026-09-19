@@ -543,7 +543,9 @@ function ImportPage() {
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
         reason={
-          entitlement.readOnly
+          upgradeReason
+            ? upgradeReason
+            : entitlement.readOnly
             ? "Your plan has ended, so MapleWealth is view-only. Restart Pro to import again."
             : "This import goes past the free plan's ten holdings. Pro removes the limit."
         }
