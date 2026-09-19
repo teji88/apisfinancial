@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { HistoryPoint } from "./history.server";
 
 const Input = z.object({
-  symbols: z.array(z.string()).max(40),
+  symbols: z.array(z.string()).max(150),
   start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -17,13 +17,13 @@ export type HistoryResponse = {
 export const getHistory = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => Input.parse(data))
   .handler(async ({ data }): Promise<HistoryResponse> => {
-    const { fetchSymbolHistory, fetchFxHistory } = await import("./history.server");
+    const { fetchSymbolHistory, fetchFxHistory, mapLimit } = await import("./history.server");
     const symbols = Array.from(
       new Set(data.symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)),
     );
 
     const [histories, fx] = await Promise.all([
-      Promise.all(symbols.map((s) => fetchSymbolHistory(s, data.start, data.end))),
+      mapLimit(symbols, 6, (s) => fetchSymbolHistory(s, data.start, data.end)),
       fetchFxHistory(data.start, data.end),
     ]);
 
