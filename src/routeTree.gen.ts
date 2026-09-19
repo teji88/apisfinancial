@@ -11,8 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDividendsRouteImport } from './routes/_authenticated/dividends'
 import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
 import { Route as AuthenticatedInvitesRouteImport } from './routes/_authenticated/invites'
@@ -32,14 +32,14 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedAccountsRoute = AuthenticatedAccountsRouteImport.update({
   id: '/accounts',
   path: '/accounts',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDividendsRoute = AuthenticatedDividendsRouteImport.update({
@@ -91,9 +91,10 @@ const ApiPublicPaymentsWebhookRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AuthenticatedIndexRoute
+  '/': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/accounts': typeof AuthenticatedAccountsRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
   '/dividends': typeof AuthenticatedDividendsRoute
   '/import': typeof AuthenticatedImportRoute
   '/invites': typeof AuthenticatedInvitesRoute
@@ -105,8 +106,10 @@ export interface FileRoutesByFullPath {
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/accounts': typeof AuthenticatedAccountsRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
   '/dividends': typeof AuthenticatedDividendsRoute
   '/import': typeof AuthenticatedImportRoute
   '/invites': typeof AuthenticatedInvitesRoute
@@ -114,7 +117,6 @@ export interface FileRoutesByTo {
   '/performance': typeof AuthenticatedPerformanceRoute
   '/plan': typeof AuthenticatedPlanRoute
   '/retirement': typeof AuthenticatedRetirementRoute
-  '/': typeof AuthenticatedIndexRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
@@ -123,6 +125,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/accounts': typeof AuthenticatedAccountsRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/dividends': typeof AuthenticatedDividendsRoute
   '/_authenticated/import': typeof AuthenticatedImportRoute
   '/_authenticated/invites': typeof AuthenticatedInvitesRoute
@@ -130,7 +133,6 @@ export interface FileRoutesById {
   '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
   '/_authenticated/plan': typeof AuthenticatedPlanRoute
   '/_authenticated/retirement': typeof AuthenticatedRetirementRoute
-  '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
@@ -140,6 +142,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/accounts'
+    | '/dashboard'
     | '/dividends'
     | '/import'
     | '/invites'
@@ -151,8 +154,10 @@ export interface FileRouteTypes {
     | '/api/public/payments/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/auth'
     | '/accounts'
+    | '/dashboard'
     | '/dividends'
     | '/import'
     | '/invites'
@@ -160,7 +165,6 @@ export interface FileRouteTypes {
     | '/performance'
     | '/plan'
     | '/retirement'
-    | '/'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
   id:
@@ -168,6 +172,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/accounts'
+    | '/_authenticated/dashboard'
     | '/_authenticated/dividends'
     | '/_authenticated/import'
     | '/_authenticated/invites'
@@ -175,7 +180,6 @@ export interface FileRouteTypes {
     | '/_authenticated/performance'
     | '/_authenticated/plan'
     | '/_authenticated/retirement'
-    | '/_authenticated/'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
   fileRoutesById: FileRoutesById
@@ -203,18 +207,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/': {
-      id: '/_authenticated/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/accounts': {
       id: '/_authenticated/accounts'
       path: '/accounts'
       fullPath: '/accounts'
       preLoaderRoute: typeof AuthenticatedAccountsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dividends': {
@@ -285,6 +289,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRoute
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDividendsRoute: typeof AuthenticatedDividendsRoute
   AuthenticatedImportRoute: typeof AuthenticatedImportRoute
   AuthenticatedInvitesRoute: typeof AuthenticatedInvitesRoute
@@ -292,11 +297,11 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPerformanceRoute: typeof AuthenticatedPerformanceRoute
   AuthenticatedPlanRoute: typeof AuthenticatedPlanRoute
   AuthenticatedRetirementRoute: typeof AuthenticatedRetirementRoute
-  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccountsRoute: AuthenticatedAccountsRoute,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDividendsRoute: AuthenticatedDividendsRoute,
   AuthenticatedImportRoute: AuthenticatedImportRoute,
   AuthenticatedInvitesRoute: AuthenticatedInvitesRoute,
@@ -304,7 +309,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPerformanceRoute: AuthenticatedPerformanceRoute,
   AuthenticatedPlanRoute: AuthenticatedPlanRoute,
   AuthenticatedRetirementRoute: AuthenticatedRetirementRoute,
-  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
