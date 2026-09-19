@@ -41,3 +41,10 @@
 - Lapsed plan → view-only, nothing deleted
 - Invite codes for free access (owner-only screen at /invites)
 - Your plan page at /plan with checkout, invite-code redemption and billing management
+
+## Phase 8 — Shared price history library (in progress)
+- [ ] `price_history` / `price_history_coverage` / `fx_history` tables (done)
+- [ ] History server reads from the database, fetches only missing windows, upserts
+- [ ] Performance page: only selected benchmarks, partial results render, retry
+- [ ] Nightly backfill appends yesterday's close for every stored symbol
+- [ ] Fix US-dollar holdings showing an inflated starting value in Performance (BN, AAPL fine in CAD, wrong in USD)
