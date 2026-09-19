@@ -57,7 +57,14 @@ Rules:
 export const parseStatement = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => Input.parse(data))
-  .handler(async ({ data }): Promise<ParseResult> => {
+  .handler(async ({ data, context }): Promise<ParseResult> => {
+    const { data: planState } = await context.supabase.rpc("plan_state", {
+      _user_id: context.userId,
+    });
+    if (planState !== "pro") {
+      throw new Error("Reading statements with AI is part of Pro. Upgrade to use file upload.");
+    }
+
     const key = process.env["LOVABLE_API_KEY"];
     if (!key) throw new Error("AI is not configured for this app.");
 
