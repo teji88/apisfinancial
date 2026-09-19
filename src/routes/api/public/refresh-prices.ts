@@ -37,8 +37,21 @@ async function handleRefresh(request: Request): Promise<Response> {
   const { saved, asOf, quotes } = await refreshPrices(symbols);
   const missing = quotes.filter((q) => q.price == null).map((q) => q.symbol);
 
-  console.log(`[market] refresh: ${saved} prices saved for ${asOf}; missing: ${missing.join(",")}`);
-  return Response.json({ ok: true, asOf, requested: symbols.length, saved, missing });
+  // Extend the shared price-history library: append the latest closes for every
+  // symbol we already store, plus any holding symbol we have never fetched.
+  let library = { symbols: 0, updated: 0, failed: [] as string[] };
+  try {
+    const { backfillLibrary } = await import("@/lib/history.server");
+    library = await backfillLibrary(symbols);
+  } catch (err) {
+    console.error(`[history] backfill failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  console.log(
+    `[market] refresh: ${saved} prices saved for ${asOf}; missing: ${missing.join(",")}; ` +
+      `history: ${library.updated}/${library.symbols} symbols`,
+  );
+  return Response.json({ ok: true, asOf, requested: symbols.length, saved, missing, library });
 }
 
 export const Route = createFileRoute("/api/public/refresh-prices")({

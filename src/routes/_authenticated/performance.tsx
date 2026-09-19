@@ -15,6 +15,7 @@ import {
 import { Activity, Landmark, TrendingUp, Wallet } from "lucide-react";
 import { usePortfolio } from "@/lib/portfolio";
 import { getHistory } from "@/lib/history.functions";
+import { Button } from "@/components/ui/button";
 import {
   BENCHMARK_GROUPS,
   DEFAULT_BENCHMARKS,
@@ -98,14 +99,15 @@ function PerformancePage() {
 
   const symbols = useMemo(() => {
     const own = holdings.map((h) => h.symbol.toUpperCase());
-    const benches = BENCHMARK_GROUPS.flatMap((g) => g.options.map((o) => o.symbol));
+    const benches = selection.map((b) => b.symbol);
     return Array.from(new Set([...own, ...benches])).sort();
-  }, [holdings]);
+  }, [holdings, selection]);
 
   const history = useQuery({
     queryKey: ["history", symbols, start, end],
     enabled: transactions.length > 0,
     staleTime: 6 * 60 * 60 * 1000,
+    retry: 1,
     queryFn: async () => fetchHistory({ data: { symbols, start, end } }),
   });
 
@@ -249,10 +251,17 @@ function PerformancePage() {
           <p className="mt-4 text-sm text-muted-foreground">
             Add some transactions and this chart will compare them against the index.
           </p>
-        ) : history.isError ? (
-          <p className="mt-4 text-sm text-destructive">
-            Market history could not be loaded right now. Try again in a moment.
-          </p>
+        ) : history.isError || !history.data ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-sm text-destructive">
+              {history.error instanceof Error && history.error.message
+                ? history.error.message
+                : "Market history could not be loaded right now."}
+            </p>
+            <Button size="sm" variant="secondary" onClick={() => history.refetch()}>
+              Try again
+            </Button>
+          </div>
         ) : (
           <div className="mt-4 h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -351,9 +360,11 @@ function PerformancePage() {
         <p className="mt-3 text-xs text-muted-foreground">
           Simulation assumes every deposit bought the benchmark ETF at that day's closing price, in
           Canadian dollars, with no dividends reinvested on either side beyond what your ledger
-          records.
+          records. Holdings are valued at the actual market close on each date, so an early point
+          can differ from the price you typed in the ledger. Canadian-listed prices go back 25
+          years; US-listed prices go back 10.
           {history.data?.missing?.length
-            ? ` No history available for ${history.data.missing.join(", ")}.`
+            ? ` No price history found for ${history.data.missing.join(", ")} — those holdings are valued at your last recorded price.`
             : ""}
         </p>
       </div>

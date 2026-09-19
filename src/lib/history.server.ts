@@ -1,7 +1,12 @@
 /**
  * Historical daily closes for benchmarking.
- * US-listed symbols come from Nasdaq, TSX (.TO) symbols from TMX,
- * and USD/CAD history from the ECB via Frankfurter.
+ *
+ * Prices are served from our own shared library in the database. Anything we
+ * have never fetched (or any gap at either end of the window) is pulled once
+ * from the upstream source, stored, and reused by every user from then on.
+ *
+ * Upstream sources: US-listed symbols from Nasdaq (10 years max), TSX (.TO)
+ * symbols from TMX (25+ years), and USD/CAD from the ECB via Frankfurter.
  */
 
 const UA =
@@ -10,9 +15,28 @@ const UA =
 export type HistoryPoint = { date: string; close: number };
 export type SymbolHistory = { symbol: string; currency: string; points: HistoryPoint[] };
 
-const cache = new Map<string, { at: number; value: SymbolHistory }>();
-const fxCache = new Map<string, { at: number; value: HistoryPoint[] }>();
-const TTL = 6 * 60 * 60 * 1000;
+const memory = new Map<string, { at: number; value: SymbolHistory | null }>();
+const fxMemory = new Map<string, { at: number; value: HistoryPoint[] }>();
+const MEM_TTL = 30 * 60 * 1000;
+
+/** A stored series is considered current if its last close is within this many days. */
+const FRESH_DAYS = 4;
+/** How far back we try to build the library on the first fetch of a symbol. */
+const TSX_YEARS = 25;
+const US_YEARS = 10;
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+function shiftDays(date: string, days: number): string {
+  const t = new Date(`${date}T00:00:00Z`).getTime() + days * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+function yearsAgo(years: number): string {
+  const d = new Date();
+  d.setUTCFullYear(d.getUTCFullYear() - years);
+  return d.toISOString().slice(0, 10);
+}
 
 function num(raw: string): number | null {
   const n = Number(raw.replace(/[$,\s]/g, ""));
@@ -25,20 +49,54 @@ function isoFromUs(value: string): string | null {
   return `${m[3]}-${m[1]}-${m[2]}`;
 }
 
+/** Run tasks with a bounded number in flight so we don't burst upstream APIs. */
+export async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]!);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+async function fetchRetry(input: string, init?: RequestInit): Promise<Response | null> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(input, init);
+      if (res.ok) return res;
+    } catch {
+      /* retry once */
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 400));
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- upstream
+
 async function fetchTmx(symbol: string, start: string, end: string): Promise<SymbolHistory | null> {
   const base = symbol.replace(/\.TO$/i, "").toUpperCase();
+  const res = await fetchRetry("https://app-money.tmx.com/graphql", {
+    method: "POST",
+    headers: { "User-Agent": UA, "Content-Type": "application/json", locale: "en" },
+    body: JSON.stringify({
+      operationName: "getTimeSeriesData",
+      variables: { symbol: `${base}:CA`, freq: "day", interval: 1, start, end },
+      query:
+        "query getTimeSeriesData($symbol: String!, $freq: String, $interval: Int, $start: String, $end: String) { getTimeSeriesData(symbol: $symbol, freq: $freq, interval: $interval, start: $start, end: $end) { dateTime close } }",
+    }),
+  });
+  if (!res) return null;
   try {
-    const res = await fetch("https://app-money.tmx.com/graphql", {
-      method: "POST",
-      headers: { "User-Agent": UA, "Content-Type": "application/json", locale: "en" },
-      body: JSON.stringify({
-        operationName: "getTimeSeriesData",
-        variables: { symbol: `${base}:CA`, freq: "day", interval: 1, start, end },
-        query:
-          "query getTimeSeriesData($symbol: String!, $freq: String, $interval: Int, $start: String, $end: String) { getTimeSeriesData(symbol: $symbol, freq: $freq, interval: $interval, start: $start, end: $end) { dateTime close } }",
-      }),
-    });
-    if (!res.ok) return null;
     const json = (await res.json()) as {
       data?: { getTimeSeriesData?: Array<{ dateTime: string; close: number }> | null };
     };
@@ -65,12 +123,12 @@ async function fetchNasdaq(
   end: string,
 ): Promise<SymbolHistory | null> {
   for (const assetclass of ["etf", "stocks"]) {
+    const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(
+      symbol.toUpperCase(),
+    )}/historical?assetclass=${assetclass}&fromdate=${start}&todate=${end}&limit=99999`;
+    const res = await fetchRetry(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+    if (!res) continue;
     try {
-      const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(
-        symbol.toUpperCase(),
-      )}/historical?assetclass=${assetclass}&fromdate=${start}&todate=${end}&limit=9999`;
-      const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
-      if (!res.ok) continue;
       const json = (await res.json()) as {
         data?: { tradesTable?: { rows?: Array<{ date: string; close: string }> | null } | null };
       };
@@ -91,33 +149,203 @@ async function fetchNasdaq(
   return null;
 }
 
-export async function fetchSymbolHistory(
+const isTsx = (symbol: string) => /\.TO$/i.test(symbol);
+
+async function fetchUpstream(
   symbol: string,
   start: string,
   end: string,
 ): Promise<SymbolHistory | null> {
-  const key = `${symbol.toUpperCase()}|${start}|${end}`;
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < TTL) return hit.value;
-
-  const value = /\.TO$/i.test(symbol)
-    ? await fetchTmx(symbol, start, end)
-    : await fetchNasdaq(symbol, start, end);
-  if (value) cache.set(key, { at: Date.now(), value });
-  return value;
+  return isTsx(symbol) ? fetchTmx(symbol, start, end) : fetchNasdaq(symbol, start, end);
 }
 
-/** Daily USD→CAD rates from the ECB reference feed. */
-export async function fetchFxHistory(start: string, end: string): Promise<HistoryPoint[]> {
-  const key = `${start}|${end}`;
-  const hit = fxCache.get(key);
-  if (hit && Date.now() - hit.at < TTL) return hit.value;
+// ------------------------------------------------------------ shared store
+
+type Coverage = {
+  symbol: string;
+  currency: string;
+  first_date: string | null;
+  last_date: string | null;
+  unavailable: boolean;
+  checked_at: string;
+};
+
+async function admin() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin;
+}
+
+async function readCoverage(symbol: string): Promise<Coverage | null> {
+  const db = await admin();
+  const { data } = await db
+    .from("price_history_coverage")
+    .select("symbol, currency, first_date, last_date, unavailable, checked_at")
+    .eq("symbol", symbol)
+    .maybeSingle();
+  return (data as Coverage | null) ?? null;
+}
+
+async function readStored(symbol: string, start: string, end: string): Promise<HistoryPoint[]> {
+  const db = await admin();
+  const points: HistoryPoint[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await db
+      .from("price_history")
+      .select("date, close")
+      .eq("symbol", symbol)
+      .gte("date", start)
+      .lte("date", end)
+      .order("date", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error || !data || data.length === 0) break;
+    for (const row of data) {
+      const close = Number(row.close);
+      if (Number.isFinite(close) && close > 0) points.push({ date: String(row.date), close });
+    }
+    if (data.length < pageSize) break;
+  }
+  return points;
+}
+
+async function storePoints(symbol: string, currency: string, points: HistoryPoint[]) {
+  if (points.length === 0) return;
+  const db = await admin();
+  const chunk = 800;
+  for (let i = 0; i < points.length; i += chunk) {
+    const rows = points.slice(i, i + chunk).map((p) => ({
+      symbol,
+      date: p.date,
+      close: p.close,
+      currency,
+    }));
+    const { error } = await db.from("price_history").upsert(rows, { onConflict: "symbol,date" });
+    if (error) console.error(`[history] store ${symbol}: ${error.message}`);
+  }
+}
+
+async function writeCoverage(
+  symbol: string,
+  currency: string,
+  first: string | null,
+  last: string | null,
+  unavailable: boolean,
+) {
+  const db = await admin();
+  const existing = await readCoverage(symbol);
+  const firstDate =
+    existing?.first_date && first ? (existing.first_date < first ? existing.first_date : first) : (first ?? existing?.first_date ?? null);
+  const lastDate =
+    existing?.last_date && last ? (existing.last_date > last ? existing.last_date : last) : (last ?? existing?.last_date ?? null);
+  const { error } = await db.from("price_history_coverage").upsert(
+    {
+      symbol,
+      currency,
+      first_date: firstDate,
+      last_date: lastDate,
+      unavailable,
+      checked_at: new Date().toISOString(),
+    },
+    { onConflict: "symbol" },
+  );
+  if (error) console.error(`[history] coverage ${symbol}: ${error.message}`);
+}
+
+/**
+ * Daily closes for a symbol over a window, served from the shared library and
+ * topped up from upstream only for the parts we are missing.
+ */
+export async function fetchSymbolHistory(
+  symbolRaw: string,
+  start: string,
+  end: string,
+): Promise<SymbolHistory | null> {
+  const symbol = symbolRaw.trim().toUpperCase();
+  if (!symbol) return null;
+
+  const memKey = `${symbol}|${start}|${end}`;
+  const hit = memory.get(memKey);
+  if (hit && Date.now() - hit.at < MEM_TTL) return hit.value;
+
+  const coverage = await readCoverage(symbol);
+  const currency = coverage?.currency ?? (isTsx(symbol) ? "CAD" : "USD");
+  const now = today();
+
+  const needsBack = !coverage?.first_date || coverage.first_date > start;
+  const needsForward = !coverage?.last_date || coverage.last_date < shiftDays(now, -FRESH_DAYS);
+  const recentlyChecked =
+    coverage != null && Date.now() - new Date(coverage.checked_at).getTime() < 6 * 60 * 60 * 1000;
+  const giveUp = coverage?.unavailable === true && recentlyChecked;
+
+  let fetched: SymbolHistory | null = null;
+  if (!giveUp && (needsBack || (needsForward && !recentlyChecked))) {
+    // First touch: grab everything the source will give so later users read
+    // straight from the library. After that, only top up the missing tail.
+    const floor = isTsx(symbol) ? yearsAgo(TSX_YEARS) : yearsAgo(US_YEARS);
+    const from = needsBack ? minDate(start, floor) : shiftDays(coverage!.last_date!, -5);
+    fetched = await fetchUpstream(symbol, from, now);
+    if (fetched) {
+      await storePoints(symbol, fetched.currency, fetched.points);
+      await writeCoverage(
+        symbol,
+        fetched.currency,
+        fetched.points[0]!.date,
+        fetched.points[fetched.points.length - 1]!.date,
+        false,
+      );
+    } else if (!coverage?.last_date) {
+      await writeCoverage(symbol, currency, null, null, true);
+    } else {
+      await writeCoverage(symbol, currency, coverage.first_date, coverage.last_date, false);
+    }
+  }
+
+  const stored = await readStored(symbol, start, end);
+  const value: SymbolHistory | null =
+    stored.length > 0
+      ? { symbol, currency: fetched?.currency ?? currency, points: stored }
+      : fetched
+        ? { ...fetched, points: fetched.points.filter((p) => p.date >= start && p.date <= end) }
+        : null;
+
+  memory.set(memKey, { at: Date.now(), value: value && value.points.length > 0 ? value : null });
+  return value && value.points.length > 0 ? value : null;
+}
+
+function minDate(a: string, b: string): string {
+  return a < b ? a : b;
+}
+
+// --------------------------------------------------------------------- FX
+
+async function readStoredFx(start: string, end: string): Promise<HistoryPoint[]> {
+  const db = await admin();
+  const points: HistoryPoint[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await db
+      .from("fx_history")
+      .select("date, usd_cad")
+      .gte("date", start)
+      .lte("date", end)
+      .order("date", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error || !data || data.length === 0) break;
+    for (const row of data) {
+      const rate = Number(row.usd_cad);
+      if (Number.isFinite(rate) && rate > 0) points.push({ date: String(row.date), close: rate });
+    }
+    if (data.length < pageSize) break;
+  }
+  return points;
+}
+
+async function fetchUpstreamFx(start: string, end: string): Promise<HistoryPoint[]> {
+  const res = await fetchRetry(`https://api.frankfurter.app/${start}..${end}?from=USD&to=CAD`, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+  });
+  if (!res) return [];
   try {
-    const res = await fetch(
-      `https://api.frankfurter.app/${start}..${end}?from=USD&to=CAD`,
-      { headers: { "User-Agent": UA, Accept: "application/json" } },
-    );
-    if (!res.ok) return [];
     const json = (await res.json()) as { rates?: Record<string, { CAD?: number }> };
     const points: HistoryPoint[] = [];
     for (const [date, row] of Object.entries(json.rates ?? {})) {
@@ -125,33 +353,112 @@ export async function fetchFxHistory(start: string, end: string): Promise<Histor
       if (typeof rate === "number" && rate > 0) points.push({ date, close: rate });
     }
     points.sort((a, b) => a.date.localeCompare(b.date));
-    fxCache.set(key, { at: Date.now(), value: points });
     return points;
   } catch {
     return [];
   }
 }
 
+async function storeFx(points: HistoryPoint[]) {
+  if (points.length === 0) return;
+  const db = await admin();
+  const chunk = 800;
+  for (let i = 0; i < points.length; i += chunk) {
+    const rows = points.slice(i, i + chunk).map((p) => ({ date: p.date, usd_cad: p.close }));
+    const { error } = await db.from("fx_history").upsert(rows, { onConflict: "date" });
+    if (error) console.error(`[history] store fx: ${error.message}`);
+  }
+}
+
+/** Daily USD→CAD rates, served from the shared library. */
+export async function fetchFxHistory(start: string, end: string): Promise<HistoryPoint[]> {
+  const key = `${start}|${end}`;
+  const hit = fxMemory.get(key);
+  if (hit && Date.now() - hit.at < MEM_TTL) return hit.value;
+
+  let stored = await readStoredFx(start, end);
+  const now = today();
+  const covered =
+    stored.length > 0 &&
+    stored[0]!.date <= shiftDays(start, 7) &&
+    stored[stored.length - 1]!.date >= shiftDays(minDate(end, now), -FRESH_DAYS);
+
+  if (!covered) {
+    const fresh = await fetchUpstreamFx(start, minDate(end, now));
+    if (fresh.length > 0) {
+      await storeFx(fresh);
+      stored = await readStoredFx(start, end);
+      if (stored.length === 0) stored = fresh;
+    }
+  }
+
+  fxMemory.set(key, { at: Date.now(), value: stored });
+  return stored;
+}
+
 const fxDayCache = new Map<string, { at: number; value: number | null }>();
 
 /**
  * USD→CAD rate on a specific date (the most recent published rate at or
- * before that date — Frankfurter rolls weekends/holidays back automatically).
+ * before that date). Reads the shared library first.
  */
 export async function fetchFxRateOn(date: string): Promise<number | null> {
   const hit = fxDayCache.get(date);
-  if (hit && Date.now() - hit.at < TTL) return hit.value;
-  try {
-    const res = await fetch(`https://api.frankfurter.app/${date}?from=USD&to=CAD`, {
+  if (hit && Date.now() - hit.at < MEM_TTL) return hit.value;
+
+  const stored = await readStoredFx(shiftDays(date, -10), date);
+  let value = stored.length > 0 ? stored[stored.length - 1]!.close : null;
+
+  if (value == null) {
+    const res = await fetchRetry(`https://api.frankfurter.app/${date}?from=USD&to=CAD`, {
       headers: { "User-Agent": UA, Accept: "application/json" },
     });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { rates?: { CAD?: number } };
-    const rate = json.rates?.CAD;
-    const value = typeof rate === "number" && rate > 0 ? rate : null;
-    fxDayCache.set(date, { at: Date.now(), value });
-    return value;
-  } catch {
-    return null;
+    if (res) {
+      try {
+        const json = (await res.json()) as { date?: string; rates?: { CAD?: number } };
+        const rate = json.rates?.CAD;
+        if (typeof rate === "number" && rate > 0) {
+          value = rate;
+          await storeFx([{ date: String(json.date ?? date), close: rate }]);
+        }
+      } catch {
+        /* leave null */
+      }
+    }
   }
+
+  fxDayCache.set(date, { at: Date.now(), value });
+  return value;
+}
+
+/**
+ * Nightly maintenance: append the latest closes for every symbol already in
+ * the library plus any new holding symbols, and extend the FX series.
+ */
+export async function backfillLibrary(extraSymbols: string[] = []): Promise<{
+  symbols: number;
+  updated: number;
+  failed: string[];
+}> {
+  const db = await admin();
+  const { data } = await db.from("price_history_coverage").select("symbol").eq("unavailable", false);
+  const known = (data ?? []).map((r) => String(r.symbol).toUpperCase());
+  const symbols = Array.from(
+    new Set([...known, ...extraSymbols.map((s) => s.trim().toUpperCase()).filter(Boolean)]),
+  );
+
+  const now = today();
+  const start = yearsAgo(1);
+  const failed: string[] = [];
+  let updated = 0;
+
+  await mapLimit(symbols, 4, async (symbol) => {
+    memory.clear();
+    const res = await fetchSymbolHistory(symbol, start, now);
+    if (res) updated++;
+    else failed.push(symbol);
+  });
+
+  await fetchFxHistory(yearsAgo(1), now);
+  return { symbols: symbols.length, updated, failed };
 }
