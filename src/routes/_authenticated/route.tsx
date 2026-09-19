@@ -64,7 +64,7 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 const NAV = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/ledger", label: "Ledger", icon: Receipt },
   { to: "/dividends", label: "Dividends", icon: Coins },
   { to: "/performance", label: "Performance", icon: BarChart3 },
@@ -149,7 +149,7 @@ function AppHeader() {
   return (
     <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-6">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to="/dashboard" className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Leaf className="h-4 w-4" />
           </span>

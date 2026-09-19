@@ -541,7 +541,10 @@ function ImportPage() {
 
       <UpgradeDialog
         open={upgradeOpen}
-        onOpenChange={setUpgradeOpen}
+        onOpenChange={(o) => {
+          setUpgradeOpen(o);
+          if (!o) setUpgradeReason(null);
+        }}
         reason={
           upgradeReason
             ? upgradeReason
