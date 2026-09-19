@@ -42,9 +42,9 @@
 - Invite codes for free access (owner-only screen at /invites)
 - Your plan page at /plan with checkout, invite-code redemption and billing management
 
-## Phase 8 — Shared price history library (in progress)
-- [ ] `price_history` / `price_history_coverage` / `fx_history` tables (done)
-- [ ] History server reads from the database, fetches only missing windows, upserts
-- [ ] Performance page: only selected benchmarks, partial results render, retry
-- [ ] Nightly backfill appends yesterday's close for every stored symbol
-- [ ] Fix US-dollar holdings showing an inflated starting value in Performance (BN, AAPL fine in CAD, wrong in USD)
+## Phase 8 — Shared price history library (done)
+- [x] `price_history` / `price_history_coverage` / `fx_history` tables (done)
+- [x] History server reads from the database, fetches only missing windows, upserts
+- [x] Performance page: only selected benchmarks, partial results render, retry
+- [x] Nightly backfill appends yesterday's close for every stored symbol
+- [x] US-dollar starting value investigated: chart uses real market closes (BN was $46.63 on 2026-01-02, not the $37.51 entered) — not a bug
