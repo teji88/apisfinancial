@@ -15,6 +15,7 @@ import {
 import { Activity, Landmark, TrendingUp, Wallet } from "lucide-react";
 import { usePortfolio } from "@/lib/portfolio";
 import { getHistory } from "@/lib/history.functions";
+import { Button } from "@/components/ui/button";
 import {
   BENCHMARK_GROUPS,
   DEFAULT_BENCHMARKS,
