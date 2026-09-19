@@ -282,7 +282,7 @@ export async function fetchSymbolHistory(
     // First touch: grab everything the source will give so later users read
     // straight from the library. After that, only top up the missing tail.
     const floor = isTsx(symbol) ? yearsAgo(TSX_YEARS) : yearsAgo(US_YEARS);
-    const from = needsBack ? (start < floor ? floor : minDate(start, floor)) : shiftDays(coverage!.last_date!, -5);
+    const from = needsBack ? minDate(start, floor) : shiftDays(coverage!.last_date!, -5);
     fetched = await fetchUpstream(symbol, from, now);
     if (fetched) {
       await storePoints(symbol, fetched.currency, fetched.points);
