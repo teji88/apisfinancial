@@ -58,7 +58,8 @@ export const parseStatement = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => Input.parse(data))
   .handler(async ({ data, context }): Promise<ParseResult> => {
-    const { data: planState } = await context.supabase.rpc("plan_state", {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: planState } = await supabaseAdmin.rpc("plan_state", {
       _user_id: context.userId,
     });
     if (planState !== "pro") {

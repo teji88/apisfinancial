@@ -30,6 +30,9 @@ export const getEntitlement = createServerFn({ method: "POST" })
   .inputValidator((data: { environment: "sandbox" | "live" }) => data)
   .handler(async ({ data, context }): Promise<Entitlement> => {
     const { supabase, userId } = context;
+    // Plan-state checks run through the server-side client so the internal
+    // database routines never need to be callable by signed-in users.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const now = Date.now();
 
     const [{ data: subs }, { data: redemptions }, { data: isAdmin }, { data: limitState }] =
@@ -47,8 +50,8 @@ export const getEntitlement = createServerFn({ method: "POST" })
           .eq("user_id", userId)
           .order("redeemed_at", { ascending: false })
           .limit(5),
-        supabase.rpc("has_role", { _user_id: userId, _role: "admin" }),
-        supabase.rpc("free_limit_state", { _user_id: userId }),
+        supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" }),
+        supabaseAdmin.rpc("free_limit_state", { _user_id: userId }),
       ]);
 
     const base = {
@@ -192,8 +195,9 @@ export const redeemInviteCode = createServerFn({ method: "POST" })
     return { ok: true, accessUntil: row.access_until };
   });
 
-async function assertAdmin(context: { supabase: any; userId: string }) {
-  const { data: isAdmin } = await context.supabase.rpc("has_role", {
+async function assertAdmin(context: { userId: string }) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: isAdmin } = await supabaseAdmin.rpc("has_role", {
     _user_id: context.userId,
     _role: "admin",
   });
