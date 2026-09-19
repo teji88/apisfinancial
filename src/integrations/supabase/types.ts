@@ -50,6 +50,24 @@ export type Database = {
         }
         Relationships: []
       }
+      fx_history: {
+        Row: {
+          created_at: string
+          date: string
+          usd_cad: number
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          usd_cad: number
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          usd_cad?: number
+        }
+        Relationships: []
+      }
       holdings: {
         Row: {
           account_id: string
@@ -204,6 +222,60 @@ export type Database = {
           price?: number | null
           symbol?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      price_history: {
+        Row: {
+          close: number
+          created_at: string
+          currency: string
+          date: string
+          symbol: string
+        }
+        Insert: {
+          close: number
+          created_at?: string
+          currency?: string
+          date: string
+          symbol: string
+        }
+        Update: {
+          close?: number
+          created_at?: string
+          currency?: string
+          date?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
+      price_history_coverage: {
+        Row: {
+          checked_at: string
+          created_at: string
+          currency: string
+          first_date: string | null
+          last_date: string | null
+          symbol: string
+          unavailable: boolean
+        }
+        Insert: {
+          checked_at?: string
+          created_at?: string
+          currency?: string
+          first_date?: string | null
+          last_date?: string | null
+          symbol: string
+          unavailable?: boolean
+        }
+        Update: {
+          checked_at?: string
+          created_at?: string
+          currency?: string
+          first_date?: string | null
+          last_date?: string | null
+          symbol?: string
+          unavailable?: boolean
         }
         Relationships: []
       }
