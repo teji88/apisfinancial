@@ -39,6 +39,9 @@ import {
 } from "@/lib/retirement";
 import { PROVINCES, PROVINCE_CODES, type ProvinceCode } from "@/lib/tax";
 import { Button } from "@/components/ui/button";
+import { Lock } from "lucide-react";
+import { useEntitlement } from "@/lib/entitlement";
+import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -100,6 +103,11 @@ function RetirementPage() {
   const profileQuery = useProfile();
   const updateProfile = useUpdateProfile();
 
+  const { entitlement } = useEntitlement();
+  const isPro = entitlement.tier !== "free";
+  const [proPromptOpen, setProPromptOpen] = useState(false);
+  const lockProps = isPro ? {} : { locked: true, onLocked: () => setProPromptOpen(true) };
+
   const [form, setForm] = useState<Profile | null>(null);
   /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
   const [clawbackTolerance, setClawbackTolerance] = useState(0);
@@ -137,7 +145,24 @@ function RetirementPage() {
     };
   }, [accounts, transactions, holdings, quotes, fxUsdCad]);
 
-  const p = form;
+  // Free plans run on the standard assumptions; saved values are kept untouched
+  // so they come back the moment the plan is upgraded.
+  const p: Profile | null = useMemo(() => {
+    if (!form) return null;
+    if (isPro) return form;
+    return {
+      ...form,
+      target_retirement_age: 65,
+      cpp_start_age: 65,
+      oas_start_age: 65,
+      inflation_rate: 2.5,
+      growth_rate: 10,
+      life_expectancy: 95,
+      marital_status: "Single",
+      manual_override: false,
+      desired_income: form.desired_income ?? 60000,
+    };
+  }, [form, isPro]);
 
   const balances = useMemo(() => {
     // RESP/RDSP are earmarked for education and disability support, so they are
@@ -236,7 +261,7 @@ function RetirementPage() {
       province,
       inflation: p.inflation_rate ?? 2.5,
       growth: p.growth_rate ?? 6,
-      desiredIncome: p.desired_income ?? 70000,
+      desiredIncome: p.desired_income ?? 60000,
       annualSavings: p.annual_savings ?? 0,
       savingsSplit: {
         tfsa: p.save_pct_tfsa ?? 40,
@@ -256,7 +281,7 @@ function RetirementPage() {
     return <p className="text-sm text-muted-foreground">Loading your plan…</p>;
   }
 
-  const set = (patch: Partial<Profile>) => setForm({ ...p, ...patch });
+  const set = (patch: Partial<Profile>) => setForm({ ...(form ?? p), ...patch });
   const married = (p.marital_status ?? "Single") !== "Single";
 
   const save = () => {
@@ -560,7 +585,7 @@ function RetirementPage() {
                 onChange={(e) => set({ current_age: num(e.target.value, 40) })}
               />
             </Field>
-            <Field label="Target retirement age">
+            <Field label="Target retirement age" {...lockProps}>
               <Input
                 type="number"
                 value={p.target_retirement_age ?? ""}
@@ -588,7 +613,7 @@ function RetirementPage() {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Inflation %">
+            <Field label="Inflation %" {...lockProps}>
               <Input
                 type="number"
                 step="0.1"
@@ -596,7 +621,7 @@ function RetirementPage() {
                 onChange={(e) => set({ inflation_rate: num(e.target.value, 2.5) })}
               />
             </Field>
-            <Field label="Growth %">
+            <Field label="Growth %" {...lockProps}>
               <Input
                 type="number"
                 step="0.1"
@@ -604,14 +629,14 @@ function RetirementPage() {
                 onChange={(e) => set({ growth_rate: num(e.target.value, 6) })}
               />
             </Field>
-            <Field label="Life expectancy">
+            <Field label="Life expectancy" {...lockProps}>
               <Input
                 type="number"
                 value={p.life_expectancy ?? 95}
                 onChange={(e) => set({ life_expectancy: num(e.target.value, 95) })}
               />
             </Field>
-            <Field label="Marital status">
+            <Field label="Marital status" {...lockProps}>
               <Select
                 value={p.marital_status ?? "Single"}
                 onValueChange={(v) => set({ marital_status: v })}
@@ -652,7 +677,7 @@ function RetirementPage() {
                 onChange={(e) => set({ cpp_future_income: num(e.target.value) })}
               />
             </Field>
-            <Field label="CPP start age (60–70)">
+            <Field label="CPP start age (60–70)" {...lockProps}>
               <Input
                 type="number"
                 value={p.cpp_start_age ?? 65}
@@ -668,7 +693,7 @@ function RetirementPage() {
                 onChange={(e) => set({ oas_years_in_canada: num(e.target.value, 40) })}
               />
             </Field>
-            <Field label="OAS start age (65–70)">
+            <Field label="OAS start age (65–70)" {...lockProps}>
               <Input
                 type="number"
                 value={p.oas_start_age ?? 65}
@@ -832,10 +857,24 @@ function RetirementPage() {
                   Off: your balances sync from your accounts. On: type your own numbers.
                 </p>
               </div>
-              <Switch
-                checked={p.manual_override ?? false}
-                onCheckedChange={(v) => set({ manual_override: v })}
-              />
+              <div className="flex items-center gap-2">
+                {isPro ? null : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    <Lock className="h-2.5 w-2.5" />
+                    Pro
+                  </span>
+                )}
+                <Switch
+                  checked={p.manual_override ?? false}
+                  onCheckedChange={(v) => {
+                    if (!isPro) {
+                      setProPromptOpen(true);
+                      return;
+                    }
+                    set({ manual_override: v });
+                  }}
+                />
+              </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {(
@@ -1037,11 +1076,40 @@ function Section({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  locked = false,
+  onLocked,
+}: {
+  label: string;
+  children: React.ReactNode;
+  locked?: boolean;
+  onLocked?: () => void;
+}) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {children}
+      <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {label}
+        {locked ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            <Lock className="h-2.5 w-2.5" />
+            Pro
+          </span>
+        ) : null}
+      </Label>
+      {locked ? (
+        <button
+          type="button"
+          className="w-full text-left"
+          title="Upgrade to Pro to change this"
+          onClick={onLocked}
+        >
+          <div className="pointer-events-none opacity-60">{children}</div>
+        </button>
+      ) : (
+        children
+      )}
     </div>
   );
 }
