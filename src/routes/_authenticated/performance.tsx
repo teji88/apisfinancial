@@ -358,6 +358,34 @@ function PerformancePage() {
           ))}
         </div>
 
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {(
+            [
+              { id: "TWR", label: "Time-weighted (%)" },
+              { id: "MWR", label: "Money-weighted ($)" },
+            ] as const
+          ).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setMode(m.id)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                mode === m.id
+                  ? "border-primary bg-primary/15 text-foreground"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+          <span className="text-xs text-muted-foreground">
+            {mode === "TWR"
+              ? "Pure market performance, starting at 0% for this window."
+              : "Growth on your money after contributions, starting at $0 for this window."}
+          </span>
+        </div>
+
+
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           {BENCHMARK_GROUPS.map((g) => (
             <div key={g.id} className="space-y-1">
