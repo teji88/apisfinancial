@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { HistoryPoint } from "./history.server";
 
 const Input = z.object({
-  symbols: z.array(z.string()).max(150),
+  symbols: z.array(z.string()).max(500),
   start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });

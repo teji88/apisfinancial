@@ -462,3 +462,38 @@ export async function backfillLibrary(extraSymbols: string[] = []): Promise<{
   await fetchFxHistory(yearsAgo(1), now);
   return { symbols: symbols.length, updated, failed };
 }
+
+/**
+ * Slow seed of the shared library from the common Canadian/US ticker universe.
+ * Each run takes only a small batch of symbols we have never fetched, so the
+ * library fills in over many nights instead of hammering the data sources.
+ * The coverage table is the progress marker, so a re-run never redoes work.
+ */
+export async function seedLibrary(batchSize = 12): Promise<{
+  remaining: number;
+  attempted: string[];
+  seeded: number;
+  failed: string[];
+}> {
+  const { TICKER_UNIVERSE } = await import("./ticker-universe");
+  const db = await admin();
+  const { data } = await db.from("price_history_coverage").select("symbol");
+  const known = new Set((data ?? []).map((r) => String(r.symbol).toUpperCase()));
+  const pending = TICKER_UNIVERSE.filter((s) => !known.has(s));
+
+  const attempted = pending.slice(0, Math.max(0, batchSize));
+  const failed: string[] = [];
+  let seeded = 0;
+  const now = today();
+
+  // Deliberately gentle: three at a time with a short pause between symbols.
+  await mapLimit(attempted, 3, async (symbol) => {
+    const from = isTsx(symbol) ? yearsAgo(TSX_YEARS) : yearsAgo(US_YEARS);
+    const res = await fetchSymbolHistory(symbol, from, now);
+    if (res && res.points.length > 0) seeded++;
+    else failed.push(symbol);
+    await new Promise((r) => setTimeout(r, 400));
+  });
+
+  return { remaining: pending.length - attempted.length, attempted, seeded, failed };
+}

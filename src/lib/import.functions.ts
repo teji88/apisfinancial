@@ -54,6 +54,38 @@ Rules:
 - confidence: 0 to 1, how certain you are of the whole row. Flag anything you had to guess
   below 0.8 and explain briefly in note.`;
 
+/**
+ * Statements carry pages of legal boilerplate, marketing and blank filler that
+ * cost money to send to the reader and add nothing. Strip the obvious noise and
+ * keep the transaction lines, so a typical upload costs a fraction as much.
+ */
+const NOISE =
+  /(terms and conditions|privacy (policy|notice)|member[-\s]?(cipf|iiroc|ciro)|this statement is|please (review|retain|contact)|if you have any questions|investor protection|complaint|all rights reserved|page \d+ of \d+|www\.|https?:\/\/|1-8\d\d[-\s]\d)/i;
+
+function condenseStatement(raw: string): string {
+  const lines = raw.split(/\r?\n/);
+  const kept: string[] = [];
+  let blanks = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      blanks++;
+      continue;
+    }
+    blanks = 0;
+    if (trimmed.length > 400) continue; // wall-of-text disclaimer block
+    // Keep anything that looks like data; drop prose-only boilerplate.
+    const hasData = /\d/.test(trimmed);
+    if (!hasData && trimmed.split(/\s+/).length > 12) continue;
+    if (NOISE.test(trimmed) && !/\d{4}-\d{2}-\d{2}/.test(trimmed)) continue;
+    kept.push(trimmed.replace(/[ \t]{2,}/g, " "));
+    if (kept.length >= 4000) break;
+  }
+  void blanks;
+  const out = kept.join("\n");
+  return out.length > 60_000 ? out.slice(0, 60_000) : out;
+}
+
 export const parseStatement = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => Input.parse(data))
@@ -91,7 +123,7 @@ export const parseStatement = createServerFn({ method: "POST" })
     ];
 
     if (data.text) {
-      parts.push({ type: "text", text: data.text.slice(0, 200_000) });
+      parts.push({ type: "text", text: condenseStatement(data.text) });
     } else if (data.dataUrl) {
       if (data.mimeType.startsWith("image/")) {
         parts.push({ type: "image", image: data.dataUrl });

@@ -48,3 +48,10 @@
 - [x] Performance page: only selected benchmarks, partial results render, retry
 - [x] Nightly backfill appends yesterday's close for every stored symbol
 - [x] US-dollar starting value investigated: chart uses real market closes (BN was $46.63 on 2026-01-02, not the $37.51 entered) — not a bug
+
+## Phase 9 — Ticker universe, search rules, cheaper imports
+- [x] History request limit raised to 500 symbols
+- [x] ~500-ticker Canadian/US universe list (`src/lib/ticker-universe.ts`)
+- [x] Slow nightly seed of the price library from that universe (small batch per run)
+- [x] Standard ticker search: .TO rule shown, auto-suffix, suggestions, Canadian fallback lookup
+- [x] Statement text condensed before AI reading to cut cost

@@ -47,11 +47,35 @@ async function handleRefresh(request: Request): Promise<Response> {
     console.error(`[history] backfill failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  // Slowly fill the library from the common Canadian/US ticker universe:
+  // a small bounded batch per run so the data sources are never hammered.
+  let seed = { remaining: 0, attempted: [] as string[], seeded: 0, failed: [] as string[] };
+  try {
+    const url = new URL(request.url);
+    const requested = Number(url.searchParams.get("seed") ?? "12");
+    const batch = Number.isFinite(requested) ? Math.min(Math.max(requested, 0), 40) : 12;
+    if (batch > 0) {
+      const { seedLibrary } = await import("@/lib/history.server");
+      seed = await seedLibrary(batch);
+    }
+  } catch (err) {
+    console.error(`[history] seed failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   console.log(
     `[market] refresh: ${saved} prices saved for ${asOf}; missing: ${missing.join(",")}; ` +
-      `history: ${library.updated}/${library.symbols} symbols`,
+      `history: ${library.updated}/${library.symbols} symbols; ` +
+      `seed: ${seed.seeded}/${seed.attempted.length} new, ${seed.remaining} left`,
   );
-  return Response.json({ ok: true, asOf, requested: symbols.length, saved, missing, library });
+  return Response.json({
+    ok: true,
+    asOf,
+    requested: symbols.length,
+    saved,
+    missing,
+    library,
+    seed,
+  });
 }
 
 export const Route = createFileRoute("/api/public/refresh-prices")({

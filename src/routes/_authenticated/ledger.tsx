@@ -21,6 +21,12 @@ import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { lookupSymbol } from "@/lib/market.functions";
 import { getFxRateOn } from "@/lib/history.functions";
+import {
+  TICKER_HINT,
+  canadianAlternative,
+  normalizeTicker,
+  suggestTickers,
+} from "@/lib/ticker-universe";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +139,8 @@ function LedgerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currency, date]);
 
+  const symbolSuggestions = useMemo(() => suggestTickers(symbol, 8), [symbol]);
+
   const rows = useMemo(() => {
     const list =
       filterAccount === "all"
@@ -145,18 +153,35 @@ function LedgerPage() {
     if (!symbol.trim()) return;
     setLooking(true);
     try {
-      const quote = await lookup({ data: { symbol } });
+      const first = normalizeTicker(symbol);
+      let used = first;
+      let quote = await lookup({ data: { symbol: first } });
+      // A bare symbol that is also a TSX listing: try the Canadian spelling.
       if (!quote?.price) {
-        toast.error("No quote found for that symbol. Check the suffix, e.g. XEQT.TO");
+        const alt = canadianAlternative(first);
+        if (alt) {
+          const second = await lookup({ data: { symbol: alt } });
+          if (second?.price) {
+            quote = second;
+            used = alt;
+          }
+        }
+      }
+      if (!quote?.price) {
+        toast.error(`No price found for ${first}. ${TICKER_HINT}`);
         return;
       }
+      setSymbol(used);
       setSymbolName(quote.name ?? null);
       setPrice(quote.price.toFixed(2));
       if (quote.currency) {
         setCurrency(quote.currency);
         setFxRate(quote.currency === "USD" ? fxUsdCad.toFixed(4) : "1");
       }
-      toast.success(`${quote.name ?? symbol.toUpperCase()} · ${quote.price.toFixed(2)} ${quote.currency ?? ""}`);
+      const market = used.endsWith(".TO") ? "Toronto" : "US";
+      toast.success(
+        `${quote.name ?? used} · ${market} · ${quote.price.toFixed(2)} ${quote.currency ?? ""}`,
+      );
     } finally {
       setLooking(false);
     }
@@ -169,12 +194,11 @@ function LedgerPage() {
       toast.error("Add an account first.");
       return;
     }
+    const cleanSymbol = normalizeTicker(symbol);
     const wouldAddHolding =
       !isCash &&
-      symbol.trim() !== "" &&
-      !holdings.some(
-        (h) => h.account_id === targetAccount && h.symbol === symbol.trim().toUpperCase(),
-      );
+      cleanSymbol !== "" &&
+      !holdings.some((h) => h.account_id === targetAccount && h.symbol === cleanSymbol);
     if (
       entitlement.readOnly ||
       (wouldAddHolding &&
@@ -188,7 +212,7 @@ function LedgerPage() {
 
       await addTransaction.mutateAsync({
         accountId: targetAccount,
-        symbol: isCash ? "" : symbol,
+        symbol: isCash ? "" : cleanSymbol,
         name: symbolName,
         assetType,
         transactionType: type,
@@ -319,10 +343,17 @@ function LedgerPage() {
               <div className="flex gap-2">
                 <Input
                   id="symbol"
-                  placeholder="XEQT.TO"
+                  placeholder="XEQT.TO or AAPL"
+                  list="ticker-suggestions"
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                  onBlur={() => setSymbol((s) => normalizeTicker(s))}
                 />
+                <datalist id="ticker-suggestions">
+                  {symbolSuggestions.map((t) => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
                 <Button type="button" variant="outline" size="icon" onClick={handleLookup}>
                   {looking ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -331,7 +362,11 @@ function LedgerPage() {
                   )}
                 </Button>
               </div>
-              {symbolName && <p className="text-xs text-muted-foreground">{symbolName}</p>}
+              {symbolName ? (
+                <p className="text-xs text-muted-foreground">{symbolName}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">{TICKER_HINT}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Asset type</Label>
