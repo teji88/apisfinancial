@@ -875,20 +875,21 @@ function RetirementPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {isPro ? null : (
+                {isProPlus ? null : (
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                     <Lock className="h-2.5 w-2.5" />
-                    Pro
+                    Pro+
                   </span>
                 )}
                 <Switch
                   checked={p.manual_override ?? false}
                   onCheckedChange={(v) => {
-                    if (!isPro) {
-                      setProPromptOpen(true);
+                    if (!isProPlus) {
+                      openPrompt(PLUS_REASON);
                       return;
                     }
                     set({ manual_override: v });
+
                   }}
                 />
               </div>
