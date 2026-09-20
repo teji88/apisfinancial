@@ -56,6 +56,16 @@ const CHART_COLORS = [
   "var(--chart-5)",
 ];
 
+/** Small label telling the reader which currency a number is expressed in. */
+function CurrencyBadge({ code }: { code: string }) {
+  const label = (code || "CAD").toUpperCase();
+  return (
+    <span className="rounded bg-muted px-1 py-px text-[10px] font-medium tracking-wide text-muted-foreground">
+      {label}
+    </span>
+  );
+}
+
 function Dashboard() {
   const {
     accounts,
