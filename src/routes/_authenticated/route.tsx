@@ -9,6 +9,7 @@ import {
   FileUp,
 
   LogOut,
+  Menu,
   Moon,
   Receipt,
   Landmark,
@@ -158,6 +159,7 @@ function AppHeader() {
         aria-hidden
       />
       <div className="relative mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-6">
+        <MobileNav />
         <Link to="/dashboard" className="flex items-center gap-2">
           <ApisLogo variant="full" size="sm" />
         </Link>
