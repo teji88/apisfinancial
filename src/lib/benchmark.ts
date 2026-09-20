@@ -103,8 +103,14 @@ function grossOf(t: Transaction): number {
   return base * fx;
 }
 
-/** Cash effect of a transaction, before any implied top-up. */
-function cashDelta(t: Transaction): number {
+/** Matches finance.ts: no set means every account keeps its own cash balance. */
+function tracksCash(t: Transaction, cashAccounts?: Set<string>): boolean {
+  return !cashAccounts || cashAccounts.has(t.account_id);
+}
+
+/** Cash effect of a transaction inside a cash-tracking account. */
+function cashDelta(t: Transaction, cashAccounts?: Set<string>): number {
+  if (!tracksCash(t, cashAccounts)) return 0;
   const gross = grossOf(t);
   const fee = (t.fee || 0) * (t.fx_rate || 1);
   switch (t.transaction_type) {
@@ -126,27 +132,28 @@ function cashDelta(t: Transaction): number {
 }
 
 /**
- * Deposits (+) and withdrawals (−) in CAD — the money the investor actually
- * put in. When a purchase is recorded without a matching deposit, the shortfall
- * is treated as an implied contribution on that date so benchmarking still works
- * for ledgers that only track trades.
+ * Money in (+) and money out (−) in CAD, using exactly the same rules as the
+ * dashboard's return figures: cash-tracking accounts count deposits and
+ * withdrawals, accounts without a cash balance count purchases as money in and
+ * sale proceeds and dividends as money out.
  */
-export function contributionFlows(transactions: Transaction[]): FlowPoint[] {
-  const txns = transactions
-    .slice()
-    .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
+export function contributionFlows(
+  transactions: Transaction[],
+  cashAccounts?: Set<string>,
+): FlowPoint[] {
   const flows: FlowPoint[] = [];
-  let cash = 0;
-  for (const t of txns) {
-    const delta = cashDelta(t);
-    if (t.transaction_type === "DEPOSIT") flows.push({ date: t.transaction_date, amount: delta });
-    else if (t.transaction_type === "WITHDRAWAL")
-      flows.push({ date: t.transaction_date, amount: delta });
-    cash += delta;
-    if (cash < -1e-6) {
-      flows.push({ date: t.transaction_date, amount: -cash });
-      cash = 0;
+  for (const t of transactions) {
+    const date = t.transaction_date;
+    const gross = grossOf(t);
+    const fee = (t.fee || 0) * (t.fx_rate || 1);
+    if (tracksCash(t, cashAccounts)) {
+      if (t.transaction_type === "DEPOSIT") flows.push({ date, amount: gross });
+      else if (t.transaction_type === "WITHDRAWAL") flows.push({ date, amount: -gross });
+      continue;
     }
+    if (t.transaction_type === "BUY") flows.push({ date, amount: gross + fee });
+    else if (t.transaction_type === "SELL") flows.push({ date, amount: -(gross - fee) });
+    else if (t.transaction_type === "DIVIDEND") flows.push({ date, amount: -gross });
   }
   return flows.sort((a, b) => a.date.localeCompare(b.date));
 }
