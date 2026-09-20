@@ -217,7 +217,7 @@ function PerformancePage() {
               <SelectItem value="all">All accounts together</SelectItem>
               {accounts.map((a) => (
                 <SelectItem key={a.id} value={a.id}>
-                  {a.name} · {a.account_type}
+                  {a.account_name} · {a.account_type}
                 </SelectItem>
               ))}
             </SelectContent>
