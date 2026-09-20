@@ -85,6 +85,14 @@ const PERIODS: { id: string; label: string }[] = [
   { id: "ALL", label: "Since inception" },
 ];
 
+/** Net contributions between two grid indices, inclusive. */
+function sumFlows(flows: number[], from: number, to: number): number {
+  let sum = 0;
+  for (let i = from; i <= to; i++) sum += flows[i] ?? 0;
+  return sum;
+}
+
+
 function PerformancePage() {
   const {
     accounts,
