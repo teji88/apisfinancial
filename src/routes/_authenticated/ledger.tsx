@@ -151,18 +151,35 @@ function LedgerPage() {
     if (!symbol.trim()) return;
     setLooking(true);
     try {
-      const quote = await lookup({ data: { symbol } });
+      const first = normalizeTicker(symbol);
+      let used = first;
+      let quote = await lookup({ data: { symbol: first } });
+      // A bare symbol that is also a TSX listing: try the Canadian spelling.
       if (!quote?.price) {
-        toast.error("No quote found for that symbol. Check the suffix, e.g. XEQT.TO");
+        const alt = canadianAlternative(first);
+        if (alt) {
+          const second = await lookup({ data: { symbol: alt } });
+          if (second?.price) {
+            quote = second;
+            used = alt;
+          }
+        }
+      }
+      if (!quote?.price) {
+        toast.error(`No price found for ${first}. ${TICKER_HINT}`);
         return;
       }
+      setSymbol(used);
       setSymbolName(quote.name ?? null);
       setPrice(quote.price.toFixed(2));
       if (quote.currency) {
         setCurrency(quote.currency);
         setFxRate(quote.currency === "USD" ? fxUsdCad.toFixed(4) : "1");
       }
-      toast.success(`${quote.name ?? symbol.toUpperCase()} · ${quote.price.toFixed(2)} ${quote.currency ?? ""}`);
+      const market = used.endsWith(".TO") ? "Toronto" : "US";
+      toast.success(
+        `${quote.name ?? used} · ${market} · ${quote.price.toFixed(2)} ${quote.currency ?? ""}`,
+      );
     } finally {
       setLooking(false);
     }
