@@ -505,12 +505,12 @@ function RetirementPage() {
                   />
                   <Tooltip formatter={(v: number) => formatCad(Math.abs(v))} />
                   <Legend />
-                  <Bar dataKey="CPP" stackId="i" fill="var(--chart-1)" />
-                  <Bar dataKey="OAS" stackId="i" fill="var(--chart-2)" />
-                  <Bar dataKey="RRIF / LIF" stackId="i" fill="var(--chart-3)" />
-                  <Bar dataKey="Non-Reg" stackId="i" fill="var(--chart-4)" />
-                  <Bar dataKey="TFSA" stackId="i" fill="var(--chart-5)" />
-                  <Bar dataKey="Taxes" stackId="i" fill="var(--destructive)" />
+                  <Bar dataKey="CPP" stackId="i" fill="var(--series-1)" />
+                  <Bar dataKey="OAS" stackId="i" fill="var(--series-2)" />
+                  <Bar dataKey="RRIF / LIF" stackId="i" fill="var(--series-3)" />
+                  <Bar dataKey="Non-Reg" stackId="i" fill="var(--series-4)" />
+                  <Bar dataKey="TFSA" stackId="i" fill="var(--series-5)" />
+                  <Bar dataKey="Taxes" stackId="i" fill="var(--series-6)" />
 
                   <Line
                     type="monotone"
@@ -549,10 +549,10 @@ function RetirementPage() {
                   <Legend />
                   {(
                     [
-                      ["RRSP / RRIF", "var(--chart-1)"],
-                      ["LIRA / LIF", "var(--chart-2)"],
-                      ["TFSA", "var(--chart-3)"],
-                      ["Non-Registered", "var(--chart-4)"],
+                      ["RRSP / RRIF", "var(--series-3)"],
+                      ["LIRA / LIF", "var(--series-2)"],
+                      ["TFSA", "var(--series-5)"],
+                      ["Non-Registered", "var(--series-4)"],
                     ] as const
                   ).map(([key, color]) => (
                     <Area
