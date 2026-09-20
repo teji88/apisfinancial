@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-export type Tier = "free" | "pro" | "invite";
+export type Tier = "free" | "pro" | "pro_plus" | "invite";
 
 export type Entitlement = {
   tier: Tier;
