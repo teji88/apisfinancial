@@ -92,22 +92,12 @@ function AppLayout() {
   }
 
   return (
-    <div className="relative min-h-screen bg-surface">
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[1100px] honey-cascade"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[1100px] hex-cascade"
-        aria-hidden
-      />
-      <div className="relative">
-        <AppHeader />
-        <ReadOnlyBanner />
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">
-          <Outlet />
-        </main>
-      </div>
+    <div className="min-h-screen bg-surface">
+      <AppHeader />
+      <ReadOnlyBanner />
+      <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">
+        <Outlet />
+      </main>
     </div>
   );
 }
