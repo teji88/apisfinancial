@@ -218,15 +218,36 @@ function PlanPage() {
                   changePlan({
                     data: {
                       priceId:
-                        billing === "monthly" ? PRO_PRICES.yearly.id : PRO_PRICES.monthly.id,
+                        PLAN_PRICES[currentPlan][billing === "monthly" ? "yearly" : "monthly"].id,
                       environment: getStripeEnvironment(),
                     },
                   }),
                 )
               }
             >
-              {billing === "monthly" ? "Switch to yearly ($10)" : "Switch to monthly ($1)"}
+              Switch to {billing === "monthly" ? "yearly" : "monthly"} (
+              {PLAN_PRICES[currentPlan][billing === "monthly" ? "yearly" : "monthly"].label})
             </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy !== null}
+              onClick={() =>
+                void run("plan", () =>
+                  changePlan({
+                    data: {
+                      priceId: PLAN_PRICES[otherPlan][billing].id,
+                      environment: getStripeEnvironment(),
+                    },
+                  }),
+                )
+              }
+            >
+              {currentPlan === "pro" ? "Upgrade to" : "Change to"} {planName(otherPlan)} (
+              {PLAN_PRICES[otherPlan][billing].label})
+            </Button>
+
 
             {entitlement.cancelAtPeriodEnd ? (
               <Button
