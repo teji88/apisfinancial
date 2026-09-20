@@ -9,6 +9,7 @@ import {
   FileUp,
 
   LogOut,
+  Menu,
   Moon,
   Receipt,
   Landmark,
@@ -60,6 +61,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 export const Route = createFileRoute("/_authenticated")({
   staticData: { sitemap: "exclude-subtree" },
@@ -158,6 +166,7 @@ function AppHeader() {
         aria-hidden
       />
       <div className="relative mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-6">
+        <MobileNav />
         <Link to="/dashboard" className="flex items-center gap-2">
           <ApisLogo variant="full" size="sm" />
         </Link>
@@ -222,23 +231,48 @@ function AppHeader() {
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-t px-4 py-2 md:hidden">
-        {NAV.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            activeOptions={{ exact: true }}
-            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground"
-            activeProps={{ className: "bg-muted text-foreground" }}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </Link>
-        ))}
-      </div>
     </header>
   );
 }
+
+/** Slide-out section menu for small screens. */
+function MobileNav() {
+  const [open, setOpen] = useState(false);
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
+          <Menu className="h-5 w-5" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-72 p-0">
+        <SheetHeader className="border-b px-5 py-4 text-left">
+          <SheetTitle>
+            <ApisLogo variant="full" size="sm" />
+          </SheetTitle>
+        </SheetHeader>
+        <nav className="flex flex-col gap-1 p-3">
+          {NAV.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              activeOptions={{ exact: true }}
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent/10 hover:text-foreground"
+              activeProps={{
+                className: "bg-accent/20 text-foreground font-medium ring-1 ring-accent/40",
+              }}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 
 function ProfileMenu() {
   const profileQuery = useProfile();

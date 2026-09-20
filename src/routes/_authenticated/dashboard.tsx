@@ -56,6 +56,16 @@ const CHART_COLORS = [
   "var(--chart-5)",
 ];
 
+/** Small label telling the reader which currency a number is expressed in. */
+function CurrencyBadge({ code }: { code: string }) {
+  const label = (code || "CAD").toUpperCase();
+  return (
+    <span className="rounded bg-muted px-1 py-px text-[10px] font-medium tracking-wide text-muted-foreground">
+      {label}
+    </span>
+  );
+}
+
 function Dashboard() {
   const {
     accounts,
@@ -236,6 +246,8 @@ function Dashboard() {
                       color: "var(--popover-foreground)",
                       fontSize: 12,
                     }}
+                    labelStyle={{ color: "var(--accent)", fontWeight: 600 }}
+                    itemStyle={{ color: "var(--accent)" }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -310,11 +322,11 @@ function Dashboard() {
               <TableRow>
                 <TableHead>Symbol</TableHead>
                 <TableHead className="text-right">Units</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-                <TableHead className="text-right">Market value</TableHead>
-                <TableHead className="text-right">ACB / unit</TableHead>
-                <TableHead className="text-right">Day</TableHead>
-                <TableHead className="text-right">Total return</TableHead>
+                <TableHead className="text-right">Price (traded)</TableHead>
+                <TableHead className="text-right">Market value (CAD)</TableHead>
+                <TableHead className="text-right">ACB / unit (CAD)</TableHead>
+                <TableHead className="text-right">Day (CAD)</TableHead>
+                <TableHead className="text-right">Total return (CAD)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -333,10 +345,27 @@ function Dashboard() {
                       </TableCell>
                       <TableCell className="num text-right">{formatUnits(p.units)}</TableCell>
                       <TableCell className="num text-right">
-                        {p.price != null ? p.price.toFixed(2) : "—"}
+                        {p.price != null ? (
+                          <span className="inline-flex items-baseline gap-1">
+                            {p.price.toFixed(2)}
+                            <CurrencyBadge code={p.currency} />
+                          </span>
+                        ) : (
+                          "—"
+                        )}
                       </TableCell>
-                      <TableCell className="num text-right">{formatCad(p.marketValue)}</TableCell>
-                      <TableCell className="num text-right">{formatCad(p.acbPerUnit)}</TableCell>
+                      <TableCell className="num text-right">
+                        <span className="inline-flex items-baseline gap-1">
+                          {formatCad(p.marketValue)}
+                          <CurrencyBadge code="CAD" />
+                        </span>
+                      </TableCell>
+                      <TableCell className="num text-right">
+                        <span className="inline-flex items-baseline gap-1">
+                          {formatCad(p.acbPerUnit)}
+                          <CurrencyBadge code="CAD" />
+                        </span>
+                      </TableCell>
                       <TableCell
                         className={`num text-right ${p.dayChange >= 0 ? "text-gain" : "text-loss"}`}
                       >
