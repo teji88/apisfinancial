@@ -56,9 +56,13 @@ function PlanPage() {
   const [confirming, setConfirming] = useState(false);
 
   const isOwner = entitlement.plan === "owner";
-  const isPaid = entitlement.tier === "pro" && !isOwner;
+  const isPaid = (entitlement.tier === "pro" || entitlement.tier === "pro_plus") && !isOwner;
   const isInvite = entitlement.tier === "invite";
-  const billing = entitlement.plan === PRO_PRICES.monthly.id ? "monthly" : "yearly";
+  const currentPlan: PaidPlan = planOfPrice(entitlement.plan) ?? "pro";
+  const billing = (entitlement.plan ?? "").endsWith("monthly") ? "monthly" : "yearly";
+  const otherPlan: PaidPlan = currentPlan === "pro" ? "pro_plus" : "pro";
+  const planName = (plan: PaidPlan) => (plan === "pro_plus" ? "Pro+" : "Pro");
+
 
   async function refreshFromProvider(quiet = false) {
     const result = await sync({ data: { environment: getStripeEnvironment() } });
