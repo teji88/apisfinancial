@@ -527,42 +527,48 @@ function LedgerPage() {
               />
             </div>
           )}
-          <div className="space-y-1.5">
-            <Label htmlFor="fx">FX rate to CAD</Label>
-            <Input
-              id="fx"
-              type="number"
-              step="any"
-              value={fxRate}
-              onChange={(e) => {
-                setFxRate(e.target.value);
-                setFxAuto(false);
-                setFxTouched(true);
-              }}
-            />
-            {fxAuto ? (
-              <p className="text-xs text-muted-foreground">Bank rate on {date}</p>
-            ) : null}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="fee">Commission / fee</Label>
-            <Input
-              id="fee"
-              type="number"
-              step="any"
-              value={fee}
-              onChange={(e) => setFee(e.target.value)}
-            />
-          </div>
+          {!isSplit && (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="fx">FX rate to CAD</Label>
+                <Input
+                  id="fx"
+                  type="number"
+                  step="any"
+                  value={fxRate}
+                  onChange={(e) => {
+                    setFxRate(e.target.value);
+                    setFxAuto(false);
+                    setFxTouched(true);
+                  }}
+                />
+                {fxAuto ? (
+                  <p className="text-xs text-muted-foreground">Bank rate on {date}</p>
+                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fee">Commission / fee</Label>
+                <Input
+                  id="fee"
+                  type="number"
+                  step="any"
+                  value={fee}
+                  onChange={(e) => setFee(e.target.value)}
+                />
+              </div>
+            </>
+          )}
           <div className="flex items-end md:col-start-4">
             <Button type="submit" className="w-full" disabled={addTransaction.isPending}>
-              Record transaction
+              {isSplit ? "Record split" : "Record transaction"}
             </Button>
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Recording into {selectedAccount?.account_type} · {selectedAccount?.account_name}. USD
-          trades use the FX rate above (today: {fxUsdCad.toFixed(4)}).
+          Recording into {selectedAccount?.account_type} · {selectedAccount?.account_name}.{" "}
+          {isSplit
+            ? "A split only changes your share count — no money in or out."
+            : `USD trades use the FX rate above (today: ${fxUsdCad.toFixed(4)}).`}
         </p>
       </form>
 
