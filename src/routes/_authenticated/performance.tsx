@@ -74,6 +74,17 @@ export const Route = createFileRoute("/_authenticated/performance")({
 
 const CHART_COLORS = ["var(--series-3)", "var(--series-4)", "var(--series-2)"];
 
+const PERIODS: { id: string; label: string }[] = [
+  { id: "YTD", label: "YTD" },
+  { id: "1M", label: "1M" },
+  { id: "3M", label: "3M" },
+  { id: "6M", label: "6M" },
+  { id: "1Y", label: "1Y" },
+  { id: "3Y", label: "3Y" },
+  { id: "5Y", label: "5Y" },
+  { id: "ALL", label: "Since inception" },
+];
+
 function PerformancePage() {
   const {
     accounts,
