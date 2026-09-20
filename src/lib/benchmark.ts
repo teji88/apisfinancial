@@ -345,8 +345,11 @@ export type ComparisonResult = {
   portfolioEnd: number;
   portfolioMwrr: number | null;
   invested: number;
+  /** Net money in (+) / out (−) during each grid interval, in CAD. */
+  cumulativeFlows: number[];
   benchmarks: BenchmarkResult[];
 };
+
 
 export function buildComparison(
   transactions: Transaction[],
