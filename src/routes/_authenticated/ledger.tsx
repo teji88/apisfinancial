@@ -21,6 +21,12 @@ import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { lookupSymbol } from "@/lib/market.functions";
 import { getFxRateOn } from "@/lib/history.functions";
+import {
+  TICKER_HINT,
+  canadianAlternative,
+  normalizeTicker,
+  suggestTickers,
+} from "@/lib/ticker-universe";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
