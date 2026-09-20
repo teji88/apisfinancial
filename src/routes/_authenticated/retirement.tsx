@@ -651,7 +651,7 @@ function RetirementPage() {
                 onChange={(e) => set({ life_expectancy: num(e.target.value, 95) })}
               />
             </Field>
-            <Field label="Marital status" {...lockProps}>
+            <Field label="Marital status" {...plusProps}>
               <Select
                 value={p.marital_status ?? "Single"}
                 onValueChange={(v) => set({ marital_status: v })}
