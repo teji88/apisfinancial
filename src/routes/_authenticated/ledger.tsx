@@ -830,7 +830,9 @@ function EditTransactionDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="edit-units">Units</Label>
+                <Label htmlFor="edit-units">
+                  {isSplit ? "New shares per 1 old share" : "Units"}
+                </Label>
                 <Input
                   id="edit-units"
                   type="number"
@@ -839,19 +841,21 @@ function EditTransactionDialog({
                   onChange={(e) => setUnits(e.target.value)}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-price">Price per unit</Label>
-                <Input
-                  id="edit-price"
-                  type="number"
-                  step="any"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
-              </div>
+              {!isSplit ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-price">Price per unit</Label>
+                  <Input
+                    id="edit-price"
+                    type="number"
+                    step="any"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                  />
+                </div>
+              ) : null}
             </>
           ) : null}
-          {isCash || type === "DIVIDEND" ? (
+          {(isCash || type === "DIVIDEND") && !isSplit ? (
             <div className="space-y-1.5">
               <Label htmlFor="edit-amount">Amount</Label>
               <Input
@@ -863,31 +867,35 @@ function EditTransactionDialog({
               />
             </div>
           ) : null}
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-fx">FX rate to CAD</Label>
-            <div className="flex gap-2">
-              <Input
-                id="edit-fx"
-                type="number"
-                step="any"
-                value={fxRate}
-                onChange={(e) => setFxRate(e.target.value)}
-              />
-              <Button type="button" variant="outline" onClick={() => void pullRate()}>
-                Use rate on date
-              </Button>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-fee">Commission / fee</Label>
-            <Input
-              id="edit-fee"
-              type="number"
-              step="any"
-              value={fee}
-              onChange={(e) => setFee(e.target.value)}
-            />
-          </div>
+          {!isSplit ? (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-fx">FX rate to CAD</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="edit-fx"
+                    type="number"
+                    step="any"
+                    value={fxRate}
+                    onChange={(e) => setFxRate(e.target.value)}
+                  />
+                  <Button type="button" variant="outline" onClick={() => void pullRate()}>
+                    Use rate on date
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-fee">Commission / fee</Label>
+                <Input
+                  id="edit-fee"
+                  type="number"
+                  step="any"
+                  value={fee}
+                  onChange={(e) => setFee(e.target.value)}
+                />
+              </div>
+            </>
+          ) : null}
         </div>
 
         <DialogFooter>
