@@ -57,7 +57,6 @@ export function ApisMark({ className }: { className?: string }) {
         <path d="M14 14.5 22 10l8 4.5v9L22 28l-8-4.5z" />
         <path d="M14 34.5 22 30l8 4.5v9L22 48l-8-4.5z" />
         <path d="M34 34.5 42 30l8 4.5v9L42 48l-8-4.5z" />
-        <path d="M34 44.5 42 40l8 4.5v9L42 58l-8-4.5z" opacity="0.35" />
       </g>
 
       {/* honey core */}
