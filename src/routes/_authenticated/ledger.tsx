@@ -116,7 +116,27 @@ function LedgerPage() {
   const [editing, setEditing] = useState<Transaction | null>(null);
 
   const isCash = CASH_TYPES.includes(type);
+  const isSplit = type === "SPLIT";
   const selectedAccount = accounts.find((a) => a.id === accountId) ?? accounts[0];
+
+  // Shares currently held of the typed symbol, for the split preview.
+  const heldUnits = useMemo(() => {
+    const clean = normalizeTicker(symbol);
+    const target = accountId || accounts[0]?.id;
+    const holding = holdings.find((h) => h.account_id === target && h.symbol === clean);
+    if (!holding) return 0;
+    let u = 0;
+    for (const t of transactions
+      .filter((t) => t.holding_id === holding.id)
+      .slice()
+      .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date))) {
+      if (t.transaction_type === "BUY" || t.transaction_type === "DRIP") u += t.units || 0;
+      else if (t.transaction_type === "SELL") u -= t.units || 0;
+      else if (t.transaction_type === "SPLIT") u *= (t.units || 0) > 0 ? t.units : 1;
+    }
+    return u;
+  }, [symbol, accountId, accounts, holdings, transactions]);
+
 
   // Historical USD→CAD rate for the chosen trade date.
   useEffect(() => {
