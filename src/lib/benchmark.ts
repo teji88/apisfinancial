@@ -10,48 +10,60 @@ import type { HistoryPoint } from "./history.server";
 import type { Holding, Transaction } from "./finance";
 import { xirr } from "./finance";
 
-export type BenchmarkOption = { symbol: string; note: string };
+export type BenchmarkOption = { symbol: string; note: string; annualYield: number };
 export type BenchmarkGroup = { id: string; label: string; options: BenchmarkOption[] };
 
-/** Each index can be tracked with either of the common Canadian-listed proxies. */
+/**
+ * Each index can be tracked with either of the common Canadian-listed proxies.
+ * `annualYield` is the ETF's indicative annual distribution yield; the
+ * simulation reinvests it so benchmarks are compared on a total-return basis.
+ */
 export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
   {
     id: "sp500",
     label: "S&P 500",
     options: [
-      { symbol: "IVV", note: "iShares Core S&P 500 (USD)" },
-      { symbol: "SPY", note: "SPDR S&P 500 ETF Trust (USD)" },
+      { symbol: "IVV", note: "iShares Core S&P 500 (USD)", annualYield: 0.013 },
+      { symbol: "SPY", note: "SPDR S&P 500 ETF Trust (USD)", annualYield: 0.013 },
     ],
   },
   {
     id: "tsx",
     label: "S&P/TSX Composite",
     options: [
-      { symbol: "XIC.TO", note: "iShares Core S&P/TSX Capped (CAD)" },
-      { symbol: "VCN.TO", note: "Vanguard FTSE Canada All Cap (CAD)" },
+      { symbol: "XIC.TO", note: "iShares Core S&P/TSX Capped (CAD)", annualYield: 0.029 },
+      { symbol: "VCN.TO", note: "Vanguard FTSE Canada All Cap (CAD)", annualYield: 0.028 },
     ],
   },
   {
     id: "global",
     label: "All-Equity Global",
     options: [
-      { symbol: "XEQT.TO", note: "iShares All-Equity ETF Portfolio (CAD)" },
-      { symbol: "VEQT.TO", note: "Vanguard All-Equity ETF Portfolio (CAD)" },
+      { symbol: "XEQT.TO", note: "iShares All-Equity ETF Portfolio (CAD)", annualYield: 0.019 },
+      { symbol: "VEQT.TO", note: "Vanguard All-Equity ETF Portfolio (CAD)", annualYield: 0.019 },
     ],
   },
 ];
 
-export type BenchmarkChoice = { id: string; label: string; symbol: string; note: string };
+export type BenchmarkChoice = {
+  id: string;
+  label: string;
+  symbol: string;
+  note: string;
+  annualYield: number;
+};
 
 export const DEFAULT_BENCHMARKS: BenchmarkChoice[] = BENCHMARK_GROUPS.map((g) => ({
   id: g.id,
   label: g.label,
   symbol: g.options[0]!.symbol,
   note: g.options[0]!.note,
+  annualYield: g.options[0]!.annualYield,
 }));
 
 /** Default proxies, kept for callers that don't offer a choice. */
 export const BENCHMARKS = DEFAULT_BENCHMARKS;
+
 
 export type BenchmarkId = string;
 
@@ -259,17 +271,23 @@ export function portfolioValueSeries(
   });
 }
 
-/** Units of the benchmark ETF bought/sold with the same cash flows. */
+/**
+ * Units of the benchmark ETF bought/sold with the same cash flows, on a
+ * total-return basis: the ETF's distributions accrue over time and are
+ * reinvested into more units at no cost.
+ */
 export function benchmarkValueSeries(
   grid: string[],
   flows: FlowPoint[],
   bench: { currency: string; points: HistoryPoint[] },
   fx: HistoryPoint[],
   fxNow: number,
+  annualYield = 0,
 ): number[] {
   const sorted = flows.slice().sort((a, b) => a.date.localeCompare(b.date));
   let idx = 0;
   let units = 0;
+  let lastDate: string | null = null;
 
   const priceCad = (date: string): number | null => {
     const close = closeOn(bench.points, date);
@@ -279,6 +297,11 @@ export function benchmarkValueSeries(
   };
 
   return grid.map((date) => {
+    if (lastDate && annualYield > 0) {
+      const days = Math.max(0, dayGap(lastDate, date));
+      units *= Math.exp((annualYield * days) / 365);
+    }
+    lastDate = date;
     while (idx < sorted.length && sorted[idx]!.date <= date) {
       const flow = sorted[idx]!;
       const p = priceCad(flow.date);
@@ -289,6 +312,21 @@ export function benchmarkValueSeries(
     return p != null ? units * p : 0;
   });
 }
+
+/** Net contribution (+) or withdrawal (−) falling inside each grid interval. */
+export function stepFlowSeries(grid: string[], flows: FlowPoint[]): number[] {
+  const sorted = flows.slice().sort((a, b) => a.date.localeCompare(b.date));
+  let idx = 0;
+  return grid.map((date) => {
+    let sum = 0;
+    while (idx < sorted.length && sorted[idx]!.date <= date) {
+      sum += sorted[idx]!.amount;
+      idx++;
+    }
+    return sum;
+  });
+}
+
 
 export type BenchmarkResult = {
   id: string;
@@ -307,8 +345,11 @@ export type ComparisonResult = {
   portfolioEnd: number;
   portfolioMwrr: number | null;
   invested: number;
+  /** Net money in (+) / out (−) during each grid interval, in CAD. */
+  stepFlows: number[];
   benchmarks: BenchmarkResult[];
 };
+
 
 export function buildComparison(
   transactions: Transaction[],
@@ -341,12 +382,21 @@ export function buildComparison(
     if (!hist || hist.points.length === 0) {
       return { ...b, values: grid.map(() => 0), endValue: 0, mwrr: null, available: false };
     }
-    const values = benchmarkValueSeries(grid, flows, hist, fx, fxNow);
+    const values = benchmarkValueSeries(grid, flows, hist, fx, fxNow, b.annualYield ?? 0);
     const endValue = values[values.length - 1] ?? 0;
     const mwrr =
       flows.length > 0 ? xirr([...xirrFlows, { date: new Date(end), amount: endValue }]) : null;
     return { ...b, values, endValue, mwrr, available: true };
   });
 
-  return { grid, portfolio, portfolioEnd: portfolioEndValue, portfolioMwrr, invested, benchmarks };
+  return {
+    grid,
+    portfolio,
+    portfolioEnd: portfolioEndValue,
+    portfolioMwrr,
+    invested,
+    stepFlows: stepFlowSeries(grid, flows),
+    benchmarks,
+  };
+
 }

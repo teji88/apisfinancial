@@ -85,6 +85,14 @@ const PERIODS: { id: string; label: string }[] = [
   { id: "ALL", label: "Since inception" },
 ];
 
+/** Net contributions between two grid indices, inclusive. */
+function sumFlows(flows: number[], from: number, to: number): number {
+  let sum = 0;
+  for (let i = from; i <= to; i++) sum += flows[i] ?? 0;
+  return sum;
+}
+
+
 function PerformancePage() {
   const {
     accounts,
@@ -128,7 +136,14 @@ function PerformancePage() {
       BENCHMARK_GROUPS.map((g) => {
         const symbol = picked[g.id] ?? g.options[0]!.symbol;
         const option = g.options.find((o) => o.symbol === symbol) ?? g.options[0]!;
-        return { id: g.id, label: g.label, symbol: option.symbol, note: option.note };
+        return {
+          id: g.id,
+          label: g.label,
+          symbol: option.symbol,
+          note: option.note,
+          annualYield: option.annualYield,
+        };
+
       }),
     [picked],
   );
@@ -184,6 +199,7 @@ function PerformancePage() {
   }, [history.data, transactions, holdings, fxUsdCad, portfolioValue, selection, cashAccounts]);
 
   const [period, setPeriod] = useState<string>("ALL");
+  const [mode, setMode] = useState<"TWR" | "MWR">("TWR");
 
   const periodStart = useMemo(() => {
     if (period === "ALL") return start;
@@ -200,26 +216,64 @@ function PerformancePage() {
     return d.toISOString().slice(0, 10);
   }, [period, start]);
 
-  // Chart shows actual dollar values: your portfolio's running value and what
-  // each simulated benchmark would be worth on the same deposits.
+  /**
+   * Both views are rebased to the start of the selected window: time-weighted
+   * return starts at 0% and money-weighted growth starts at $0, so the chart
+   * answers "how did I do against the index over this window".
+   */
   const chartData = useMemo(() => {
     if (!comparison) return [];
-    const firstIdx = comparison.grid.findIndex((d) => d >= periodStart);
-    if (firstIdx < 0) return [];
+    const grid = comparison.grid;
+    const found = grid.findIndex((d) => d >= periodStart);
+    if (found < 0) return [];
+    const base = Math.max(0, found - 1);
+    const flows = comparison.stepFlows;
+
+    const rebase = (values: number[]): (number | null)[] => {
+      const out: (number | null)[] = [];
+      let chain = 1;
+      for (let i = base; i < grid.length; i++) {
+        if (i === base) {
+          out.push(0);
+          continue;
+        }
+        const prev = values[i - 1] ?? 0;
+        const cur = values[i] ?? 0;
+        const flow = flows[i] ?? 0;
+        if (mode === "TWR") {
+          if (prev > 0) chain *= (cur - flow) / prev;
+          else if (cur > 0 && flow > 0) chain *= cur / flow;
+          out.push(Math.round((chain - 1) * 10000) / 100);
+        } else {
+          const gain = cur - (values[base] ?? 0) - sumFlows(flows, base + 1, i);
+          out.push(Math.round(gain * 100) / 100);
+        }
+      }
+      return out;
+    };
+
+    const portfolioSeries = rebase(comparison.portfolio);
+    const benchSeries = comparison.benchmarks
+      .filter((b) => b.available)
+      .map((b) => ({ label: b.label, series: rebase(b.values) }));
+
     const rows: Record<string, string | number>[] = [];
-    for (let i = firstIdx; i < comparison.grid.length; i++) {
-      const row: Record<string, string | number> = { date: comparison.grid[i]! };
-      const pv = comparison.portfolio[i] ?? 0;
-      if (pv > 0) row["Portfolio"] = Math.round(pv * 100) / 100;
-      comparison.benchmarks.forEach((b) => {
-        if (!b.available) return;
-        const v = b.values[i] ?? 0;
-        if (v > 0) row[b.label] = Math.round(v * 100) / 100;
-      });
+    for (let i = base; i < grid.length; i++) {
+      const k = i - base;
+      const row: Record<string, string | number> = { date: grid[i]! };
+      const pv = portfolioSeries[k];
+      if (pv != null) row["Portfolio"] = pv;
+      for (const b of benchSeries) {
+        const v = b.series[k];
+        if (v != null) row[b.label] = v;
+      }
       rows.push(row);
     }
     return rows;
-  }, [comparison, periodStart]);
+  }, [comparison, periodStart, mode]);
+
+  const formatValue = (v: number) =>
+    mode === "TWR" ? `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}%` : formatCad(v);
 
   const tooltipStyle = {
     background: "var(--popover)",
@@ -228,6 +282,7 @@ function PerformancePage() {
     color: "var(--popover-foreground)",
     fontSize: 12,
   };
+
 
   const gainPct =
     comparison && comparison.invested > 0
@@ -318,6 +373,34 @@ function PerformancePage() {
           ))}
         </div>
 
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {(
+            [
+              { id: "TWR", label: "Time-weighted (%)" },
+              { id: "MWR", label: "Money-weighted ($)" },
+            ] as const
+          ).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setMode(m.id)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                mode === m.id
+                  ? "border-primary bg-primary/15 text-foreground"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+          <span className="text-xs text-muted-foreground">
+            {mode === "TWR"
+              ? "Pure market performance, starting at 0% for this window."
+              : "Growth on your money after contributions, starting at $0 for this window."}
+          </span>
+        </div>
+
+
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           {BENCHMARK_GROUPS.map((g) => (
             <div key={g.id} className="space-y-1">
@@ -372,13 +455,18 @@ function PerformancePage() {
                 <YAxis
                   tick={{ fontSize: 11 }}
                   stroke="var(--muted-foreground)"
-                  width={68}
-                  tickFormatter={(v: number) => formatCad(Math.round(v)).replace(".00", "")}
+                  width={72}
+                  tickFormatter={(v: number) =>
+                    mode === "TWR"
+                      ? `${v.toFixed(0)}%`
+                      : formatCad(Math.round(v)).replace(".00", "")
+                  }
                 />
                 <Tooltip
-                  formatter={(v: number, name: string) => [formatCad(v), name]}
+                  formatter={(v: number, name: string) => [formatValue(v), name]}
                   contentStyle={tooltipStyle}
                 />
+
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line
                   type="monotone"
@@ -458,14 +546,16 @@ function PerformancePage() {
         </Table>
         <p className="mt-3 text-xs text-muted-foreground">
           Simulation assumes every deposit bought the benchmark ETF at that day's closing price, in
-          Canadian dollars, with no dividends reinvested on either side beyond what your ledger
-          records. Holdings are valued at the actual market close on each date, so an early point
-          can differ from the price you typed in the ledger. Canadian-listed prices go back 25
-          years; US-listed prices go back 10.
+          Canadian dollars. Benchmarks are shown on a total-return basis: each fund's distributions
+          accrue over time and are reinvested, so dividends are included in the comparison. Your own
+          side counts the dividends recorded in your ledger. Holdings are valued at the actual market
+          close on each date, so an early point can differ from the price you typed in the ledger.
+          Canadian-listed prices go back 25 years; US-listed prices go back 10.
           {history.data?.missing?.length
             ? ` No price history found for ${history.data.missing.join(", ")} — those holdings are valued at your last recorded price.`
             : ""}
         </p>
+
       </div>
     </div>
   );
