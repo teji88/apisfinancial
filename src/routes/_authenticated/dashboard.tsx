@@ -74,7 +74,6 @@ function Dashboard() {
     quotes,
     fxUsdCad,
     pricesAsOf,
-    missingPrices,
     loading,
   } = usePortfolio();
 
