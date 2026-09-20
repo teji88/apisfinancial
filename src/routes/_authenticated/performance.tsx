@@ -184,6 +184,7 @@ function PerformancePage() {
   }, [history.data, transactions, holdings, fxUsdCad, portfolioValue, selection, cashAccounts]);
 
   const [period, setPeriod] = useState<string>("ALL");
+  const [mode, setMode] = useState<"TWR" | "MWR">("TWR");
 
   const periodStart = useMemo(() => {
     if (period === "ALL") return start;
@@ -200,26 +201,64 @@ function PerformancePage() {
     return d.toISOString().slice(0, 10);
   }, [period, start]);
 
-  // Chart shows actual dollar values: your portfolio's running value and what
-  // each simulated benchmark would be worth on the same deposits.
+  /**
+   * Both views are rebased to the start of the selected window: time-weighted
+   * return starts at 0% and money-weighted growth starts at $0, so the chart
+   * answers "how did I do against the index over this window".
+   */
   const chartData = useMemo(() => {
     if (!comparison) return [];
-    const firstIdx = comparison.grid.findIndex((d) => d >= periodStart);
-    if (firstIdx < 0) return [];
+    const grid = comparison.grid;
+    const found = grid.findIndex((d) => d >= periodStart);
+    if (found < 0) return [];
+    const base = Math.max(0, found - 1);
+    const flows = comparison.stepFlows;
+
+    const rebase = (values: number[]): (number | null)[] => {
+      const out: (number | null)[] = [];
+      let chain = 1;
+      for (let i = base; i < grid.length; i++) {
+        if (i === base) {
+          out.push(0);
+          continue;
+        }
+        const prev = values[i - 1] ?? 0;
+        const cur = values[i] ?? 0;
+        const flow = flows[i] ?? 0;
+        if (mode === "TWR") {
+          if (prev > 0) chain *= (cur - flow) / prev;
+          else if (cur > 0 && flow > 0) chain *= cur / flow;
+          out.push(Math.round((chain - 1) * 10000) / 100);
+        } else {
+          const gain = cur - (values[base] ?? 0) - sumFlows(flows, base + 1, i);
+          out.push(Math.round(gain * 100) / 100);
+        }
+      }
+      return out;
+    };
+
+    const portfolioSeries = rebase(comparison.portfolio);
+    const benchSeries = comparison.benchmarks
+      .filter((b) => b.available)
+      .map((b) => ({ label: b.label, series: rebase(b.values) }));
+
     const rows: Record<string, string | number>[] = [];
-    for (let i = firstIdx; i < comparison.grid.length; i++) {
-      const row: Record<string, string | number> = { date: comparison.grid[i]! };
-      const pv = comparison.portfolio[i] ?? 0;
-      if (pv > 0) row["Portfolio"] = Math.round(pv * 100) / 100;
-      comparison.benchmarks.forEach((b) => {
-        if (!b.available) return;
-        const v = b.values[i] ?? 0;
-        if (v > 0) row[b.label] = Math.round(v * 100) / 100;
-      });
+    for (let i = base; i < grid.length; i++) {
+      const k = i - base;
+      const row: Record<string, string | number> = { date: grid[i]! };
+      const pv = portfolioSeries[k];
+      if (pv != null) row["Portfolio"] = pv;
+      for (const b of benchSeries) {
+        const v = b.series[k];
+        if (v != null) row[b.label] = v;
+      }
       rows.push(row);
     }
     return rows;
-  }, [comparison, periodStart]);
+  }, [comparison, periodStart, mode]);
+
+  const formatValue = (v: number) =>
+    mode === "TWR" ? `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}%` : formatCad(v);
 
   const tooltipStyle = {
     background: "var(--popover)",
@@ -228,6 +267,7 @@ function PerformancePage() {
     color: "var(--popover-foreground)",
     fontSize: 12,
   };
+
 
   const gainPct =
     comparison && comparison.invested > 0
