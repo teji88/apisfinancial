@@ -609,10 +609,12 @@ function LedgerPage() {
               {rows.map((t) => {
                 const account = accounts.find((a) => a.id === t.account_id);
                 const holding = holdings.find((h) => h.id === t.holding_id);
-                const cad =
-                  (t.amount != null && t.amount !== 0
-                    ? t.amount
-                    : t.units * t.price_per_unit) * t.fx_rate;
+                const split = t.transaction_type === "SPLIT";
+                const cad = split
+                  ? 0
+                  : (t.amount != null && t.amount !== 0
+                      ? t.amount
+                      : t.units * t.price_per_unit) * t.fx_rate;
                 return (
                   <TableRow key={t.id}>
                     <TableCell className="num">{t.transaction_date}</TableCell>
@@ -626,12 +628,16 @@ function LedgerPage() {
                     </TableCell>
                     <TableCell>{holding?.symbol ?? "—"}</TableCell>
                     <TableCell className="num text-right">
-                      {t.units ? formatUnits(t.units) : "—"}
+                      {split
+                        ? `${formatUnits(t.units || 1)} for 1`
+                        : t.units
+                          ? formatUnits(t.units)
+                          : "—"}
                     </TableCell>
                     <TableCell className="num text-right">
-                      {t.price_per_unit ? t.price_per_unit.toFixed(2) : "—"}
+                      {!split && t.price_per_unit ? t.price_per_unit.toFixed(2) : "—"}
                     </TableCell>
-                    <TableCell className="num text-right">{formatCad(cad)}</TableCell>
+                    <TableCell className="num text-right">{split ? "—" : formatCad(cad)}</TableCell>
                     <TableCell>
                       <div className="flex justify-end">
                         <Button
