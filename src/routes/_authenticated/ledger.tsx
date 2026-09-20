@@ -116,7 +116,27 @@ function LedgerPage() {
   const [editing, setEditing] = useState<Transaction | null>(null);
 
   const isCash = CASH_TYPES.includes(type);
+  const isSplit = type === "SPLIT";
   const selectedAccount = accounts.find((a) => a.id === accountId) ?? accounts[0];
+
+  // Shares currently held of the typed symbol, for the split preview.
+  const heldUnits = useMemo(() => {
+    const clean = normalizeTicker(symbol);
+    const target = accountId || accounts[0]?.id;
+    const holding = holdings.find((h) => h.account_id === target && h.symbol === clean);
+    if (!holding) return 0;
+    let u = 0;
+    for (const t of transactions
+      .filter((t) => t.holding_id === holding.id)
+      .slice()
+      .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date))) {
+      if (t.transaction_type === "BUY" || t.transaction_type === "DRIP") u += t.units || 0;
+      else if (t.transaction_type === "SELL") u -= t.units || 0;
+      else if (t.transaction_type === "SPLIT") u *= (t.units || 0) > 0 ? t.units : 1;
+    }
+    return u;
+  }, [symbol, accountId, accounts, holdings, transactions]);
+
 
   // Historical USD→CAD rate for the chosen trade date.
   useEffect(() => {
@@ -255,8 +275,11 @@ function LedgerPage() {
       setUpgradeOpen(true);
       return;
     }
+    if (isSplit && !(Number(units || 0) > 0)) {
+      toast.error("Enter how many new shares you get for each old share.");
+      return;
+    }
     try {
-
       await addTransaction.mutateAsync({
         accountId: targetAccount,
         symbol: isCash ? "" : cleanSymbol,
@@ -264,14 +287,14 @@ function LedgerPage() {
         assetType,
         transactionType: type,
         units: isCash ? 0 : Number(units || 0),
-        pricePerUnit: isCash ? 0 : Number(price || 0),
-        amount: isCash || type === "DIVIDEND" ? Number(amount || 0) || null : null,
+        pricePerUnit: isCash || isSplit ? 0 : Number(price || 0),
+        amount: (isCash || type === "DIVIDEND") && !isSplit ? Number(amount || 0) || null : null,
         currency,
-        fxRate: Number(fxRate || 1),
-        fee: Number(fee || 0),
+        fxRate: isSplit ? 1 : Number(fxRate || 1),
+        fee: isSplit ? 0 : Number(fee || 0),
         date,
       });
-      toast.success("Transaction recorded");
+      toast.success(isSplit ? "Share split recorded" : "Transaction recorded");
       setUnits("");
       setAmount("");
       setFee("0");
@@ -429,7 +452,24 @@ function LedgerPage() {
                 </SelectContent>
               </Select>
             </div>
-            {type === "DIVIDEND" ? (
+            {isSplit ? (
+              <div className="space-y-1.5 md:col-span-2">
+                <Label htmlFor="ratio">New shares per 1 old share</Label>
+                <Input
+                  id="ratio"
+                  type="number"
+                  step="any"
+                  placeholder="2 for a 2-for-1, 0.1 for a 1-for-10"
+                  value={units}
+                  onChange={(e) => setUnits(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {heldUnits > 0 && Number(units || 0) > 0
+                    ? `${formatUnits(heldUnits)} shares become ${formatUnits(heldUnits * Number(units))}. What you paid stays the same, so the cost per share changes only.`
+                    : "A split changes how many shares you hold. No money moves, and your cost base and returns are untouched."}
+                </p>
+              </div>
+            ) : type === "DIVIDEND" ? (
               <div className="space-y-1.5">
                 <Label htmlFor="amount">Dividend amount</Label>
                 <Input
@@ -487,42 +527,48 @@ function LedgerPage() {
               />
             </div>
           )}
-          <div className="space-y-1.5">
-            <Label htmlFor="fx">FX rate to CAD</Label>
-            <Input
-              id="fx"
-              type="number"
-              step="any"
-              value={fxRate}
-              onChange={(e) => {
-                setFxRate(e.target.value);
-                setFxAuto(false);
-                setFxTouched(true);
-              }}
-            />
-            {fxAuto ? (
-              <p className="text-xs text-muted-foreground">Bank rate on {date}</p>
-            ) : null}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="fee">Commission / fee</Label>
-            <Input
-              id="fee"
-              type="number"
-              step="any"
-              value={fee}
-              onChange={(e) => setFee(e.target.value)}
-            />
-          </div>
+          {!isSplit && (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="fx">FX rate to CAD</Label>
+                <Input
+                  id="fx"
+                  type="number"
+                  step="any"
+                  value={fxRate}
+                  onChange={(e) => {
+                    setFxRate(e.target.value);
+                    setFxAuto(false);
+                    setFxTouched(true);
+                  }}
+                />
+                {fxAuto ? (
+                  <p className="text-xs text-muted-foreground">Bank rate on {date}</p>
+                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fee">Commission / fee</Label>
+                <Input
+                  id="fee"
+                  type="number"
+                  step="any"
+                  value={fee}
+                  onChange={(e) => setFee(e.target.value)}
+                />
+              </div>
+            </>
+          )}
           <div className="flex items-end md:col-start-4">
             <Button type="submit" className="w-full" disabled={addTransaction.isPending}>
-              Record transaction
+              {isSplit ? "Record split" : "Record transaction"}
             </Button>
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Recording into {selectedAccount?.account_type} · {selectedAccount?.account_name}. USD
-          trades use the FX rate above (today: {fxUsdCad.toFixed(4)}).
+          Recording into {selectedAccount?.account_type} · {selectedAccount?.account_name}.{" "}
+          {isSplit
+            ? "A split only changes your share count — no money in or out."
+            : `USD trades use the FX rate above (today: ${fxUsdCad.toFixed(4)}).`}
         </p>
       </form>
 
@@ -563,10 +609,12 @@ function LedgerPage() {
               {rows.map((t) => {
                 const account = accounts.find((a) => a.id === t.account_id);
                 const holding = holdings.find((h) => h.id === t.holding_id);
-                const cad =
-                  (t.amount != null && t.amount !== 0
-                    ? t.amount
-                    : t.units * t.price_per_unit) * t.fx_rate;
+                const split = t.transaction_type === "SPLIT";
+                const cad = split
+                  ? 0
+                  : (t.amount != null && t.amount !== 0
+                      ? t.amount
+                      : t.units * t.price_per_unit) * t.fx_rate;
                 return (
                   <TableRow key={t.id}>
                     <TableCell className="num">{t.transaction_date}</TableCell>
@@ -580,12 +628,16 @@ function LedgerPage() {
                     </TableCell>
                     <TableCell>{holding?.symbol ?? "—"}</TableCell>
                     <TableCell className="num text-right">
-                      {t.units ? formatUnits(t.units) : "—"}
+                      {split
+                        ? `${formatUnits(t.units || 1)} for 1`
+                        : t.units
+                          ? formatUnits(t.units)
+                          : "—"}
                     </TableCell>
                     <TableCell className="num text-right">
-                      {t.price_per_unit ? t.price_per_unit.toFixed(2) : "—"}
+                      {!split && t.price_per_unit ? t.price_per_unit.toFixed(2) : "—"}
                     </TableCell>
-                    <TableCell className="num text-right">{formatCad(cad)}</TableCell>
+                    <TableCell className="num text-right">{split ? "—" : formatCad(cad)}</TableCell>
                     <TableCell>
                       <div className="flex justify-end">
                         <Button
@@ -660,6 +712,7 @@ function EditTransactionDialog({
   const [fee, setFee] = useState(String(transaction.fee ?? 0));
 
   const isCash = CASH_TYPES.includes(type);
+  const isSplit = type === "SPLIT";
 
   async function pullRate() {
     if (currency !== "USD") {
@@ -676,6 +729,10 @@ function EditTransactionDialog({
   }
 
   async function save() {
+    if (isSplit && !(Number(units || 0) > 0)) {
+      toast.error("Enter how many new shares you get for each old share.");
+      return;
+    }
     try {
       await updateTransaction.mutateAsync({
         id: transaction.id,
@@ -685,12 +742,12 @@ function EditTransactionDialog({
         assetType: holding?.asset_type ?? "Stock",
         transactionType: type,
         units: isCash ? 0 : Number(units || 0),
-        pricePerUnit: isCash ? 0 : Number(price || 0),
+        pricePerUnit: isCash || isSplit ? 0 : Number(price || 0),
         amount:
-          isCash || type === "DIVIDEND" ? Number(amount || 0) || null : null,
+          (isCash || type === "DIVIDEND") && !isSplit ? Number(amount || 0) || null : null,
         currency,
-        fxRate: Number(fxRate || 1),
-        fee: Number(fee || 0),
+        fxRate: isSplit ? 1 : Number(fxRate || 1),
+        fee: isSplit ? 0 : Number(fee || 0),
         date,
       });
       toast.success("Transaction updated");
@@ -773,7 +830,9 @@ function EditTransactionDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="edit-units">Units</Label>
+                <Label htmlFor="edit-units">
+                  {isSplit ? "New shares per 1 old share" : "Units"}
+                </Label>
                 <Input
                   id="edit-units"
                   type="number"
@@ -782,19 +841,21 @@ function EditTransactionDialog({
                   onChange={(e) => setUnits(e.target.value)}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-price">Price per unit</Label>
-                <Input
-                  id="edit-price"
-                  type="number"
-                  step="any"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
-              </div>
+              {!isSplit ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-price">Price per unit</Label>
+                  <Input
+                    id="edit-price"
+                    type="number"
+                    step="any"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                  />
+                </div>
+              ) : null}
             </>
           ) : null}
-          {isCash || type === "DIVIDEND" ? (
+          {(isCash || type === "DIVIDEND") && !isSplit ? (
             <div className="space-y-1.5">
               <Label htmlFor="edit-amount">Amount</Label>
               <Input
@@ -806,31 +867,35 @@ function EditTransactionDialog({
               />
             </div>
           ) : null}
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-fx">FX rate to CAD</Label>
-            <div className="flex gap-2">
-              <Input
-                id="edit-fx"
-                type="number"
-                step="any"
-                value={fxRate}
-                onChange={(e) => setFxRate(e.target.value)}
-              />
-              <Button type="button" variant="outline" onClick={() => void pullRate()}>
-                Use rate on date
-              </Button>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-fee">Commission / fee</Label>
-            <Input
-              id="edit-fee"
-              type="number"
-              step="any"
-              value={fee}
-              onChange={(e) => setFee(e.target.value)}
-            />
-          </div>
+          {!isSplit ? (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-fx">FX rate to CAD</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="edit-fx"
+                    type="number"
+                    step="any"
+                    value={fxRate}
+                    onChange={(e) => setFxRate(e.target.value)}
+                  />
+                  <Button type="button" variant="outline" onClick={() => void pullRate()}>
+                    Use rate on date
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-fee">Commission / fee</Label>
+                <Input
+                  id="edit-fee"
+                  type="number"
+                  step="any"
+                  value={fee}
+                  onChange={(e) => setFee(e.target.value)}
+                />
+              </div>
+            </>
+          ) : null}
         </div>
 
         <DialogFooter>

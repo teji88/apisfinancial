@@ -189,6 +189,14 @@ export function portfolioValueSeries(
       if (t.holding_id && t.transaction_type === "SELL") {
         units.set(t.holding_id, (units.get(t.holding_id) ?? 0) - (t.units || 0));
       }
+      // A split moves no money; it only rescales units (and the ledger
+      // fallback price), so contributions and benchmarks are untouched.
+      if (t.holding_id && t.transaction_type === "SPLIT") {
+        const ratio = (t.units || 0) > 0 ? t.units : 1;
+        units.set(t.holding_id, (units.get(t.holding_id) ?? 0) * ratio);
+        const prev = ledgerPrice.get(t.holding_id);
+        if (prev) ledgerPrice.set(t.holding_id, prev / ratio);
+      }
       if (t.holding_id && t.price_per_unit) ledgerPrice.set(t.holding_id, t.price_per_unit);
       idx++;
     }

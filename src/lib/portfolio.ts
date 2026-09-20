@@ -191,7 +191,7 @@ async function ensureHolding(
   return data.id;
 }
 
-const NEEDS_SYMBOL = ["BUY", "SELL", "DIVIDEND", "DRIP"];
+const NEEDS_SYMBOL = ["BUY", "SELL", "DIVIDEND", "DRIP", "SPLIT"];
 
 export function useAddTransaction() {
   const invalidate = useInvalidatePortfolio();

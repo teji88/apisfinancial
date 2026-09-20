@@ -33,11 +33,23 @@ export const TRANSACTION_TYPES = [
   "SELL",
   "DIVIDEND",
   "DRIP",
+  "SPLIT",
   "DEPOSIT",
   "WITHDRAWAL",
   "FEE",
 ] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
+
+/**
+ * A share split is stored with `units` holding the ratio: new shares per one
+ * old share (2 for a 2-for-1, 0.1 for a 1-for-10 consolidation).
+ * It never moves money, so cost base and cash flows are untouched.
+ */
+export function splitRatio(t: Transaction): number {
+  const r = t.units || 0;
+  return r > 0 ? r : 1;
+}
+
 
 export type Account = {
   id: string;
@@ -173,6 +185,9 @@ export function computePositions(
           units = 0;
           acb = 0;
         }
+      } else if (type === "SPLIT") {
+        // Unit count changes, total cost base does not.
+        units *= splitRatio(t);
       } else if (type === "DIVIDEND") {
         dividends += grossCad(t);
       } else if (type === "FEE") {
@@ -427,6 +442,16 @@ export function buildValuationSeries(
           units.set(t.holding_id, (units.get(t.holding_id) ?? 0) - (t.units || 0));
           if (t.price_per_unit) lastPrice.set(t.holding_id, t.price_per_unit);
           lastFx.set(t.holding_id, rateFor(t, holdingById.get(t.holding_id)));
+        }
+        break;
+      case "SPLIT":
+        // No money moves: scale units and the last seen price so the
+        // valuation is continuous across the split date.
+        if (t.holding_id) {
+          const ratio = splitRatio(t);
+          units.set(t.holding_id, (units.get(t.holding_id) ?? 0) * ratio);
+          const prev = lastPrice.get(t.holding_id);
+          if (prev) lastPrice.set(t.holding_id, prev / ratio);
         }
         break;
       case "DIVIDEND":
