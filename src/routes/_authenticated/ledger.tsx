@@ -810,13 +810,18 @@ function EditTransactionDialog({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-price">Price per unit</Label>
-                <Input
-                  id="edit-price"
-                  type="number"
-                  step="any"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="edit-price"
+                    type="number"
+                    step="any"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                  />
+                  <Button type="button" variant="outline" onClick={() => void pullPrice()}>
+                    Close on date
+                  </Button>
+                </div>
               </div>
             </>
           ) : null}
