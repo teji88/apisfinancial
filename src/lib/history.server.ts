@@ -316,6 +316,23 @@ function minDate(a: string, b: string): string {
   return a < b ? a : b;
 }
 
+/**
+ * The official close for a symbol on a date, falling back to the most recent
+ * trading day before it (weekends, holidays). Reads the shared library, which
+ * is only ever written from TMX (Canada) and Nasdaq (US).
+ */
+export async function fetchQuoteOnDate(
+  symbolRaw: string,
+  date: string,
+): Promise<{ symbol: string; currency: string; date: string; close: number } | null> {
+  const symbol = symbolRaw.trim().toUpperCase();
+  if (!symbol) return null;
+  const history = await fetchSymbolHistory(symbol, shiftDays(date, -14), date);
+  const last = history?.points[history.points.length - 1];
+  if (!history || !last) return null;
+  return { symbol, currency: history.currency, date: last.date, close: last.close };
+}
+
 // --------------------------------------------------------------------- FX
 
 async function readStoredFx(start: string, end: string): Promise<HistoryPoint[]> {
