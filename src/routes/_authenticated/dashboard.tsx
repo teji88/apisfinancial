@@ -341,9 +341,17 @@ function Dashboard() {
                       <TableCell className="num text-right">{formatUnits(p.units)}</TableCell>
                       <TableCell className="num text-right">
                         {p.price != null ? (
-                          <span className="inline-flex items-baseline gap-1">
+                          <span
+                            className="inline-flex items-baseline gap-1"
+                            title={
+                              p.priceEstimated
+                                ? "No market feed for this symbol — valued at your own recorded price"
+                                : undefined
+                            }
+                          >
                             {p.price.toFixed(2)}
                             <CurrencyBadge code={p.currency} />
+                            {p.priceEstimated ? <CurrencyBadge code="your price" /> : null}
                           </span>
                         ) : (
                           "—"
