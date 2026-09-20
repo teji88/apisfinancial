@@ -192,10 +192,6 @@ function Landing() {
             </div>
 
             <div className="honey-card relative overflow-hidden border-accent/60 p-6 ring-1 ring-accent/30">
-              <div
-                className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.08]"
-                aria-hidden
-              />
               <div className="relative flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Pro</h3>
                 <span className="rounded-full bg-accent/25 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-accent/40">
