@@ -652,6 +652,7 @@ function EditTransactionDialog({
 }) {
   const updateTransaction = useUpdateTransaction();
   const fxOnDate = useServerFn(getFxRateOn);
+  const quoteOnDate = useServerFn(getQuoteOnDate);
   const holding = holdings.find((h) => h.id === transaction.holding_id);
 
   const [accountId, setAccountId] = useState(transaction.account_id);
