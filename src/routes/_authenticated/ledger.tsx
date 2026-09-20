@@ -194,12 +194,11 @@ function LedgerPage() {
       toast.error("Add an account first.");
       return;
     }
+    const cleanSymbol = normalizeTicker(symbol);
     const wouldAddHolding =
       !isCash &&
-      symbol.trim() !== "" &&
-      !holdings.some(
-        (h) => h.account_id === targetAccount && h.symbol === symbol.trim().toUpperCase(),
-      );
+      cleanSymbol !== "" &&
+      !holdings.some((h) => h.account_id === targetAccount && h.symbol === cleanSymbol);
     if (
       entitlement.readOnly ||
       (wouldAddHolding &&
