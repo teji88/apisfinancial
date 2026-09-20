@@ -382,12 +382,21 @@ export function buildComparison(
     if (!hist || hist.points.length === 0) {
       return { ...b, values: grid.map(() => 0), endValue: 0, mwrr: null, available: false };
     }
-    const values = benchmarkValueSeries(grid, flows, hist, fx, fxNow);
+    const values = benchmarkValueSeries(grid, flows, hist, fx, fxNow, b.annualYield ?? 0);
     const endValue = values[values.length - 1] ?? 0;
     const mwrr =
       flows.length > 0 ? xirr([...xirrFlows, { date: new Date(end), amount: endValue }]) : null;
     return { ...b, values, endValue, mwrr, available: true };
   });
 
-  return { grid, portfolio, portfolioEnd: portfolioEndValue, portfolioMwrr, invested, benchmarks };
+  return {
+    grid,
+    portfolio,
+    portfolioEnd: portfolioEndValue,
+    portfolioMwrr,
+    invested,
+    cumulativeFlows: stepFlowSeries(grid, flows),
+    benchmarks,
+  };
+
 }
