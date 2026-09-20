@@ -172,7 +172,7 @@ function Landing() {
           </p>
 
           <div className="mx-auto mt-10 grid max-w-3xl gap-5 md:grid-cols-2">
-            <div className="panel p-6">
+            <div className="honey-card p-6">
               <h3 className="text-lg font-semibold">Free</h3>
               <p className="num mt-2 text-3xl font-semibold">$0</p>
               <p className="mt-1 text-xs text-muted-foreground">Forever</p>
@@ -185,23 +185,28 @@ function Landing() {
                   "Type transactions in by hand",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
                     {p}
                   </li>
                 ))}
               </ul>
-              <Button asChild className="mt-6 w-full" variant="outline">
+              <Button asChild className="mt-6 w-full border-accent/50" variant="outline">
                 <Link to="/auth">Create an account</Link>
               </Button>
             </div>
 
-            <div className="panel border-primary/50 p-6 ring-1 ring-primary/20">
-              <div className="flex items-center justify-between">
+            <div className="honey-card relative overflow-hidden border-accent/60 p-6 ring-1 ring-accent/30">
+              <div
+                className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.08]"
+                aria-hidden
+              />
+              <div className="relative flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Pro</h3>
-                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                <span className="rounded-full bg-accent/25 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-accent/40">
                   Most useful
                 </span>
               </div>
+
               <p className="num mt-2 text-3xl font-semibold">
                 $1<span className="text-base font-normal text-muted-foreground">/month</span>
               </p>
