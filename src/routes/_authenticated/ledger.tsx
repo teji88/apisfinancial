@@ -275,8 +275,11 @@ function LedgerPage() {
       setUpgradeOpen(true);
       return;
     }
+    if (isSplit && !(Number(units || 0) > 0)) {
+      toast.error("Enter how many new shares you get for each old share.");
+      return;
+    }
     try {
-
       await addTransaction.mutateAsync({
         accountId: targetAccount,
         symbol: isCash ? "" : cleanSymbol,
@@ -284,14 +287,14 @@ function LedgerPage() {
         assetType,
         transactionType: type,
         units: isCash ? 0 : Number(units || 0),
-        pricePerUnit: isCash ? 0 : Number(price || 0),
-        amount: isCash || type === "DIVIDEND" ? Number(amount || 0) || null : null,
+        pricePerUnit: isCash || isSplit ? 0 : Number(price || 0),
+        amount: (isCash || type === "DIVIDEND") && !isSplit ? Number(amount || 0) || null : null,
         currency,
-        fxRate: Number(fxRate || 1),
-        fee: Number(fee || 0),
+        fxRate: isSplit ? 1 : Number(fxRate || 1),
+        fee: isSplit ? 0 : Number(fee || 0),
         date,
       });
-      toast.success("Transaction recorded");
+      toast.success(isSplit ? "Share split recorded" : "Transaction recorded");
       setUnits("");
       setAmount("");
       setFee("0");
