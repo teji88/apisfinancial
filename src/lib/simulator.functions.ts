@@ -207,7 +207,7 @@ export const simulateBenchmark = createServerFn({ method: "POST" })
     );
     if (!you) return { error: "We could not price your picks over that window." };
 
-    const benchmarks = SIM_BENCHMARKS.filter((b) => series.has(b.symbol))
+    const benchmarks = SIM_BENCHMARKS.filter((b) => usableBenchmarks.includes(b.symbol))
       .map((b) => buildLine(b.symbol, b.label, b.note, b.color, [{ symbol: b.symbol, weight: 1 }]))
       .filter((l): l is SimLine => l !== null);
 
