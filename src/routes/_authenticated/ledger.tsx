@@ -179,17 +179,56 @@ function LedgerPage() {
       }
       setSymbol(used);
       setSymbolName(quote.name ?? null);
-      setPrice(quote.price.toFixed(2));
       if (quote.currency) {
         setCurrency(quote.currency);
-        setFxRate(quote.currency === "USD" ? fxUsdCad.toFixed(4) : "1");
+        if (!fxTouched) setFxRate(quote.currency === "USD" ? fxUsdCad.toFixed(4) : "1");
       }
       const market = used.endsWith(".TO") ? "Toronto" : "US";
+
+      // Use the close on the trade date rather than today's quote.
+      const wantsHistory = /^\d{4}-\d{2}-\d{2}$/.test(date) && date < today();
+      const onDate = wantsHistory ? await quoteOnDate({ data: { symbol: used, date } }) : null;
+      if (onDate) {
+        setPrice(onDate.close.toFixed(2));
+        setPriceNote(`Close on ${onDate.date}`);
+        toast.success(
+          `${quote.name ?? used} · ${market} · ${onDate.close.toFixed(2)} ${onDate.currency} (close on ${onDate.date})`,
+        );
+        return;
+      }
+      setPrice(quote.price.toFixed(2));
+      setPriceNote(wantsHistory ? "No close stored for that date — today's price shown" : null);
       toast.success(
         `${quote.name ?? used} · ${market} · ${quote.price.toFixed(2)} ${quote.currency ?? ""}`,
       );
     } finally {
       setLooking(false);
+    }
+  }
+
+  /** Re-fetch the official close for the date currently in the form. */
+  async function pullPriceOnDate() {
+    const clean = normalizeTicker(symbol);
+    if (!clean) {
+      toast.error("Enter a symbol first.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      toast.error("Pick a valid date first.");
+      return;
+    }
+    setPricing(true);
+    try {
+      const res = await quoteOnDate({ data: { symbol: clean, date } });
+      if (!res) {
+        toast.error(`No close stored for ${clean} on ${date}.`);
+        return;
+      }
+      setPrice(res.close.toFixed(2));
+      setPriceNote(`Close on ${res.date}`);
+      toast.success(`${clean} closed at ${res.close.toFixed(2)} ${res.currency} on ${res.date}`);
+    } finally {
+      setPricing(false);
     }
   }
 
