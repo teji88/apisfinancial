@@ -222,20 +222,6 @@ function AppHeader() {
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-t px-4 py-2 md:hidden">
-        {NAV.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            activeOptions={{ exact: true }}
-            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground"
-            activeProps={{ className: "bg-muted text-foreground" }}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </Link>
-        ))}
-      </div>
     </header>
   );
 }
