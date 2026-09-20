@@ -139,6 +139,8 @@ function LedgerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currency, date]);
 
+  const symbolSuggestions = useMemo(() => suggestTickers(symbol, 8), [symbol]);
+
   const rows = useMemo(() => {
     const list =
       filterAccount === "all"
