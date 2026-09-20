@@ -440,13 +440,18 @@ function PerformancePage() {
                 <YAxis
                   tick={{ fontSize: 11 }}
                   stroke="var(--muted-foreground)"
-                  width={68}
-                  tickFormatter={(v: number) => formatCad(Math.round(v)).replace(".00", "")}
+                  width={72}
+                  tickFormatter={(v: number) =>
+                    mode === "TWR"
+                      ? `${v.toFixed(0)}%`
+                      : formatCad(Math.round(v)).replace(".00", "")
+                  }
                 />
                 <Tooltip
-                  formatter={(v: number, name: string) => [formatCad(v), name]}
+                  formatter={(v: number, name: string) => [formatValue(v), name]}
                   contentStyle={tooltipStyle}
                 />
+
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line
                   type="monotone"
