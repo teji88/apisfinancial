@@ -104,9 +104,10 @@ function Landing() {
             <Button asChild variant="ghost" size="sm">
               <Link to="/auth">Sign in</Link>
             </Button>
-            <Button asChild size="sm">
+            <Button asChild size="sm" className="honey-fill">
               <Link to="/auth">Get started</Link>
             </Button>
+
           </div>
         </div>
       </header>
@@ -269,7 +270,7 @@ function Landing() {
               Add your accounts and Apis Financial does the rest — in today&apos;s dollars, with
               Canadian tax rules built in.
             </p>
-            <Button asChild size="lg" className="mt-7">
+            <Button asChild size="lg" className="honey-fill mt-7">
               <Link to="/auth">Start free</Link>
             </Button>
           </div>
@@ -287,7 +288,7 @@ function Landing() {
 }
 
 function Cellv({ value }: { value: string | boolean }) {
-  if (value === true) return <Check className="mx-auto h-4 w-4 text-primary" />;
+  if (value === true) return <Check className="mx-auto h-4 w-4 text-accent" />;
   if (value === false) return <Minus className="mx-auto h-4 w-4 text-muted-foreground" />;
   return <span className="num">{value}</span>;
 }
