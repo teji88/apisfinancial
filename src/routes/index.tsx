@@ -16,6 +16,7 @@ import { ApisLogo } from "@/components/brand/ApisLogo";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
+  staticData: { sitemap: true },
   head: () => ({
     meta: [
       { title: "Apis Financial — Canadian portfolio tracker & retirement planner" },

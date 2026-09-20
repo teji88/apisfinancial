@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/table";
 
 export const Route = createFileRoute("/_authenticated/accounts")({
+  staticData: { sitemap: false },
   head: () => ({
     meta: [
       { title: "Accounts — Apis Financial" },

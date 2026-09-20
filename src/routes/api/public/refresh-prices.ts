@@ -79,6 +79,7 @@ async function handleRefresh(request: Request): Promise<Response> {
 }
 
 export const Route = createFileRoute("/api/public/refresh-prices")({
+  staticData: { sitemap: false },
   server: {
     handlers: {
       POST: async ({ request }) => handleRefresh(request),

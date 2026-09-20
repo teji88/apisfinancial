@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  staticData: { sitemap: false },
   head: () => ({
     meta: [
       { title: "Dashboard — Apis Financial" },

@@ -24,6 +24,7 @@ import {
 } from "@/lib/entitlement.functions";
 
 export const Route = createFileRoute("/_authenticated/invites")({
+  staticData: { sitemap: false },
   head: () => ({
     meta: [
       { title: "Invite codes — Apis Financial" },
