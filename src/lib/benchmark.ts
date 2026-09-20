@@ -271,17 +271,23 @@ export function portfolioValueSeries(
   });
 }
 
-/** Units of the benchmark ETF bought/sold with the same cash flows. */
+/**
+ * Units of the benchmark ETF bought/sold with the same cash flows, on a
+ * total-return basis: the ETF's distributions accrue over time and are
+ * reinvested into more units at no cost.
+ */
 export function benchmarkValueSeries(
   grid: string[],
   flows: FlowPoint[],
   bench: { currency: string; points: HistoryPoint[] },
   fx: HistoryPoint[],
   fxNow: number,
+  annualYield = 0,
 ): number[] {
   const sorted = flows.slice().sort((a, b) => a.date.localeCompare(b.date));
   let idx = 0;
   let units = 0;
+  let lastDate: string | null = null;
 
   const priceCad = (date: string): number | null => {
     const close = closeOn(bench.points, date);
@@ -291,6 +297,11 @@ export function benchmarkValueSeries(
   };
 
   return grid.map((date) => {
+    if (lastDate && annualYield > 0) {
+      const days = Math.max(0, dayGap(lastDate, date));
+      units *= Math.exp((annualYield * days) / 365);
+    }
+    lastDate = date;
     while (idx < sorted.length && sorted[idx]!.date <= date) {
       const flow = sorted[idx]!;
       const p = priceCad(flow.date);
@@ -301,6 +312,21 @@ export function benchmarkValueSeries(
     return p != null ? units * p : 0;
   });
 }
+
+/** Net contribution (+) or withdrawal (−) falling inside each grid interval. */
+export function stepFlowSeries(grid: string[], flows: FlowPoint[]): number[] {
+  const sorted = flows.slice().sort((a, b) => a.date.localeCompare(b.date));
+  let idx = 0;
+  return grid.map((date) => {
+    let sum = 0;
+    while (idx < sorted.length && sorted[idx]!.date <= date) {
+      sum += sorted[idx]!.amount;
+      idx++;
+    }
+    return sum;
+  });
+}
+
 
 export type BenchmarkResult = {
   id: string;
