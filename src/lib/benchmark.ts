@@ -268,8 +268,9 @@ export function buildComparison(
   fxNow: number,
   portfolioEndValue: number,
   selection: BenchmarkChoice[] = DEFAULT_BENCHMARKS,
+  cashAccounts?: Set<string>,
 ): ComparisonResult | null {
-  const flows = contributionFlows(transactions);
+  const flows = contributionFlows(transactions, cashAccounts);
   if (transactions.length === 0) return null;
   const start = transactions
     .map((t) => t.transaction_date)
@@ -277,7 +278,7 @@ export function buildComparison(
   const end = new Date().toISOString().slice(0, 10);
   const grid = dateGrid(start, end);
 
-  const portfolio = portfolioValueSeries(grid, transactions, holdings, history, fx, fxNow);
+  const portfolio = portfolioValueSeries(grid, transactions, holdings, history, fx, fxNow, cashAccounts);
   if (portfolio.length > 0) portfolio[portfolio.length - 1] = portfolioEndValue;
 
   const invested = flows.reduce((s, f) => s + f.amount, 0);
