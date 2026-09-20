@@ -91,7 +91,7 @@ export const parseStatement = createServerFn({ method: "POST" })
     ];
 
     if (data.text) {
-      parts.push({ type: "text", text: data.text.slice(0, 200_000) });
+      parts.push({ type: "text", text: condenseStatement(data.text) });
     } else if (data.dataUrl) {
       if (data.mimeType.startsWith("image/")) {
         parts.push({ type: "image", image: data.dataUrl });
