@@ -106,8 +106,9 @@ function LedgerPage() {
   const [fxAuto, setFxAuto] = useState(false);
   // Once the user types their own rate or price, we never overwrite it.
   const [fxTouched, setFxTouched] = useState(false);
+  // Once the user types their own price, it wins over any fetched close.
+  const [priceTouched, setPriceTouched] = useState(false);
   const [priceNote, setPriceNote] = useState<string | null>(null);
-  const [pricing, setPricing] = useState(false);
   const [fee, setFee] = useState("0");
   const [date, setDate] = useState(today());
   const [looking, setLooking] = useState(false);
@@ -146,6 +147,25 @@ function LedgerPage() {
   }, [currency, date]);
 
   const symbolSuggestions = useMemo(() => suggestTickers(symbol, 8), [symbol]);
+
+  // When a past trade date is chosen (or changed), fill the price with that
+  // day's close — unless the user typed their own price.
+  useEffect(() => {
+    let cancelled = false;
+    if (priceTouched) return;
+    const clean = normalizeTicker(symbol);
+    if (!clean || !/^\d{4}-\d{2}-\d{2}$/.test(date) || date >= today()) return;
+    void (async () => {
+      const res = await quoteOnDate({ data: { symbol: clean, date } });
+      if (cancelled || !res) return;
+      setPrice(res.close.toFixed(2));
+      setPriceNote(`Close on ${res.date}`);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
   const rows = useMemo(() => {
     const list =
