@@ -135,6 +135,8 @@ export type HoldingPosition = {
   realizedGain: number;
   dividendsReceived: number;
   price: number | null;
+  /** True when no market feed exists and the price comes from your own ledger. */
+  priceEstimated: boolean;
   previousClose: number | null;
   marketValue: number;
   dayChange: number;
