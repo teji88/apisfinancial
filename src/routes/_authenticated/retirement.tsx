@@ -758,7 +758,8 @@ function RetirementPage() {
             </p>
           </Section>
 
-          {married && (
+          {married && isProPlus && (
+
             <Section
               title="Your spouse"
               subtitle={`Their CPP and OAS count towards the household income. Estimated CPP entitlement: ${derived.spousePct}% of the maximum.`}
