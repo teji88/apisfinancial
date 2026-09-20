@@ -71,11 +71,35 @@ export const Route = createFileRoute("/_authenticated/performance")({
   component: PerformancePage,
 });
 
-const CHART_COLORS = ["var(--chart-2)", "var(--chart-3)", "var(--chart-4)"];
+const CHART_COLORS = ["var(--series-3)", "var(--series-4)", "var(--series-2)"];
 
 function PerformancePage() {
-  const { accounts, holdings, transactions, quotes, fxUsdCad, loading } = usePortfolio();
+  const {
+    accounts,
+    holdings: allHoldings,
+    transactions: allTransactions,
+    quotes,
+    fxUsdCad,
+    loading,
+  } = usePortfolio();
   const fetchHistory = useServerFn(getHistory);
+
+  const [accountFilter, setAccountFilter] = useState<string>("all");
+
+  const holdings = useMemo(
+    () =>
+      accountFilter === "all"
+        ? allHoldings
+        : allHoldings.filter((h) => h.account_id === accountFilter),
+    [allHoldings, accountFilter],
+  );
+  const transactions = useMemo(
+    () =>
+      accountFilter === "all"
+        ? allTransactions
+        : allTransactions.filter((t) => t.account_id === accountFilter),
+    [allTransactions, accountFilter],
+  );
 
   const start = useMemo(() => {
     const dates = transactions.map((t) => t.transaction_date).sort();
