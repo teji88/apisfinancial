@@ -27,8 +27,19 @@ export function useEntitlement() {
     staleTime: 60 * 1000,
     queryFn: async () => fetchEntitlement({ data: { environment: getStripeEnvironment() } }),
   });
-  return { entitlement: query.data ?? FREE_FALLBACK, loading: query.isLoading, refetch: query.refetch };
+  const entitlement = query.data ?? FREE_FALLBACK;
+  return {
+    entitlement,
+    /** Pro-level features: unlimited accounts/holdings, statement reading, solo planner controls. */
+    hasPro: entitlement.tier !== "free",
+    /** Pro+ features: household/spouse planning, savings split, manual balance overrides. */
+    hasProPlus:
+      entitlement.tier === "pro_plus" || entitlement.tier === "invite" || entitlement.isAdmin,
+    loading: query.isLoading,
+    refetch: query.refetch,
+  };
 }
+
 
 export function formatDate(iso: string | null): string {
   if (!iso) return "—";

@@ -74,18 +74,26 @@ const FEATURES = [
   },
 ];
 
-const COMPARISON: Array<{ label: string; free: string | boolean; pro: string | boolean }> = [
-  { label: "Accounts", free: "1", pro: "Unlimited" },
-  { label: "Holdings", free: "10", pro: "Unlimited" },
-  { label: "Ledger, adjusted cost base and returns", free: true, pro: true },
-  { label: "Dividends and the ten-year compounder", free: true, pro: true },
-  { label: "Benchmarking", free: true, pro: true },
-  { label: "Retirement plan and withdrawal schedule", free: true, pro: true },
-  { label: "Upload a statement for AI reading", free: false, pro: true },
-  { label: "Change retirement age, CPP and OAS start dates", free: false, pro: true },
-  { label: "Change inflation, growth and life expectancy", free: false, pro: true },
-  { label: "Couple planning and manual balance override", free: false, pro: true },
+const COMPARISON: Array<{
+  label: string;
+  free: string | boolean;
+  pro: string | boolean;
+  plus: string | boolean;
+}> = [
+  { label: "Accounts", free: "1", pro: "Unlimited", plus: "Unlimited" },
+  { label: "Holdings", free: "10", pro: "Unlimited", plus: "Unlimited" },
+  { label: "Ledger, adjusted cost base and returns", free: true, pro: true, plus: true },
+  { label: "Dividends and the ten-year compounder", free: true, pro: true, plus: true },
+  { label: "Benchmarking", free: true, pro: true, plus: true },
+  { label: "Retirement plan and withdrawal schedule", free: true, pro: true, plus: true },
+  { label: "All accounts combined vs benchmarks", free: false, pro: true, plus: true },
+  { label: "Upload a statement for AI reading", free: false, pro: true, plus: true },
+  { label: "Change retirement age, CPP and OAS start dates", free: false, pro: true, plus: true },
+  { label: "Change inflation, growth and life expectancy", free: false, pro: true, plus: true },
+  { label: "Couple and household planning", free: false, pro: false, plus: true },
+  { label: "Savings split and what-if balances", free: false, pro: false, plus: true },
 ];
+
 
 function Landing() {
   const { session, loading } = useAuth();
@@ -164,11 +172,11 @@ function Landing() {
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
           <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
           <p className="mx-auto mt-3 max-w-xl text-center text-sm text-muted-foreground">
-            Start free and stay free for a single account. Pro removes every limit for about the
-            price of a coffee a year.
+            Start free and stay free for a single account. Pro removes every limit, and Pro+ adds
+            household planning — all for about the price of a coffee a year.
           </p>
 
-          <div className="mx-auto mt-10 grid max-w-3xl gap-5 md:grid-cols-2">
+          <div className="mx-auto mt-10 grid max-w-5xl gap-5 md:grid-cols-3">
             <div className="honey-card p-6">
               <h3 className="text-lg font-semibold">Free</h3>
               <p className="num mt-2 text-3xl font-semibold">$0</p>
@@ -208,11 +216,12 @@ function Landing() {
               </p>
               <ul className="relative mt-5 space-y-2 text-sm">
                 {[
+                  "Everything in Free",
                   "Unlimited accounts and holdings",
                   "Upload statements for AI reading",
-                  "Full control of the retirement planner",
-                  "Couple planning with spouse benefits",
-                  "Everything in Free",
+                  "All accounts combined vs benchmarks",
+                  "Your own retirement age, CPP and OAS start",
+                  "Your own inflation, growth and life expectancy",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
@@ -224,16 +233,43 @@ function Landing() {
                 <Link to="/auth">Get Pro</Link>
               </Button>
             </div>
+
+            <div className="honey-card p-6">
+              <h3 className="text-lg font-semibold">Pro+</h3>
+              <p className="num mt-2 text-3xl font-semibold">
+                $2<span className="text-base font-normal text-muted-foreground">/month</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                or $20 a year · cancel any time
+              </p>
+              <ul className="mt-5 space-y-2 text-sm">
+                {[
+                  "Everything in Pro",
+                  "Couple and household planning",
+                  "Spouse CPP, OAS and balances",
+                  "Pension splitting and clawback control",
+                  "Savings split and what-if balances",
+                ].map((p) => (
+                  <li key={p} className="flex gap-2">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                    {p}
+                  </li>
+                ))}
+              </ul>
+              <Button asChild className="mt-6 w-full border-accent/50" variant="outline">
+                <Link to="/auth">Get Pro+</Link>
+              </Button>
+            </div>
           </div>
 
           <div className="honey-card mt-12 overflow-x-auto">
-
-            <table className="w-full min-w-[520px] text-sm">
+            <table className="w-full min-w-[620px] text-sm">
               <thead>
                 <tr className="border-b border-border/60 text-left">
                   <th className="px-5 py-3 font-medium">What you get</th>
                   <th className="px-5 py-3 text-center font-medium">Free</th>
                   <th className="px-5 py-3 text-center font-medium">Pro</th>
+                  <th className="px-5 py-3 text-center font-medium">Pro+</th>
                 </tr>
               </thead>
               <tbody>
@@ -245,6 +281,9 @@ function Landing() {
                     </td>
                     <td className="px-5 py-3 text-center">
                       <Cellv value={row.pro} />
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      <Cellv value={row.plus} />
                     </td>
                   </tr>
                 ))}
@@ -260,6 +299,7 @@ function Landing() {
             </h2>
             <p className="mt-3 text-sm text-muted-foreground">
               Add your accounts and Apis Financial does the rest — in today&apos;s dollars, with
+
               Canadian tax rules built in.
             </p>
             <Button asChild size="lg" className="honey-fill mt-7">

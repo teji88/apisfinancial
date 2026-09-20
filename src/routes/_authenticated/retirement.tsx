@@ -104,10 +104,24 @@ function RetirementPage() {
   const profileQuery = useProfile();
   const updateProfile = useUpdateProfile();
 
-  const { entitlement } = useEntitlement();
-  const isPro = entitlement.tier !== "free";
+  const { entitlement, hasPro, hasProPlus } = useEntitlement();
+  const isPro = hasPro;
+  const isProPlus = hasProPlus;
   const [proPromptOpen, setProPromptOpen] = useState(false);
-  const lockProps = isPro ? {} : { locked: true, onLocked: () => setProPromptOpen(true) };
+  const [promptReason, setPromptReason] = useState<string>("");
+  const PRO_REASON =
+    "The free plan runs the retirement plan on standard assumptions — retirement at 65, CPP and OAS at 65, 2.5% inflation, 6% growth, to age 95. Pro lets you change all of them.";
+  const PLUS_REASON =
+    "Couple and household planning, the savings split and what-if balances are part of Pro+ ($2 a month or $20 a year).";
+  const openPrompt = (reason: string) => {
+    setPromptReason(reason);
+    setProPromptOpen(true);
+  };
+  const lockProps = isPro ? {} : { locked: true, onLocked: () => openPrompt(PRO_REASON) };
+  const plusProps = isProPlus
+    ? {}
+    : { locked: true, planLabel: "Pro+", onLocked: () => openPrompt(PLUS_REASON) };
+
 
   const [form, setForm] = useState<Profile | null>(null);
   /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
@@ -637,7 +651,7 @@ function RetirementPage() {
                 onChange={(e) => set({ life_expectancy: num(e.target.value, 95) })}
               />
             </Field>
-            <Field label="Marital status" {...lockProps}>
+            <Field label="Marital status" {...plusProps}>
               <Select
                 value={p.marital_status ?? "Single"}
                 onValueChange={(v) => set({ marital_status: v })}
@@ -716,34 +730,36 @@ function RetirementPage() {
                 onChange={(e) => set({ annual_savings: num(e.target.value) })}
               />
             </Field>
-            <Field label="% to TFSA">
+            <Field label="% to TFSA" {...plusProps}>
               <Input
                 type="number"
                 value={p.save_pct_tfsa ?? 40}
                 onChange={(e) => set({ save_pct_tfsa: num(e.target.value) })}
               />
             </Field>
-            <Field label="% to RRSP / FHSA">
+            <Field label="% to RRSP / FHSA" {...plusProps}>
               <Input
                 type="number"
                 value={p.save_pct_rrsp ?? 40}
                 onChange={(e) => set({ save_pct_rrsp: num(e.target.value) })}
               />
             </Field>
-            <Field label="% to non-registered">
+            <Field label="% to non-registered" {...plusProps}>
               <Input
                 type="number"
                 value={p.save_pct_nonreg ?? 20}
                 onChange={(e) => set({ save_pct_nonreg: num(e.target.value) })}
               />
             </Field>
+
             <p className="col-span-full text-xs text-muted-foreground">
               Splits are normalised, so they do not have to add to exactly 100. Today they total{" "}
               {(p.save_pct_tfsa ?? 0) + (p.save_pct_rrsp ?? 0) + (p.save_pct_nonreg ?? 0)}%.
             </p>
           </Section>
 
-          {married && (
+          {married && isProPlus && (
+
             <Section
               title="Your spouse"
               subtitle={`Their CPP and OAS count towards the household income. Estimated CPP entitlement: ${derived.spousePct}% of the maximum.`}
@@ -859,20 +875,21 @@ function RetirementPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {isPro ? null : (
+                {isProPlus ? null : (
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                     <Lock className="h-2.5 w-2.5" />
-                    Pro
+                    Pro+
                   </span>
                 )}
                 <Switch
                   checked={p.manual_override ?? false}
                   onCheckedChange={(v) => {
-                    if (!isPro) {
-                      setProPromptOpen(true);
+                    if (!isProPlus) {
+                      openPrompt(PLUS_REASON);
                       return;
                     }
                     set({ manual_override: v });
+
                   }}
                 />
               </div>
@@ -1057,8 +1074,9 @@ function RetirementPage() {
       <UpgradeDialog
         open={proPromptOpen}
         onOpenChange={setProPromptOpen}
-        reason="The free plan runs the retirement plan on standard assumptions — retirement at 65, CPP and OAS at 65, 2.5% inflation, 10% growth, to age 95, single. Pro lets you change all of them."
+        reason={promptReason || PRO_REASON}
       />
+
     </div>
   );
 }
@@ -1087,11 +1105,13 @@ function Field({
   label,
   children,
   locked = false,
+  planLabel = "Pro",
   onLocked,
 }: {
   label: string;
   children: React.ReactNode;
   locked?: boolean;
+  planLabel?: string;
   onLocked?: () => void;
 }) {
   return (
@@ -1101,7 +1121,7 @@ function Field({
         {locked ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
             <Lock className="h-2.5 w-2.5" />
-            Pro
+            {planLabel}
           </span>
         ) : null}
       </Label>
@@ -1109,12 +1129,13 @@ function Field({
         <button
           type="button"
           className="w-full text-left"
-          title="Upgrade to Pro to change this"
+          title={`Upgrade to ${planLabel} to change this`}
           onClick={onLocked}
         >
           <div className="pointer-events-none opacity-60">{children}</div>
         </button>
       ) : (
+
         children
       )}
     </div>
