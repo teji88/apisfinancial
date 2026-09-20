@@ -128,14 +128,20 @@ export const simulateBenchmark = createServerFn({ method: "POST" })
     }
     for (const h of usable) if (!yields.has(h.symbol)) noDividendData.push(h.symbol);
 
-    // Common window: everyone starts on the first day all the lines exist.
-    const included = [...usable.map((h) => h.symbol), ...benchSymbols.filter((s) => series.has(s))];
-    const start = included
+    // The window is set by the user's own picks. A benchmark that did not
+    // exist that far back (ZEQT only launched in 2022) is dropped rather than
+    // shortening everyone else's comparison.
+    const pickSymbols = usable.map((h) => h.symbol);
+    const start = pickSymbols
       .map((s) => series.get(s)!.points[0]!.date)
       .reduce((a, b) => (a > b ? a : b), requestedStart);
-    const lastDate = included
-      .map((s) => series.get(s)!.points[series.get(s)!.points.length - 1]!.date)
-      .reduce((a, b) => (a < b ? a : b), end);
+    const lastOf = (s: string) => series.get(s)!.points[series.get(s)!.points.length - 1]!.date;
+    const usableBenchmarks = benchSymbols.filter(
+      (s) => series.has(s) && series.get(s)!.points[0]!.date <= start,
+    );
+    const included = [...pickSymbols, ...usableBenchmarks];
+    const lastDate = included.map(lastOf).reduce((a, b) => (a < b ? a : b), end);
+
 
     const gridSet = new Set<string>();
     for (const s of included) {
