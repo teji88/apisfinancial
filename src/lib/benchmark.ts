@@ -10,48 +10,60 @@ import type { HistoryPoint } from "./history.server";
 import type { Holding, Transaction } from "./finance";
 import { xirr } from "./finance";
 
-export type BenchmarkOption = { symbol: string; note: string };
+export type BenchmarkOption = { symbol: string; note: string; annualYield: number };
 export type BenchmarkGroup = { id: string; label: string; options: BenchmarkOption[] };
 
-/** Each index can be tracked with either of the common Canadian-listed proxies. */
+/**
+ * Each index can be tracked with either of the common Canadian-listed proxies.
+ * `annualYield` is the ETF's indicative annual distribution yield; the
+ * simulation reinvests it so benchmarks are compared on a total-return basis.
+ */
 export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
   {
     id: "sp500",
     label: "S&P 500",
     options: [
-      { symbol: "IVV", note: "iShares Core S&P 500 (USD)" },
-      { symbol: "SPY", note: "SPDR S&P 500 ETF Trust (USD)" },
+      { symbol: "IVV", note: "iShares Core S&P 500 (USD)", annualYield: 0.013 },
+      { symbol: "SPY", note: "SPDR S&P 500 ETF Trust (USD)", annualYield: 0.013 },
     ],
   },
   {
     id: "tsx",
     label: "S&P/TSX Composite",
     options: [
-      { symbol: "XIC.TO", note: "iShares Core S&P/TSX Capped (CAD)" },
-      { symbol: "VCN.TO", note: "Vanguard FTSE Canada All Cap (CAD)" },
+      { symbol: "XIC.TO", note: "iShares Core S&P/TSX Capped (CAD)", annualYield: 0.029 },
+      { symbol: "VCN.TO", note: "Vanguard FTSE Canada All Cap (CAD)", annualYield: 0.028 },
     ],
   },
   {
     id: "global",
     label: "All-Equity Global",
     options: [
-      { symbol: "XEQT.TO", note: "iShares All-Equity ETF Portfolio (CAD)" },
-      { symbol: "VEQT.TO", note: "Vanguard All-Equity ETF Portfolio (CAD)" },
+      { symbol: "XEQT.TO", note: "iShares All-Equity ETF Portfolio (CAD)", annualYield: 0.019 },
+      { symbol: "VEQT.TO", note: "Vanguard All-Equity ETF Portfolio (CAD)", annualYield: 0.019 },
     ],
   },
 ];
 
-export type BenchmarkChoice = { id: string; label: string; symbol: string; note: string };
+export type BenchmarkChoice = {
+  id: string;
+  label: string;
+  symbol: string;
+  note: string;
+  annualYield: number;
+};
 
 export const DEFAULT_BENCHMARKS: BenchmarkChoice[] = BENCHMARK_GROUPS.map((g) => ({
   id: g.id,
   label: g.label,
   symbol: g.options[0]!.symbol,
   note: g.options[0]!.note,
+  annualYield: g.options[0]!.annualYield,
 }));
 
 /** Default proxies, kept for callers that don't offer a choice. */
 export const BENCHMARKS = DEFAULT_BENCHMARKS;
+
 
 export type BenchmarkId = string;
 
