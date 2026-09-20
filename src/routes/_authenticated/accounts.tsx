@@ -35,13 +35,13 @@ import {
 export const Route = createFileRoute("/_authenticated/accounts")({
   head: () => ({
     meta: [
-      { title: "Accounts — MapleWealth" },
+      { title: "Accounts — Apis Financial" },
       {
         name: "description",
         content:
           "Manage your TFSA, RRSP, Spousal RRSP, LIRA, RESP, RDSP, FHSA, non-registered and corporate accounts in one place.",
       },
-      { property: "og:title", content: "Accounts — MapleWealth" },
+      { property: "og:title", content: "Accounts — Apis Financial" },
       {
         property: "og:description",
         content: "Every Canadian registered and taxable account type, tracked in CAD.",
@@ -113,7 +113,7 @@ function AccountsPage() {
         onOpenChange={setUpgradeOpen}
         reason={
           entitlement.readOnly
-            ? "Your plan has ended, so MapleWealth is view-only. Restart Pro to make changes."
+            ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to make changes."
             : "The free plan includes one account. Pro removes the limit."
         }
       />

@@ -48,13 +48,13 @@ import {
 export const Route = createFileRoute("/_authenticated/dividends")({
   head: () => ({
     meta: [
-      { title: "Dividends — MapleWealth" },
+      { title: "Dividends — Apis Financial" },
       {
         name: "description",
         content:
           "Forward annual dividend income, portfolio yield, yield on cost, trailing 12-month income and a ten-year compounder projection for your Canadian portfolio.",
       },
-      { property: "og:title", content: "Dividends — MapleWealth" },
+      { property: "og:title", content: "Dividends — Apis Financial" },
       {
         property: "og:description",
         content: "Track dividend income, yield on cost and project ten years of compounding.",
@@ -591,7 +591,7 @@ function DividendsPage() {
       <UpgradeDialog
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
-        reason="MapleWealth is view-only right now, so dividends cannot be recorded. Restart Pro to make changes again."
+        reason="Apis Financial is view-only right now, so dividends cannot be recorded. Restart Pro to make changes again."
       />
     </div>
 

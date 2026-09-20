@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "MapleWealth — Canadian portfolio tracker & retirement planner" },
+      { title: "Apis Financial — Canadian portfolio tracker & retirement planner" },
       {
         name: "description",
         content:
@@ -25,7 +25,7 @@ export const Route = createFileRoute("/")({
       },
       {
         property: "og:title",
-        content: "MapleWealth — Canadian portfolio tracker & retirement planner",
+        content: "Apis Financial — Canadian portfolio tracker & retirement planner",
       },
       {
         property: "og:description",
@@ -99,7 +99,7 @@ function Landing() {
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 md:px-6">
           <span className="flex items-center gap-2 font-display text-lg font-semibold">
             <Leaf className="h-5 w-5 text-primary" />
-            MapleWealth
+            Apis Financial
           </span>
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm">
@@ -121,7 +121,7 @@ function Landing() {
             Know what you own, what it earns, and when you can retire
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground">
-            MapleWealth tracks your registered and non-registered accounts in Canadian dollars,
+            Apis Financial tracks your registered and non-registered accounts in Canadian dollars,
             follows your dividend income, measures you against the market, and turns it all into a
             retirement plan that keeps tax and OAS clawback as low as possible.
           </p>
@@ -246,7 +246,7 @@ function Landing() {
               See your retirement date, not just your balance
             </h2>
             <p className="mt-3 text-sm text-muted-foreground">
-              Add your accounts and MapleWealth does the rest — in today&apos;s dollars, with
+              Add your accounts and Apis Financial does the rest — in today&apos;s dollars, with
               Canadian tax rules built in.
             </p>
             <Button asChild size="lg" className="mt-7">
@@ -258,7 +258,7 @@ function Landing() {
 
       <footer className="border-t border-border/60">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-6 text-xs text-muted-foreground md:px-6">
-          <span>© {new Date().getFullYear()} MapleWealth</span>
+          <span>© {new Date().getFullYear()} Apis Financial</span>
           <span>Information only — not financial or tax advice.</span>
         </div>
       </footer>

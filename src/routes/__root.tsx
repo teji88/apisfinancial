@@ -78,13 +78,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "MapleWealth — Canadian portfolio tracker" },
+      { title: "Apis Financial — Canadian portfolio tracker" },
       {
         name: "description",
         content:
           "Track TFSA, RRSP, FHSA and non-registered accounts in CAD with adjusted cost base, MWRR and TWRR.",
       },
-      { property: "og:title", content: "MapleWealth — Canadian portfolio tracker" },
+      { property: "og:title", content: "Apis Financial — Canadian portfolio tracker" },
       {
         property: "og:description",
         content: "Canadian portfolio tracking with ACB, dividends and retirement planning.",

@@ -29,13 +29,13 @@ import {
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "Dashboard — MapleWealth" },
+      { title: "Dashboard — Apis Financial" },
       {
         name: "description",
         content:
           "Your Canadian portfolio at a glance: market value in CAD, adjusted cost base, day change, money-weighted and time-weighted returns.",
       },
-      { property: "og:title", content: "Dashboard — MapleWealth" },
+      { property: "og:title", content: "Dashboard — Apis Financial" },
       {
         property: "og:description",
         content: "Portfolio value, ACB, MWRR and TWRR across all your registered and taxable accounts.",
@@ -135,7 +135,7 @@ function Dashboard() {
         <div>
           <h2 className="text-xl font-semibold">Let&apos;s set up your first account</h2>
           <p className="mt-1 max-w-md text-sm text-muted-foreground">
-            Add a TFSA, RRSP, FHSA, or non-registered account, then record your trades. MapleWealth
+            Add a TFSA, RRSP, FHSA, or non-registered account, then record your trades. Apis Financial
             handles the CAD conversion, adjusted cost base and return math for you.
           </p>
         </div>

@@ -52,13 +52,13 @@ import {
 export const Route = createFileRoute("/_authenticated/performance")({
   head: () => ({
     meta: [
-      { title: "Performance & Benchmarking — MapleWealth" },
+      { title: "Performance & Benchmarking — Apis Financial" },
       {
         name: "description",
         content:
           "Compare your portfolio against the S&P 500, S&P/TSX Composite and an all-equity global ETF using a cash-flow-matched simulation that buys the index on your exact deposit dates.",
       },
-      { property: "og:title", content: "Performance & Benchmarking — MapleWealth" },
+      { property: "og:title", content: "Performance & Benchmarking — Apis Financial" },
       {
         property: "og:description",
         content:

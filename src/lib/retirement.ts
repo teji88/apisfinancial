@@ -1,5 +1,5 @@
 /**
- * MapleWealth retirement engine (household edition).
+ * Apis Financial retirement engine (household edition).
  * Engine 1: forward projection → earliest sustainable retirement age.
  * Engine 2: tax-efficient drawdown with RRSP/LIF melt-down to pre-empt the
  *           age-71 forced-withdrawal spike and OAS clawback.
