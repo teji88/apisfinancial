@@ -199,12 +199,30 @@ function PerformancePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Performance &amp; benchmarking</h1>
-        <p className="text-sm text-muted-foreground">
-          Each benchmark buys the index ETF with your exact deposit dates and amounts, so the gap
-          you see is real alpha — not a static overlay.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Performance &amp; benchmarking</h1>
+          <p className="text-sm text-muted-foreground">
+            Each benchmark buys the index ETF with your exact deposit dates and amounts, so the gap
+            you see is real alpha — not a static overlay.
+          </p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">Account</p>
+          <Select value={accountFilter} onValueChange={setAccountFilter}>
+            <SelectTrigger className="w-60">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All accounts together</SelectItem>
+              {accounts.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name} · {a.account_type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
