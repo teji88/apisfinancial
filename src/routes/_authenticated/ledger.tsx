@@ -452,7 +452,24 @@ function LedgerPage() {
                 </SelectContent>
               </Select>
             </div>
-            {type === "DIVIDEND" ? (
+            {isSplit ? (
+              <div className="space-y-1.5 md:col-span-2">
+                <Label htmlFor="ratio">New shares per 1 old share</Label>
+                <Input
+                  id="ratio"
+                  type="number"
+                  step="any"
+                  placeholder="2 for a 2-for-1, 0.1 for a 1-for-10"
+                  value={units}
+                  onChange={(e) => setUnits(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {heldUnits > 0 && Number(units || 0) > 0
+                    ? `${formatUnits(heldUnits)} shares become ${formatUnits(heldUnits * Number(units))}. What you paid stays the same, so the cost per share changes only.`
+                    : "A split changes how many shares you hold. No money moves, and your cost base and returns are untouched."}
+                </p>
+              </div>
+            ) : type === "DIVIDEND" ? (
               <div className="space-y-1.5">
                 <Label htmlFor="amount">Dividend amount</Label>
                 <Input
