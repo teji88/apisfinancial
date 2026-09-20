@@ -160,7 +160,7 @@ function AppHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
-      <div className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.06]" aria-hidden />
+      <div className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.14]" aria-hidden />
       <div className="relative mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-6">
         <Link to="/dashboard" className="flex items-center gap-2">
           <ApisLogo variant="full" size="sm" />
