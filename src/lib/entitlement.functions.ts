@@ -64,7 +64,7 @@ export const getEntitlement = createServerFn({ method: "POST" })
     if (base.isAdmin) {
       return {
         ...base,
-        tier: "pro",
+        tier: "pro_plus",
         readOnly: false,
         graceUntil: null,
         accessEndsAt: null,
@@ -100,9 +100,10 @@ export const getEntitlement = createServerFn({ method: "POST" })
           new Date(s.current_period_end).getTime() > now),
     );
     if (active) {
+      const isPlus = (active.price_id ?? "").startsWith("pro_plus");
       return {
         ...base,
-        tier: "pro",
+        tier: isPlus ? "pro_plus" : "pro",
         readOnly: false,
         graceUntil: null,
         accessEndsAt: active.current_period_end ?? null,
@@ -112,6 +113,7 @@ export const getEntitlement = createServerFn({ method: "POST" })
         holdingLimit: null,
       };
     }
+
 
     // A plan or invite that has ended: everything becomes read-only.
     const lapsedEnd =
