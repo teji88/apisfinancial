@@ -444,6 +444,16 @@ export function buildValuationSeries(
           lastFx.set(t.holding_id, rateFor(t, holdingById.get(t.holding_id)));
         }
         break;
+      case "SPLIT":
+        // No money moves: scale units and the last seen price so the
+        // valuation is continuous across the split date.
+        if (t.holding_id) {
+          const ratio = splitRatio(t);
+          units.set(t.holding_id, (units.get(t.holding_id) ?? 0) * ratio);
+          const prev = lastPrice.get(t.holding_id);
+          if (prev) lastPrice.set(t.holding_id, prev / ratio);
+        }
+        break;
       case "DIVIDEND":
         if (withCash) cash += gross;
         else flowOnDate -= gross;
