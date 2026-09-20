@@ -292,7 +292,14 @@ function Landing() {
           </div>
         </section>
 
+        <section className="border-t border-border/60 bg-background/40">
+          <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center md:px-6">
+            <h2 className="font-display text-3xl font-semibold">
+              See your retirement date, not just your balance
+            </h2>
+            <p className="mt-3 text-sm text-muted-foreground">
               Add your accounts and Apis Financial does the rest — in today&apos;s dollars, with
+
               Canadian tax rules built in.
             </p>
             <Button asChild size="lg" className="honey-fill mt-7">
