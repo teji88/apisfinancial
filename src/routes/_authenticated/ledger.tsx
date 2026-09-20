@@ -20,7 +20,7 @@ import {
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { lookupSymbol } from "@/lib/market.functions";
-import { getFxRateOn } from "@/lib/history.functions";
+import { getFxRateOn, getQuoteOnDate } from "@/lib/history.functions";
 import {
   TICKER_HINT,
   canadianAlternative,
@@ -91,6 +91,7 @@ function LedgerPage() {
   const deleteTransaction = useDeleteTransaction();
   const lookup = useServerFn(lookupSymbol);
   const fxOnDate = useServerFn(getFxRateOn);
+  const quoteOnDate = useServerFn(getQuoteOnDate);
 
   const [accountId, setAccountId] = useState<string>("");
   const [type, setType] = useState<string>("BUY");
