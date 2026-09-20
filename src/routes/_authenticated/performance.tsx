@@ -301,8 +301,25 @@ function PerformancePage() {
             Your portfolio vs the benchmarks
           </h2>
           <span className="text-xs text-muted-foreground">
-            {start} → {end}
+            {Math.max(start, periodStart)} → {end}
           </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {PERIODS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setPeriod(p.id)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                period === p.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
