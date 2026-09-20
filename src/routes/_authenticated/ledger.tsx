@@ -275,6 +275,7 @@ function LedgerPage() {
       setUnits("");
       setAmount("");
       setFee("0");
+      setPriceTouched(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save the transaction");
     }
@@ -453,26 +454,17 @@ function LedgerPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="price">Price per unit</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="price"
-                      type="number"
-                      step="any"
-                      value={price}
-                      onChange={(e) => {
-                        setPrice(e.target.value);
-                        setPriceNote("Your own price");
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => void pullPriceOnDate()}
-                      disabled={pricing}
-                    >
-                      {pricing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Close on date"}
-                    </Button>
-                  </div>
+                  <Input
+                    id="price"
+                    type="number"
+                    step="any"
+                    value={price}
+                    onChange={(e) => {
+                      setPrice(e.target.value);
+                      setPriceTouched(true);
+                      setPriceNote("Your own price");
+                    }}
+                  />
                   {priceNote ? (
                     <p className="text-xs text-muted-foreground">{priceNote}</p>
                   ) : null}
