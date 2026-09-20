@@ -1074,8 +1074,9 @@ function RetirementPage() {
       <UpgradeDialog
         open={proPromptOpen}
         onOpenChange={setProPromptOpen}
-        reason="The free plan runs the retirement plan on standard assumptions — retirement at 65, CPP and OAS at 65, 2.5% inflation, 10% growth, to age 95, single. Pro lets you change all of them."
+        reason={promptReason || PRO_REASON}
       />
+
     </div>
   );
 }
