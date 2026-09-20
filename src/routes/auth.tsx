@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Leaf } from "lucide-react";
+import { ApisLogo } from "@/components/brand/ApisLogo";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
@@ -108,15 +108,11 @@ function AuthPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-12">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Leaf className="h-5 w-5" />
-          </span>
-          <div>
-            <h1 className="text-lg font-semibold leading-none">Apis Financial</h1>
-            <p className="text-xs text-muted-foreground">Canadian portfolio tracking</p>
-          </div>
+        <div className="mb-8 flex flex-col items-center gap-2">
+          <ApisLogo variant="stacked" size="lg" />
+          <p className="text-xs text-muted-foreground">Canadian portfolio tracking</p>
         </div>
+
 
         <div className="panel p-6">
           <h2 className="text-xl font-semibold">

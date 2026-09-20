@@ -7,11 +7,12 @@ import {
   FileUp,
   Landmark,
   LayoutDashboard,
-  Leaf,
   Minus,
   Receipt,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { ApisLogo } from "@/components/brand/ApisLogo";
+
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
@@ -97,10 +98,8 @@ function Landing() {
     <div className="min-h-screen bg-surface">
       <header className="border-b border-border/60">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 md:px-6">
-          <span className="flex items-center gap-2 font-display text-lg font-semibold">
-            <Leaf className="h-5 w-5 text-primary" />
-            Apis Financial
-          </span>
+          <ApisLogo variant="full" size="sm" />
+
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm">
               <Link to="/auth">Sign in</Link>
