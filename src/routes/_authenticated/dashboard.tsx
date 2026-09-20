@@ -236,6 +236,8 @@ function Dashboard() {
                       color: "var(--popover-foreground)",
                       fontSize: 12,
                     }}
+                    labelStyle={{ color: "var(--accent)", fontWeight: 600 }}
+                    itemStyle={{ color: "var(--accent)" }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -310,11 +312,11 @@ function Dashboard() {
               <TableRow>
                 <TableHead>Symbol</TableHead>
                 <TableHead className="text-right">Units</TableHead>
-                <TableHead className="text-right">Price</TableHead>
-                <TableHead className="text-right">Market value</TableHead>
-                <TableHead className="text-right">ACB / unit</TableHead>
-                <TableHead className="text-right">Day</TableHead>
-                <TableHead className="text-right">Total return</TableHead>
+                <TableHead className="text-right">Price (traded)</TableHead>
+                <TableHead className="text-right">Market value (CAD)</TableHead>
+                <TableHead className="text-right">ACB / unit (CAD)</TableHead>
+                <TableHead className="text-right">Day (CAD)</TableHead>
+                <TableHead className="text-right">Total return (CAD)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
