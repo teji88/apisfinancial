@@ -136,7 +136,14 @@ function PerformancePage() {
       BENCHMARK_GROUPS.map((g) => {
         const symbol = picked[g.id] ?? g.options[0]!.symbol;
         const option = g.options.find((o) => o.symbol === symbol) ?? g.options[0]!;
-        return { id: g.id, label: g.label, symbol: option.symbol, note: option.note };
+        return {
+          id: g.id,
+          label: g.label,
+          symbol: option.symbol,
+          note: option.note,
+          annualYield: option.annualYield,
+        };
+
       }),
     [picked],
   );
