@@ -169,11 +169,16 @@ export function computePositions(
     let realized = 0;
     let dividends = 0;
 
+    // Last price the user actually recorded, in the holding's own currency.
+    // Used to value symbols with no market feed (delisted, merged, private).
+    let ledgerPrice: number | null = null;
+
     for (const t of txns) {
       const type = t.transaction_type;
       if (type === "BUY" || type === "DRIP") {
         units += t.units || 0;
         acb += grossCad(t) + feeCad(t);
+        if (t.price_per_unit) ledgerPrice = t.price_per_unit;
       } else if (type === "SELL") {
         const sold = Math.min(t.units || 0, units);
         const acbSold = units > 0 ? (acb * sold) / units : 0;
@@ -181,13 +186,16 @@ export function computePositions(
         realized += proceeds - acbSold;
         acb -= acbSold;
         units -= sold;
+        if (t.price_per_unit) ledgerPrice = t.price_per_unit;
         if (units <= 1e-9) {
           units = 0;
           acb = 0;
         }
       } else if (type === "SPLIT") {
         // Unit count changes, total cost base does not.
-        units *= splitRatio(t);
+        const ratio = splitRatio(t);
+        units *= ratio;
+        if (ledgerPrice != null && ratio > 0) ledgerPrice /= ratio;
       } else if (type === "DIVIDEND") {
         dividends += grossCad(t);
       } else if (type === "FEE") {
@@ -197,8 +205,10 @@ export function computePositions(
 
     const quote = quotes[h.symbol.toUpperCase()];
     const fx = h.currency === "USD" ? fxUsdCad : 1;
-    const price = quote?.price ?? null;
-    const prev = quote?.previousClose ?? null;
+    const quoted = quote?.price ?? null;
+    const estimated = quoted == null;
+    const price = quoted ?? ledgerPrice;
+    const prev = estimated ? null : (quote?.previousClose ?? null);
     const marketValue = price != null ? units * price * fx : 0;
     const dayChange = price != null && prev != null ? units * (price - prev) * fx : 0;
     const unrealized = price != null ? marketValue - acb : 0;
