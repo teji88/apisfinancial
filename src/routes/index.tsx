@@ -74,18 +74,26 @@ const FEATURES = [
   },
 ];
 
-const COMPARISON: Array<{ label: string; free: string | boolean; pro: string | boolean }> = [
-  { label: "Accounts", free: "1", pro: "Unlimited" },
-  { label: "Holdings", free: "10", pro: "Unlimited" },
-  { label: "Ledger, adjusted cost base and returns", free: true, pro: true },
-  { label: "Dividends and the ten-year compounder", free: true, pro: true },
-  { label: "Benchmarking", free: true, pro: true },
-  { label: "Retirement plan and withdrawal schedule", free: true, pro: true },
-  { label: "Upload a statement for AI reading", free: false, pro: true },
-  { label: "Change retirement age, CPP and OAS start dates", free: false, pro: true },
-  { label: "Change inflation, growth and life expectancy", free: false, pro: true },
-  { label: "Couple planning and manual balance override", free: false, pro: true },
+const COMPARISON: Array<{
+  label: string;
+  free: string | boolean;
+  pro: string | boolean;
+  plus: string | boolean;
+}> = [
+  { label: "Accounts", free: "1", pro: "Unlimited", plus: "Unlimited" },
+  { label: "Holdings", free: "10", pro: "Unlimited", plus: "Unlimited" },
+  { label: "Ledger, adjusted cost base and returns", free: true, pro: true, plus: true },
+  { label: "Dividends and the ten-year compounder", free: true, pro: true, plus: true },
+  { label: "Benchmarking", free: true, pro: true, plus: true },
+  { label: "Retirement plan and withdrawal schedule", free: true, pro: true, plus: true },
+  { label: "All accounts combined vs benchmarks", free: false, pro: true, plus: true },
+  { label: "Upload a statement for AI reading", free: false, pro: true, plus: true },
+  { label: "Change retirement age, CPP and OAS start dates", free: false, pro: true, plus: true },
+  { label: "Change inflation, growth and life expectancy", free: false, pro: true, plus: true },
+  { label: "Couple and household planning", free: false, pro: false, plus: true },
+  { label: "Savings split and what-if balances", free: false, pro: false, plus: true },
 ];
+
 
 function Landing() {
   const { session, loading } = useAuth();
