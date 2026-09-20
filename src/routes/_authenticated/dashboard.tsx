@@ -310,10 +310,6 @@ function Dashboard() {
           <span className="text-xs text-muted-foreground">
             Prices as of {pricesAsOf ?? "—"} · refreshed once daily after market close ·
             USD/CAD {fxUsdCad.toFixed(4)}
-            {missingPrices.length > 0
-              ? ` · no price available for ${missingPrices.join(", ")}`
-              : ""}
-
           </span>
         </div>
         <div className="overflow-x-auto">
