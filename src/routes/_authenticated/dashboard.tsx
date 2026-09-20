@@ -335,10 +335,27 @@ function Dashboard() {
                       </TableCell>
                       <TableCell className="num text-right">{formatUnits(p.units)}</TableCell>
                       <TableCell className="num text-right">
-                        {p.price != null ? p.price.toFixed(2) : "—"}
+                        {p.price != null ? (
+                          <span className="inline-flex items-baseline gap-1">
+                            {p.price.toFixed(2)}
+                            <CurrencyBadge code={p.currency} />
+                          </span>
+                        ) : (
+                          "—"
+                        )}
                       </TableCell>
-                      <TableCell className="num text-right">{formatCad(p.marketValue)}</TableCell>
-                      <TableCell className="num text-right">{formatCad(p.acbPerUnit)}</TableCell>
+                      <TableCell className="num text-right">
+                        <span className="inline-flex items-baseline gap-1">
+                          {formatCad(p.marketValue)}
+                          <CurrencyBadge code="CAD" />
+                        </span>
+                      </TableCell>
+                      <TableCell className="num text-right">
+                        <span className="inline-flex items-baseline gap-1">
+                          {formatCad(p.acbPerUnit)}
+                          <CurrencyBadge code="CAD" />
+                        </span>
+                      </TableCell>
                       <TableCell
                         className={`num text-right ${p.dayChange >= 0 ? "text-gain" : "text-loss"}`}
                       >
