@@ -376,10 +376,13 @@ function PerformancePage() {
                 <YAxis
                   tick={{ fontSize: 11 }}
                   stroke="var(--muted-foreground)"
-                  width={72}
-                  tickFormatter={(v: number) => formatCad(v, 0)}
+                  width={56}
+                  tickFormatter={(v: number) => `${v}%`}
                 />
-                <Tooltip formatter={(v: number) => formatCad(v)} contentStyle={tooltipStyle} />
+                <Tooltip
+                  formatter={(v: number) => [`${v > 0 ? "+" : ""}${v}%`, undefined]}
+                  contentStyle={tooltipStyle}
+                />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line
                   type="monotone"
