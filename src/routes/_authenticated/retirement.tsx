@@ -730,27 +730,28 @@ function RetirementPage() {
                 onChange={(e) => set({ annual_savings: num(e.target.value) })}
               />
             </Field>
-            <Field label="% to TFSA">
+            <Field label="% to TFSA" {...plusProps}>
               <Input
                 type="number"
                 value={p.save_pct_tfsa ?? 40}
                 onChange={(e) => set({ save_pct_tfsa: num(e.target.value) })}
               />
             </Field>
-            <Field label="% to RRSP / FHSA">
+            <Field label="% to RRSP / FHSA" {...plusProps}>
               <Input
                 type="number"
                 value={p.save_pct_rrsp ?? 40}
                 onChange={(e) => set({ save_pct_rrsp: num(e.target.value) })}
               />
             </Field>
-            <Field label="% to non-registered">
+            <Field label="% to non-registered" {...plusProps}>
               <Input
                 type="number"
                 value={p.save_pct_nonreg ?? 20}
                 onChange={(e) => set({ save_pct_nonreg: num(e.target.value) })}
               />
             </Field>
+
             <p className="col-span-full text-xs text-muted-foreground">
               Splits are normalised, so they do not have to add to exactly 100. Today they total{" "}
               {(p.save_pct_tfsa ?? 0) + (p.save_pct_rrsp ?? 0) + (p.save_pct_nonreg ?? 0)}%.
