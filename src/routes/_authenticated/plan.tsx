@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { PlanUpgrade } from "@/components/PlanUpgrade";
 import { useEntitlement, formatDate } from "@/lib/entitlement";
-import { getStripeEnvironment, PRO_PRICES } from "@/lib/stripe";
+import { getStripeEnvironment, PLAN_PRICES, planOfPrice, type PaidPlan } from "@/lib/stripe";
 import {
   createPortalSession,
   syncSubscription,
@@ -80,8 +80,8 @@ function PlanPage() {
     (async () => {
       for (let attempt = 0; attempt < 8 && !cancelled; attempt++) {
         const data = await refreshFromProvider(true);
-        if (data && data.tier === "pro") {
-          toast.success("Payment received — Pro is active. Thank you!");
+        if (data && data.tier !== "free") {
+          toast.success("Payment received — your plan is active. Thank you!");
           break;
         }
         await new Promise((r) => setTimeout(r, 2000));
@@ -154,9 +154,17 @@ function PlanPage() {
             {isOwner
               ? "Owner — full access"
               : isPaid
-                ? `Pro — ${billing === "monthly" ? "$1 a month" : "$10 a year"}`
+                ? `${planName(currentPlan)} — ${
+                    currentPlan === "pro"
+                      ? billing === "monthly"
+                        ? "$1 a month"
+                        : "$10 a year"
+                      : billing === "monthly"
+                        ? "$2 a month"
+                        : "$20 a year"
+                  }`
                 : isInvite
-                  ? "Pro — invite code"
+                  ? "Pro+ — invite code"
                   : "Free"}
           </p>
           {entitlement.readOnly && <Badge variant="destructive">View only</Badge>}
