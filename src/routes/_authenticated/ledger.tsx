@@ -106,8 +106,9 @@ function LedgerPage() {
   const [fxAuto, setFxAuto] = useState(false);
   // Once the user types their own rate or price, we never overwrite it.
   const [fxTouched, setFxTouched] = useState(false);
+  // Once the user types their own price, it wins over any fetched close.
+  const [priceTouched, setPriceTouched] = useState(false);
   const [priceNote, setPriceNote] = useState<string | null>(null);
-  const [pricing, setPricing] = useState(false);
   const [fee, setFee] = useState("0");
   const [date, setDate] = useState(today());
   const [looking, setLooking] = useState(false);
@@ -146,6 +147,25 @@ function LedgerPage() {
   }, [currency, date]);
 
   const symbolSuggestions = useMemo(() => suggestTickers(symbol, 8), [symbol]);
+
+  // When a past trade date is chosen (or changed), fill the price with that
+  // day's close — unless the user typed their own price.
+  useEffect(() => {
+    let cancelled = false;
+    if (priceTouched) return;
+    const clean = normalizeTicker(symbol);
+    if (!clean || !/^\d{4}-\d{2}-\d{2}$/.test(date) || date >= today()) return;
+    void (async () => {
+      const res = await quoteOnDate({ data: { symbol: clean, date } });
+      if (cancelled || !res) return;
+      setPrice(res.close.toFixed(2));
+      setPriceNote(`Close on ${res.date}`);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
   const rows = useMemo(() => {
     const list =
@@ -186,8 +206,12 @@ function LedgerPage() {
       const market = used.endsWith(".TO") ? "Toronto" : "US";
 
       // Use the close on the trade date rather than today's quote.
+      // A price the user typed themselves always wins.
       const wantsHistory = /^\d{4}-\d{2}-\d{2}$/.test(date) && date < today();
-      const onDate = wantsHistory ? await quoteOnDate({ data: { symbol: used, date } }) : null;
+      const onDate =
+        wantsHistory && !priceTouched
+          ? await quoteOnDate({ data: { symbol: used, date } })
+          : null;
       if (onDate) {
         setPrice(onDate.close.toFixed(2));
         setPriceNote(`Close on ${onDate.date}`);
@@ -196,39 +220,17 @@ function LedgerPage() {
         );
         return;
       }
-      setPrice(quote.price.toFixed(2));
-      setPriceNote(wantsHistory ? "No close stored for that date — today's price shown" : null);
+      if (!priceTouched) {
+        setPrice(quote.price.toFixed(2));
+        setPriceNote(
+          wantsHistory ? "No close stored for that date — today's price shown" : null,
+        );
+      }
       toast.success(
         `${quote.name ?? used} · ${market} · ${quote.price.toFixed(2)} ${quote.currency ?? ""}`,
       );
     } finally {
       setLooking(false);
-    }
-  }
-
-  /** Re-fetch the official close for the date currently in the form. */
-  async function pullPriceOnDate() {
-    const clean = normalizeTicker(symbol);
-    if (!clean) {
-      toast.error("Enter a symbol first.");
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      toast.error("Pick a valid date first.");
-      return;
-    }
-    setPricing(true);
-    try {
-      const res = await quoteOnDate({ data: { symbol: clean, date } });
-      if (!res) {
-        toast.error(`No close stored for ${clean} on ${date}.`);
-        return;
-      }
-      setPrice(res.close.toFixed(2));
-      setPriceNote(`Close on ${res.date}`);
-      toast.success(`${clean} closed at ${res.close.toFixed(2)} ${res.currency} on ${res.date}`);
-    } finally {
-      setPricing(false);
     }
   }
 
@@ -273,6 +275,7 @@ function LedgerPage() {
       setUnits("");
       setAmount("");
       setFee("0");
+      setPriceTouched(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save the transaction");
     }
@@ -451,26 +454,17 @@ function LedgerPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="price">Price per unit</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="price"
-                      type="number"
-                      step="any"
-                      value={price}
-                      onChange={(e) => {
-                        setPrice(e.target.value);
-                        setPriceNote("Your own price");
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => void pullPriceOnDate()}
-                      disabled={pricing}
-                    >
-                      {pricing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Close on date"}
-                    </Button>
-                  </div>
+                  <Input
+                    id="price"
+                    type="number"
+                    step="any"
+                    value={price}
+                    onChange={(e) => {
+                      setPrice(e.target.value);
+                      setPriceTouched(true);
+                      setPriceNote("Your own price");
+                    }}
+                  />
                   {priceNote ? (
                     <p className="text-xs text-muted-foreground">{priceNote}</p>
                   ) : null}
@@ -652,7 +646,6 @@ function EditTransactionDialog({
 }) {
   const updateTransaction = useUpdateTransaction();
   const fxOnDate = useServerFn(getFxRateOn);
-  const quoteOnDate = useServerFn(getQuoteOnDate);
   const holding = holdings.find((h) => h.id === transaction.holding_id);
 
   const [accountId, setAccountId] = useState(transaction.account_id);
@@ -680,25 +673,6 @@ function EditTransactionDialog({
     const res = await fxOnDate({ data: { date } });
     if (res.rate) setFxRate(res.rate.toFixed(4));
     else toast.error("No published rate for that date.");
-  }
-
-  async function pullPrice() {
-    const clean = symbol.trim().toUpperCase();
-    if (!clean) {
-      toast.error("Enter a symbol first.");
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      toast.error("Pick a valid date first.");
-      return;
-    }
-    const res = await quoteOnDate({ data: { symbol: clean, date } });
-    if (!res) {
-      toast.error(`No close stored for ${clean} on ${date}.`);
-      return;
-    }
-    setPrice(res.close.toFixed(2));
-    toast.success(`${clean} closed at ${res.close.toFixed(2)} ${res.currency} on ${res.date}`);
   }
 
   async function save() {
@@ -810,18 +784,13 @@ function EditTransactionDialog({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-price">Price per unit</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="edit-price"
-                    type="number"
-                    step="any"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                  />
-                  <Button type="button" variant="outline" onClick={() => void pullPrice()}>
-                    Close on date
-                  </Button>
-                </div>
+                <Input
+                  id="edit-price"
+                  type="number"
+                  step="any"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
               </div>
             </>
           ) : null}
