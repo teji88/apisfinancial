@@ -200,25 +200,21 @@ function PerformancePage() {
     return d.toISOString().slice(0, 10);
   }, [period, start]);
 
-  // Chart shows percentage change since the start of the chosen period so
-  // portfolio and benchmarks are directly comparable over any window.
+  // Chart shows actual dollar values: your portfolio's running value and what
+  // each simulated benchmark would be worth on the same deposits.
   const chartData = useMemo(() => {
     if (!comparison) return [];
     const firstIdx = comparison.grid.findIndex((d) => d >= periodStart);
     if (firstIdx < 0) return [];
-    const base = (arr: number[]) => {
-      const v = arr[firstIdx] ?? 0;
-      return v > 0 ? v : null;
-    };
-    const portBase = base(comparison.portfolio);
-    const benchBases = comparison.benchmarks.map((b) => base(b.values));
     const rows: Record<string, string | number>[] = [];
     for (let i = firstIdx; i < comparison.grid.length; i++) {
       const row: Record<string, string | number> = { date: comparison.grid[i]! };
-      if (portBase) row["Portfolio"] = +(((comparison.portfolio[i] ?? 0) / portBase - 1) * 100).toFixed(2);
-      comparison.benchmarks.forEach((b, bi) => {
-        const bb = benchBases[bi];
-        if (b.available && bb) row[b.label] = +(((b.values[i] ?? 0) / bb - 1) * 100).toFixed(2);
+      const pv = comparison.portfolio[i] ?? 0;
+      if (pv > 0) row["Portfolio"] = Math.round(pv * 100) / 100;
+      comparison.benchmarks.forEach((b) => {
+        if (!b.available) return;
+        const v = b.values[i] ?? 0;
+        if (v > 0) row[b.label] = Math.round(v * 100) / 100;
       });
       rows.push(row);
     }
