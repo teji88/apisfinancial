@@ -215,7 +215,7 @@ function PerformancePage() {
     const rows: Record<string, string | number>[] = [];
     for (let i = firstIdx; i < comparison.grid.length; i++) {
       const row: Record<string, string | number> = { date: comparison.grid[i]! };
-      if (portBase) row.Portfolio = +(((comparison.portfolio[i] ?? 0) / portBase - 1) * 100).toFixed(2);
+      if (portBase) row["Portfolio"] = +(((comparison.portfolio[i] ?? 0) / portBase - 1) * 100).toFixed(2);
       comparison.benchmarks.forEach((b, bi) => {
         const bb = benchBases[bi];
         if (b.available && bb) row[b.label] = +(((b.values[i] ?? 0) / bb - 1) * 100).toFixed(2);
@@ -301,7 +301,7 @@ function PerformancePage() {
             Your portfolio vs the benchmarks
           </h2>
           <span className="text-xs text-muted-foreground">
-            {Math.max(start, periodStart)} → {end}
+            {(periodStart > start ? periodStart : start)} → {end}
           </span>
         </div>
 
