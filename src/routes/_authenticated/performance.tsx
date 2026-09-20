@@ -373,7 +373,7 @@ function PerformancePage() {
                   tick={{ fontSize: 11 }}
                   stroke="var(--muted-foreground)"
                   width={68}
-                  tickFormatter={(v: number) => formatCad(v).replace(".00", "")}
+                  tickFormatter={(v: number) => formatCad(Math.round(v)).replace(".00", "")}
                 />
                 <Tooltip
                   formatter={(v: number, name: string) => [formatCad(v), name]}
