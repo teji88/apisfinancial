@@ -167,8 +167,9 @@ function PerformancePage() {
       fxUsdCad,
       portfolioValue,
       selection,
+      cashAccounts,
     );
-  }, [history.data, transactions, holdings, fxUsdCad, portfolioValue, selection]);
+  }, [history.data, transactions, holdings, fxUsdCad, portfolioValue, selection, cashAccounts]);
 
   const chartData = useMemo(() => {
     if (!comparison) return [];
