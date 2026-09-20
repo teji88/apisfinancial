@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as BeatXeqtRouteImport } from './routes/beat-xeqt'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -37,6 +38,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BeatXeqtRoute = BeatXeqtRouteImport.update({
+  id: '/beat-xeqt',
+  path: '/beat-xeqt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -105,6 +111,7 @@ const ApiPublicPaymentsWebhookRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/beat-xeqt': typeof BeatXeqtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/beat-xeqt': typeof BeatXeqtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/beat-xeqt': typeof BeatXeqtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/accounts': typeof AuthenticatedAccountsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/beat-xeqt'
     | '/sitemap.xml'
     | '/accounts'
     | '/dashboard'
@@ -173,6 +183,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/beat-xeqt'
     | '/sitemap.xml'
     | '/accounts'
     | '/dashboard'
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/beat-xeqt'
     | '/sitemap.xml'
     | '/_authenticated/accounts'
     | '/_authenticated/dashboard'
@@ -208,6 +220,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  BeatXeqtRoute: typeof BeatXeqtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiPublicRefreshPricesRoute: typeof ApiPublicRefreshPricesRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
@@ -234,6 +247,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/beat-xeqt': {
+      id: '/beat-xeqt'
+      path: '/beat-xeqt'
+      fullPath: '/beat-xeqt'
+      preLoaderRoute: typeof BeatXeqtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sitemap.xml': {
@@ -354,6 +374,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  BeatXeqtRoute: BeatXeqtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiPublicRefreshPricesRoute: ApiPublicRefreshPricesRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,

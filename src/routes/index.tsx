@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ApisLogo } from "@/components/brand/ApisLogo";
+import { BenchmarkSimulator } from "@/components/BenchmarkSimulator";
+
 
 import { Button } from "@/components/ui/button";
 
@@ -153,7 +155,12 @@ function Landing() {
           </div>
         </section>
 
+        <section className="mx-auto w-full max-w-6xl px-4 pb-4 md:px-6">
+          <BenchmarkSimulator />
+        </section>
+
         <section className="border-y border-border/60 bg-background/40">
+
           <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-16 md:grid-cols-3 md:px-6">
             {FEATURES.map((f) => (
               <div key={f.title} className="honey-card p-5">
