@@ -13,4 +13,4 @@ Allow: /
 User-agent: *
 Allow: /
 
-Sitemap: https://apisfinancial.lovable.app/sitemap.xml
+Sitemap: https://apisfinancial.app/sitemap.xml
