@@ -212,7 +212,7 @@ function LedgerPage() {
 
       await addTransaction.mutateAsync({
         accountId: targetAccount,
-        symbol: isCash ? "" : symbol,
+        symbol: isCash ? "" : cleanSymbol,
         name: symbolName,
         assetType,
         transactionType: type,
