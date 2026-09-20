@@ -52,7 +52,7 @@ export function ApisMark({ className }: { className?: string }) {
         strokeWidth="3.4"
         strokeLinejoin="round"
         fill="none"
-        className="text-[#0D1B2A] dark:text-[#E8EDF5]"
+        className="text-[#B45309] dark:text-[#FBBF24]"
       >
         <path d="M14 14.5 22 10l8 4.5v9L22 28l-8-4.5z" />
         <path d="M14 34.5 22 30l8 4.5v9L22 48l-8-4.5z" />

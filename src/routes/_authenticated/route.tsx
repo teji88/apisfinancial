@@ -150,26 +150,31 @@ function AppHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-6">
+      <div className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.06]" aria-hidden />
+      <div className="relative mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-6">
         <Link to="/dashboard" className="flex items-center gap-2">
           <ApisLogo variant="full" size="sm" />
         </Link>
 
 
-        <div className="hidden items-center gap-1 rounded-lg bg-muted p-1 md:flex">
+        <div className="hidden items-center gap-1 rounded-lg bg-secondary/70 p-1 md:flex">
           {NAV.map((item) => (
             <Link
               key={item.to}
               to={item.to}
               activeOptions={{ exact: true }}
-              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-              activeProps={{ className: "bg-card text-foreground shadow-sm" }}
+              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/10 hover:text-foreground"
+              activeProps={{
+                className:
+                  "bg-accent/20 text-foreground shadow-sm ring-1 ring-accent/40 font-medium",
+              }}
             >
               <item.icon className="h-4 w-4" />
               {item.label}
             </Link>
           ))}
         </div>
+
 
         <div className="ml-auto flex items-center gap-4">
           <div className="hidden text-right sm:block">
