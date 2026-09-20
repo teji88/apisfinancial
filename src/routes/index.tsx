@@ -142,8 +142,8 @@ function Landing() {
             {FEATURES.map((f) => (
               <div key={f.title} className="panel p-5">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/20 text-accent-foreground">
-
                   <f.icon className="h-5 w-5" />
+
                 </span>
                 <h3 className="mt-3 text-base font-semibold">{f.title}</h3>
                 <p className="mt-1.5 text-sm text-muted-foreground">{f.body}</p>
