@@ -104,44 +104,56 @@ function Landing() {
             <Button asChild variant="ghost" size="sm">
               <Link to="/auth">Sign in</Link>
             </Button>
-            <Button asChild size="sm">
+            <Button asChild size="sm" className="honey-fill">
               <Link to="/auth">Get started</Link>
             </Button>
+
           </div>
         </div>
       </header>
 
       <main>
-        <section className="mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6 md:py-24">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">
-            Built for Canadian investors
-          </p>
-          <h1 className="mx-auto mt-4 max-w-3xl font-display text-4xl font-semibold leading-tight md:text-5xl">
-            Know what you own, what it earns, and when you can retire
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground">
-            Apis Financial tracks your registered and non-registered accounts in Canadian dollars,
-            follows your dividend income, measures you against the market, and turns it all into a
-            retirement plan that keeps tax and OAS clawback as low as possible.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Button asChild size="lg">
-              <Link to="/auth">Start free</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <a href="#pricing">See pricing</a>
-            </Button>
+        <section className="relative overflow-hidden">
+          <div
+            className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.07]"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ background: "var(--honey-glow)" }}
+            aria-hidden
+          />
+          <div className="relative mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6 md:py-24">
+            <p className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-primary">
+              Built for Canadian investors
+            </p>
+            <h1 className="mx-auto mt-4 max-w-3xl font-display text-4xl font-semibold leading-tight md:text-5xl">
+              Know what you own, what it earns, and when you can retire
+            </h1>
+            <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground">
+              Apis Financial tracks your registered and non-registered accounts in Canadian dollars,
+              follows your dividend income, measures you against the market, and turns it all into a
+              retirement plan that keeps tax and OAS clawback as low as possible.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <Button asChild size="lg" className="honey-fill">
+                <Link to="/auth">Start free</Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-accent/50">
+                <a href="#pricing">See pricing</a>
+              </Button>
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Free plan covers one account and ten holdings. No card needed.
+            </p>
           </div>
-          <p className="mt-4 text-xs text-muted-foreground">
-            Free plan covers one account and ten holdings. No card needed.
-          </p>
         </section>
 
         <section className="border-y border-border/60 bg-background/40">
           <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-16 md:grid-cols-3 md:px-6">
             {FEATURES.map((f) => (
-              <div key={f.title} className="panel p-5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/20 text-accent-foreground">
+              <div key={f.title} className="honey-card p-5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/25 text-primary ring-1 ring-accent/40">
                   <f.icon className="h-5 w-5" />
 
                 </span>
@@ -152,6 +164,7 @@ function Landing() {
           </div>
         </section>
 
+
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
           <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
           <p className="mx-auto mt-3 max-w-xl text-center text-sm text-muted-foreground">
@@ -160,7 +173,7 @@ function Landing() {
           </p>
 
           <div className="mx-auto mt-10 grid max-w-3xl gap-5 md:grid-cols-2">
-            <div className="panel p-6">
+            <div className="honey-card p-6">
               <h3 className="text-lg font-semibold">Free</h3>
               <p className="num mt-2 text-3xl font-semibold">$0</p>
               <p className="mt-1 text-xs text-muted-foreground">Forever</p>
@@ -173,28 +186,35 @@ function Landing() {
                   "Type transactions in by hand",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
                     {p}
                   </li>
                 ))}
               </ul>
-              <Button asChild className="mt-6 w-full" variant="outline">
+              <Button asChild className="mt-6 w-full border-accent/50" variant="outline">
                 <Link to="/auth">Create an account</Link>
               </Button>
             </div>
 
-            <div className="panel border-primary/50 p-6 ring-1 ring-primary/20">
-              <div className="flex items-center justify-between">
+            <div className="honey-card relative overflow-hidden border-accent/60 p-6 ring-1 ring-accent/30">
+              <div
+                className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.08]"
+                aria-hidden
+              />
+              <div className="relative flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Pro</h3>
-                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                <span className="rounded-full bg-accent/25 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-accent/40">
                   Most useful
                 </span>
               </div>
-              <p className="num mt-2 text-3xl font-semibold">
+
+              <p className="num relative mt-2 text-3xl font-semibold">
                 $1<span className="text-base font-normal text-muted-foreground">/month</span>
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">or $10 a year · cancel any time</p>
-              <ul className="mt-5 space-y-2 text-sm">
+              <p className="relative mt-1 text-xs text-muted-foreground">
+                or $10 a year · cancel any time
+              </p>
+              <ul className="relative mt-5 space-y-2 text-sm">
                 {[
                   "Unlimited accounts and holdings",
                   "Upload statements for AI reading",
@@ -203,18 +223,19 @@ function Landing() {
                   "Everything in Free",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
                     {p}
                   </li>
                 ))}
               </ul>
-              <Button asChild className="mt-6 w-full">
+              <Button asChild className="honey-fill relative mt-6 w-full">
                 <Link to="/auth">Get Pro</Link>
               </Button>
             </div>
           </div>
 
-          <div className="panel mt-12 overflow-x-auto">
+          <div className="honey-card mt-12 overflow-x-auto">
+
             <table className="w-full min-w-[520px] text-sm">
               <thead>
                 <tr className="border-b border-border/60 text-left">
@@ -249,7 +270,7 @@ function Landing() {
               Add your accounts and Apis Financial does the rest — in today&apos;s dollars, with
               Canadian tax rules built in.
             </p>
-            <Button asChild size="lg" className="mt-7">
+            <Button asChild size="lg" className="honey-fill mt-7">
               <Link to="/auth">Start free</Link>
             </Button>
           </div>
@@ -267,7 +288,7 @@ function Landing() {
 }
 
 function Cellv({ value }: { value: string | boolean }) {
-  if (value === true) return <Check className="mx-auto h-4 w-4 text-primary" />;
+  if (value === true) return <Check className="mx-auto h-4 w-4 text-accent" />;
   if (value === false) return <Minus className="mx-auto h-4 w-4 text-muted-foreground" />;
   return <span className="num">{value}</span>;
 }
