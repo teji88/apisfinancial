@@ -74,6 +74,17 @@ export const Route = createFileRoute("/_authenticated/performance")({
 
 const CHART_COLORS = ["var(--series-3)", "var(--series-4)", "var(--series-2)"];
 
+const PERIODS: { id: string; label: string }[] = [
+  { id: "YTD", label: "YTD" },
+  { id: "1M", label: "1M" },
+  { id: "3M", label: "3M" },
+  { id: "6M", label: "6M" },
+  { id: "1Y", label: "1Y" },
+  { id: "3Y", label: "3Y" },
+  { id: "5Y", label: "5Y" },
+  { id: "ALL", label: "Since inception" },
+];
+
 function PerformancePage() {
   const {
     accounts,
@@ -172,19 +183,47 @@ function PerformancePage() {
     );
   }, [history.data, transactions, holdings, fxUsdCad, portfolioValue, selection, cashAccounts]);
 
+  const [period, setPeriod] = useState<string>("ALL");
+
+  const periodStart = useMemo(() => {
+    if (period === "ALL") return start;
+    const d = new Date();
+    if (period === "YTD") return `${d.getFullYear()}-01-01`;
+    const months =
+      period === "1M" ? 1
+      : period === "3M" ? 3
+      : period === "6M" ? 6
+      : period === "1Y" ? 12
+      : period === "3Y" ? 36
+      : 60; // 5Y
+    d.setMonth(d.getMonth() - months);
+    return d.toISOString().slice(0, 10);
+  }, [period, start]);
+
+  // Chart shows percentage change since the start of the chosen period so
+  // portfolio and benchmarks are directly comparable over any window.
   const chartData = useMemo(() => {
     if (!comparison) return [];
-    return comparison.grid.map((date, i) => {
-      const row: Record<string, string | number> = {
-        date,
-        Portfolio: Math.round(comparison.portfolio[i] ?? 0),
-      };
-      for (const b of comparison.benchmarks) {
-        if (b.available) row[b.label] = Math.round(b.values[i] ?? 0);
-      }
-      return row;
-    });
-  }, [comparison]);
+    const firstIdx = comparison.grid.findIndex((d) => d >= periodStart);
+    if (firstIdx < 0) return [];
+    const base = (arr: number[]) => {
+      const v = arr[firstIdx] ?? 0;
+      return v > 0 ? v : null;
+    };
+    const portBase = base(comparison.portfolio);
+    const benchBases = comparison.benchmarks.map((b) => base(b.values));
+    const rows: Record<string, string | number>[] = [];
+    for (let i = firstIdx; i < comparison.grid.length; i++) {
+      const row: Record<string, string | number> = { date: comparison.grid[i]! };
+      if (portBase) row["Portfolio"] = +(((comparison.portfolio[i] ?? 0) / portBase - 1) * 100).toFixed(2);
+      comparison.benchmarks.forEach((b, bi) => {
+        const bb = benchBases[bi];
+        if (b.available && bb) row[b.label] = +(((b.values[i] ?? 0) / bb - 1) * 100).toFixed(2);
+      });
+      rows.push(row);
+    }
+    return rows;
+  }, [comparison, periodStart]);
 
   const tooltipStyle = {
     background: "var(--popover)",
@@ -262,8 +301,25 @@ function PerformancePage() {
             Your portfolio vs the benchmarks
           </h2>
           <span className="text-xs text-muted-foreground">
-            {start} → {end}
+            {(periodStart > start ? periodStart : start)} → {end}
           </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {PERIODS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setPeriod(p.id)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                period === p.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -320,10 +376,13 @@ function PerformancePage() {
                 <YAxis
                   tick={{ fontSize: 11 }}
                   stroke="var(--muted-foreground)"
-                  width={72}
-                  tickFormatter={(v: number) => formatCad(v, 0)}
+                  width={56}
+                  tickFormatter={(v: number) => `${v}%`}
                 />
-                <Tooltip formatter={(v: number) => formatCad(v)} contentStyle={tooltipStyle} />
+                <Tooltip
+                  formatter={(v: number) => [`${v > 0 ? "+" : ""}${v}%`, undefined]}
+                  contentStyle={tooltipStyle}
+                />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line
                   type="monotone"
