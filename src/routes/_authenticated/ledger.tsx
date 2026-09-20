@@ -676,25 +676,6 @@ function EditTransactionDialog({
     else toast.error("No published rate for that date.");
   }
 
-  async function pullPrice() {
-    const clean = symbol.trim().toUpperCase();
-    if (!clean) {
-      toast.error("Enter a symbol first.");
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      toast.error("Pick a valid date first.");
-      return;
-    }
-    const res = await quoteOnDate({ data: { symbol: clean, date } });
-    if (!res) {
-      toast.error(`No close stored for ${clean} on ${date}.`);
-      return;
-    }
-    setPrice(res.close.toFixed(2));
-    toast.success(`${clean} closed at ${res.close.toFixed(2)} ${res.currency} on ${res.date}`);
-  }
-
   async function save() {
     try {
       await updateTransaction.mutateAsync({
@@ -804,18 +785,13 @@ function EditTransactionDialog({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-price">Price per unit</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="edit-price"
-                    type="number"
-                    step="any"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                  />
-                  <Button type="button" variant="outline" onClick={() => void pullPrice()}>
-                    Close on date
-                  </Button>
-                </div>
+                <Input
+                  id="edit-price"
+                  type="number"
+                  step="any"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
               </div>
             </>
           ) : null}
