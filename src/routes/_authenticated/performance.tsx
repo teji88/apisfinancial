@@ -172,19 +172,47 @@ function PerformancePage() {
     );
   }, [history.data, transactions, holdings, fxUsdCad, portfolioValue, selection, cashAccounts]);
 
+  const [period, setPeriod] = useState<string>("ALL");
+
+  const periodStart = useMemo(() => {
+    if (period === "ALL") return start;
+    const d = new Date();
+    if (period === "YTD") return `${d.getFullYear()}-01-01`;
+    const months =
+      period === "1M" ? 1
+      : period === "3M" ? 3
+      : period === "6M" ? 6
+      : period === "1Y" ? 12
+      : period === "3Y" ? 36
+      : 60; // 5Y
+    d.setMonth(d.getMonth() - months);
+    return d.toISOString().slice(0, 10);
+  }, [period, start]);
+
+  // Chart shows percentage change since the start of the chosen period so
+  // portfolio and benchmarks are directly comparable over any window.
   const chartData = useMemo(() => {
     if (!comparison) return [];
-    return comparison.grid.map((date, i) => {
-      const row: Record<string, string | number> = {
-        date,
-        Portfolio: Math.round(comparison.portfolio[i] ?? 0),
-      };
-      for (const b of comparison.benchmarks) {
-        if (b.available) row[b.label] = Math.round(b.values[i] ?? 0);
-      }
-      return row;
-    });
-  }, [comparison]);
+    const firstIdx = comparison.grid.findIndex((d) => d >= periodStart);
+    if (firstIdx < 0) return [];
+    const base = (arr: number[]) => {
+      const v = arr[firstIdx] ?? 0;
+      return v > 0 ? v : null;
+    };
+    const portBase = base(comparison.portfolio);
+    const benchBases = comparison.benchmarks.map((b) => base(b.values));
+    const rows: Record<string, string | number>[] = [];
+    for (let i = firstIdx; i < comparison.grid.length; i++) {
+      const row: Record<string, string | number> = { date: comparison.grid[i]! };
+      if (portBase) row.Portfolio = +(((comparison.portfolio[i] ?? 0) / portBase - 1) * 100).toFixed(2);
+      comparison.benchmarks.forEach((b, bi) => {
+        const bb = benchBases[bi];
+        if (b.available && bb) row[b.label] = +(((b.values[i] ?? 0) / bb - 1) * 100).toFixed(2);
+      });
+      rows.push(row);
+    }
+    return rows;
+  }, [comparison, periodStart]);
 
   const tooltipStyle = {
     background: "var(--popover)",
