@@ -207,11 +207,13 @@ function Landing() {
                 </span>
               </div>
 
-              <p className="num mt-2 text-3xl font-semibold">
+              <p className="num relative mt-2 text-3xl font-semibold">
                 $1<span className="text-base font-normal text-muted-foreground">/month</span>
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">or $10 a year · cancel any time</p>
-              <ul className="mt-5 space-y-2 text-sm">
+              <p className="relative mt-1 text-xs text-muted-foreground">
+                or $10 a year · cancel any time
+              </p>
+              <ul className="relative mt-5 space-y-2 text-sm">
                 {[
                   "Unlimited accounts and holdings",
                   "Upload statements for AI reading",
@@ -220,18 +222,19 @@ function Landing() {
                   "Everything in Free",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
                     {p}
                   </li>
                 ))}
               </ul>
-              <Button asChild className="mt-6 w-full">
+              <Button asChild className="honey-fill relative mt-6 w-full">
                 <Link to="/auth">Get Pro</Link>
               </Button>
             </div>
           </div>
 
-          <div className="panel mt-12 overflow-x-auto">
+          <div className="honey-card mt-12 overflow-x-auto">
+
             <table className="w-full min-w-[520px] text-sm">
               <thead>
                 <tr className="border-b border-border/60 text-left">
