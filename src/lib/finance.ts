@@ -229,6 +229,7 @@ export function computePositions(
       realizedGain: realized,
       dividendsReceived: dividends,
       price,
+      priceEstimated: estimated && price != null,
       previousClose: prev,
       marketValue,
       dayChange,
