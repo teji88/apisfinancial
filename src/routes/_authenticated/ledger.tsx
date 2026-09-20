@@ -451,13 +451,29 @@ function LedgerPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="price">Price per unit</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="any"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="price"
+                      type="number"
+                      step="any"
+                      value={price}
+                      onChange={(e) => {
+                        setPrice(e.target.value);
+                        setPriceNote("Your own price");
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void pullPriceOnDate()}
+                      disabled={pricing}
+                    >
+                      {pricing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Close on date"}
+                    </Button>
+                  </div>
+                  {priceNote ? (
+                    <p className="text-xs text-muted-foreground">{priceNote}</p>
+                  ) : null}
                 </div>
               </>
             )}
