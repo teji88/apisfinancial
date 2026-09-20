@@ -503,6 +503,7 @@ function LedgerPage() {
               onChange={(e) => {
                 setFxRate(e.target.value);
                 setFxAuto(false);
+                setFxTouched(true);
               }}
             />
             {fxAuto ? (
