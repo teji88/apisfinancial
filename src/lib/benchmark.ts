@@ -169,6 +169,7 @@ export function portfolioValueSeries(
   history: SeriesMap,
   fx: HistoryPoint[],
   fxNow: number,
+  cashAccounts?: Set<string>,
 ): number[] {
   const holdingById = new Map(holdings.map((h) => [h.id, h]));
   const txns = transactions.slice().sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
@@ -180,7 +181,7 @@ export function portfolioValueSeries(
   return grid.map((date) => {
     while (idx < txns.length && txns[idx]!.transaction_date <= date) {
       const t = txns[idx]!;
-      cash += cashDelta(t);
+      cash += cashDelta(t, cashAccounts);
       if (cash < 0) cash = 0; // implied contribution covers the shortfall
       if (t.holding_id && (t.transaction_type === "BUY" || t.transaction_type === "DRIP")) {
         units.set(t.holding_id, (units.get(t.holding_id) ?? 0) + (t.units || 0));
