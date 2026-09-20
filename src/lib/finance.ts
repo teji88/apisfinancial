@@ -185,6 +185,9 @@ export function computePositions(
           units = 0;
           acb = 0;
         }
+      } else if (type === "SPLIT") {
+        // Unit count changes, total cost base does not.
+        units *= splitRatio(t);
       } else if (type === "DIVIDEND") {
         dividends += grossCad(t);
       } else if (type === "FEE") {
