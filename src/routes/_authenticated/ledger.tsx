@@ -682,6 +682,25 @@ function EditTransactionDialog({
     else toast.error("No published rate for that date.");
   }
 
+  async function pullPrice() {
+    const clean = symbol.trim().toUpperCase();
+    if (!clean) {
+      toast.error("Enter a symbol first.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      toast.error("Pick a valid date first.");
+      return;
+    }
+    const res = await quoteOnDate({ data: { symbol: clean, date } });
+    if (!res) {
+      toast.error(`No close stored for ${clean} on ${date}.`);
+      return;
+    }
+    setPrice(res.close.toFixed(2));
+    toast.success(`${clean} closed at ${res.close.toFixed(2)} ${res.currency} on ${res.date}`);
+  }
+
   async function save() {
     try {
       await updateTransaction.mutateAsync({
