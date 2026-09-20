@@ -531,14 +531,16 @@ function PerformancePage() {
         </Table>
         <p className="mt-3 text-xs text-muted-foreground">
           Simulation assumes every deposit bought the benchmark ETF at that day's closing price, in
-          Canadian dollars, with no dividends reinvested on either side beyond what your ledger
-          records. Holdings are valued at the actual market close on each date, so an early point
-          can differ from the price you typed in the ledger. Canadian-listed prices go back 25
-          years; US-listed prices go back 10.
+          Canadian dollars. Benchmarks are shown on a total-return basis: each fund's distributions
+          accrue over time and are reinvested, so dividends are included in the comparison. Your own
+          side counts the dividends recorded in your ledger. Holdings are valued at the actual market
+          close on each date, so an early point can differ from the price you typed in the ledger.
+          Canadian-listed prices go back 25 years; US-listed prices go back 10.
           {history.data?.missing?.length
             ? ` No price history found for ${history.data.missing.join(", ")} — those holdings are valued at your last recorded price.`
             : ""}
         </p>
+
       </div>
     </div>
   );
