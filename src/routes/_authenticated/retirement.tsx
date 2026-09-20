@@ -1105,11 +1105,13 @@ function Field({
   label,
   children,
   locked = false,
+  planLabel = "Pro",
   onLocked,
 }: {
   label: string;
   children: React.ReactNode;
   locked?: boolean;
+  planLabel?: string;
   onLocked?: () => void;
 }) {
   return (
@@ -1119,7 +1121,7 @@ function Field({
         {locked ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
             <Lock className="h-2.5 w-2.5" />
-            Pro
+            {planLabel}
           </span>
         ) : null}
       </Label>
@@ -1127,12 +1129,13 @@ function Field({
         <button
           type="button"
           className="w-full text-left"
-          title="Upgrade to Pro to change this"
+          title={`Upgrade to ${planLabel} to change this`}
           onClick={onLocked}
         >
           <div className="pointer-events-none opacity-60">{children}</div>
         </button>
       ) : (
+
         children
       )}
     </div>
