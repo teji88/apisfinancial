@@ -120,6 +120,7 @@ function LedgerPage() {
   // Historical USD→CAD rate for the chosen trade date.
   useEffect(() => {
     let cancelled = false;
+    if (fxTouched) return;
     if (currency !== "USD") {
       setFxRate("1");
       setFxAuto(false);
