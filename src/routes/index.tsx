@@ -112,36 +112,47 @@ function Landing() {
       </header>
 
       <main>
-        <section className="mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6 md:py-24">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">
-            Built for Canadian investors
-          </p>
-          <h1 className="mx-auto mt-4 max-w-3xl font-display text-4xl font-semibold leading-tight md:text-5xl">
-            Know what you own, what it earns, and when you can retire
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground">
-            Apis Financial tracks your registered and non-registered accounts in Canadian dollars,
-            follows your dividend income, measures you against the market, and turns it all into a
-            retirement plan that keeps tax and OAS clawback as low as possible.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Button asChild size="lg">
-              <Link to="/auth">Start free</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <a href="#pricing">See pricing</a>
-            </Button>
+        <section className="relative overflow-hidden">
+          <div
+            className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.07]"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ background: "var(--honey-glow)" }}
+            aria-hidden
+          />
+          <div className="relative mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6 md:py-24">
+            <p className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-primary">
+              Built for Canadian investors
+            </p>
+            <h1 className="mx-auto mt-4 max-w-3xl font-display text-4xl font-semibold leading-tight md:text-5xl">
+              Know what you own, what it earns, and when you can retire
+            </h1>
+            <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground">
+              Apis Financial tracks your registered and non-registered accounts in Canadian dollars,
+              follows your dividend income, measures you against the market, and turns it all into a
+              retirement plan that keeps tax and OAS clawback as low as possible.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <Button asChild size="lg" className="honey-fill">
+                <Link to="/auth">Start free</Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-accent/50">
+                <a href="#pricing">See pricing</a>
+              </Button>
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Free plan covers one account and ten holdings. No card needed.
+            </p>
           </div>
-          <p className="mt-4 text-xs text-muted-foreground">
-            Free plan covers one account and ten holdings. No card needed.
-          </p>
         </section>
 
         <section className="border-y border-border/60 bg-background/40">
           <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-16 md:grid-cols-3 md:px-6">
             {FEATURES.map((f) => (
-              <div key={f.title} className="panel p-5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/20 text-accent-foreground">
+              <div key={f.title} className="honey-card p-5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/25 text-primary ring-1 ring-accent/40">
                   <f.icon className="h-5 w-5" />
 
                 </span>
@@ -151,6 +162,7 @@ function Landing() {
             ))}
           </div>
         </section>
+
 
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
           <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
