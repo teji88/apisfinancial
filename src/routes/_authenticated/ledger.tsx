@@ -712,6 +712,7 @@ function EditTransactionDialog({
   const [fee, setFee] = useState(String(transaction.fee ?? 0));
 
   const isCash = CASH_TYPES.includes(type);
+  const isSplit = type === "SPLIT";
 
   async function pullRate() {
     if (currency !== "USD") {
@@ -728,6 +729,10 @@ function EditTransactionDialog({
   }
 
   async function save() {
+    if (isSplit && !(Number(units || 0) > 0)) {
+      toast.error("Enter how many new shares you get for each old share.");
+      return;
+    }
     try {
       await updateTransaction.mutateAsync({
         id: transaction.id,
@@ -737,12 +742,12 @@ function EditTransactionDialog({
         assetType: holding?.asset_type ?? "Stock",
         transactionType: type,
         units: isCash ? 0 : Number(units || 0),
-        pricePerUnit: isCash ? 0 : Number(price || 0),
+        pricePerUnit: isCash || isSplit ? 0 : Number(price || 0),
         amount:
-          isCash || type === "DIVIDEND" ? Number(amount || 0) || null : null,
+          (isCash || type === "DIVIDEND") && !isSplit ? Number(amount || 0) || null : null,
         currency,
-        fxRate: Number(fxRate || 1),
-        fee: Number(fee || 0),
+        fxRate: isSplit ? 1 : Number(fxRate || 1),
+        fee: isSplit ? 0 : Number(fee || 0),
         date,
       });
       toast.success("Transaction updated");
