@@ -33,11 +33,23 @@ export const TRANSACTION_TYPES = [
   "SELL",
   "DIVIDEND",
   "DRIP",
+  "SPLIT",
   "DEPOSIT",
   "WITHDRAWAL",
   "FEE",
 ] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
+
+/**
+ * A share split is stored with `units` holding the ratio: new shares per one
+ * old share (2 for a 2-for-1, 0.1 for a 1-for-10 consolidation).
+ * It never moves money, so cost base and cash flows are untouched.
+ */
+export function splitRatio(t: Transaction): number {
+  const r = t.units || 0;
+  return r > 0 ? r : 1;
+}
+
 
 export type Account = {
   id: string;
