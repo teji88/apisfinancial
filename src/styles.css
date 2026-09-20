@@ -237,7 +237,7 @@
 
 /* Softer honeycomb for the sticky app header: texture stays, readability wins. */
 @utility hex-cascade-soft {
-  opacity: 0.16;
+  opacity: 0.09;
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
@@ -255,7 +255,7 @@
 }
 
 .dark .hex-cascade-soft {
-  opacity: 0.12;
+  opacity: 0.08;
 }
 
 /* Warm honey wash for the top bar: deeper at the top, clearing at the bottom. */
