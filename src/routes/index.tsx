@@ -172,14 +172,6 @@ function Landing() {
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
           <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
           <p className="mx-auto mt-3 max-w-xl text-center text-sm text-muted-foreground">
-            Start free and stay free for a single account. Pro removes every limit for about the
-            price of a coffee a year.
-          </p>
-
-          <div className="mx-auto mt-10 grid max-w-3xl gap-5 md:grid-cols-2">
-        <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
-          <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
-          <p className="mx-auto mt-3 max-w-xl text-center text-sm text-muted-foreground">
             Start free and stay free for a single account. Pro removes every limit, and Pro+ adds
             household planning — all for about the price of a coffee a year.
           </p>
