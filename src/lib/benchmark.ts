@@ -346,7 +346,7 @@ export type ComparisonResult = {
   portfolioMwrr: number | null;
   invested: number;
   /** Net money in (+) / out (−) during each grid interval, in CAD. */
-  cumulativeFlows: number[];
+  stepFlows: number[];
   benchmarks: BenchmarkResult[];
 };
 
@@ -395,7 +395,7 @@ export function buildComparison(
     portfolioEnd: portfolioEndValue,
     portfolioMwrr,
     invested,
-    cumulativeFlows: stepFlowSeries(grid, flows),
+    stepFlows: stepFlowSeries(grid, flows),
     benchmarks,
   };
 
