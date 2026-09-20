@@ -7,7 +7,7 @@ import {
   Gift,
   LayoutDashboard,
   FileUp,
-  LogIn as _LogInUnused,
+
   LogOut,
   Moon,
   Receipt,
@@ -22,6 +22,8 @@ import {
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import { ApisLogo } from "@/components/brand/ApisLogo";
+
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/lib/portfolio";
 import { useProfile, useUpdateProfile } from "@/lib/profile";
