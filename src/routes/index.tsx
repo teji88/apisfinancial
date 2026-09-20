@@ -141,7 +141,8 @@ function Landing() {
           <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-16 md:grid-cols-3 md:px-6">
             {FEATURES.map((f) => (
               <div key={f.title} className="panel p-5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/20 text-accent-foreground">
+
                   <f.icon className="h-5 w-5" />
                 </span>
                 <h3 className="mt-3 text-base font-semibold">{f.title}</h3>
