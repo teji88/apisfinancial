@@ -184,7 +184,36 @@
 }
 
 @utility hex-mesh {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='64' viewBox='0 0 56 64'%3E%3Cpath d='M28 1 54 16v32L28 63 2 48V16z' fill='none' stroke='%230D1B2A' stroke-width='2'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='64' viewBox='0 0 56 64'%3E%3Cpath d='M28 1 54 16v32L28 63 2 48V16z' fill='none' stroke='%23B45309' stroke-width='2'/%3E%3C/svg%3E");
   background-size: 56px 64px;
 }
+
+@utility honey-glow {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: var(--honey-glow);
+  }
+}
+
+@utility honey-fill {
+  background-image: var(--gradient-honey);
+  color: #2a1c05;
+  box-shadow: var(--shadow-honey);
+  border: none;
+  &:hover {
+    filter: brightness(1.06);
+  }
+}
+
+@utility honey-card {
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 14px -8px rgba(180, 83, 9, 0.35);
+}
+
 
