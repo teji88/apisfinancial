@@ -126,7 +126,7 @@ export function PlanUpgrade({ onDone }: { onDone?: () => void }) {
           <Gift className="h-4 w-4" /> Have an invite code?
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Codes from the MapleWealth team unlock everything at no charge.
+          Codes from the Apis Financial team unlock everything at no charge.
         </p>
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <div className="space-y-1.5">

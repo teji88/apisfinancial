@@ -66,13 +66,13 @@ import {
 export const Route = createFileRoute("/_authenticated/retirement")({
   head: () => ({
     meta: [
-      { title: "Retirement Planner — MapleWealth" },
+      { title: "Retirement Planner — Apis Financial" },
       {
         name: "description",
         content:
           "Canadian retirement planning with 2026 federal and provincial tax brackets, CPP from your earnings history, OAS from your years in Canada, RRIF minimums and a tax-efficient household withdrawal plan.",
       },
-      { property: "og:title", content: "Retirement Planner — MapleWealth" },
+      { property: "og:title", content: "Retirement Planner — Apis Financial" },
       {
         property: "og:description",
         content:

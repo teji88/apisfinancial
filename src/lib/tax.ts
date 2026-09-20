@@ -1,5 +1,5 @@
 /**
- * MapleWealth Canadian tax engine — 2026 estimated federal + provincial brackets.
+ * Apis Financial Canadian tax engine — 2026 estimated federal + provincial brackets.
  * Figures are projections and should be treated as planning estimates.
  */
 

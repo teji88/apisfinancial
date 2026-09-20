@@ -58,13 +58,13 @@ import {
 export const Route = createFileRoute("/_authenticated/ledger")({
   head: () => ({
     meta: [
-      { title: "Ledger — MapleWealth" },
+      { title: "Ledger — Apis Financial" },
       {
         name: "description",
         content:
           "Record buys, sells, dividends, DRIPs, deposits, withdrawals and fees in CAD or USD with exact FX rates.",
       },
-      { property: "og:title", content: "Ledger — MapleWealth" },
+      { property: "og:title", content: "Ledger — Apis Financial" },
       {
         property: "og:description",
         content: "A complete Canadian transaction ledger feeding your ACB and return calculations.",
@@ -273,7 +273,7 @@ function LedgerPage() {
         onOpenChange={setUpgradeOpen}
         reason={
           entitlement.readOnly
-            ? "Your plan has ended, so MapleWealth is view-only. Restart Pro to make changes."
+            ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to make changes."
             : "The free plan includes ten holdings. Pro removes the limit."
         }
       />

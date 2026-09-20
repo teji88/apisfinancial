@@ -22,13 +22,13 @@ export const Route = createFileRoute("/_authenticated/plan")({
     typeof search['session_id'] === "string" ? { session_id: search['session_id'] } : {},
   head: () => ({
     meta: [
-      { title: "Your plan — MapleWealth" },
+      { title: "Your plan — Apis Financial" },
       {
         name: "description",
         content:
           "Stay on the free plan with one account and ten holdings, or go Pro for unlimited accounts and holdings.",
       },
-      { property: "og:title", content: "Your plan — MapleWealth" },
+      { property: "og:title", content: "Your plan — Apis Financial" },
       {
         property: "og:description",
         content: "Free covers one account and ten holdings. Pro is $1 a month or $10 a year.",
@@ -186,7 +186,7 @@ function PlanPage() {
           <p className="mt-3 text-sm text-muted-foreground">Free access with no end date.</p>
         ) : isOwner ? (
           <p className="mt-3 text-sm text-muted-foreground">
-            You own MapleWealth, so no limits apply to your own account.
+            You own Apis Financial, so no limits apply to your own account.
           </p>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">

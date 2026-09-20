@@ -7,17 +7,18 @@ import {
   FileUp,
   Landmark,
   LayoutDashboard,
-  Leaf,
   Minus,
   Receipt,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { ApisLogo } from "@/components/brand/ApisLogo";
+
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "MapleWealth — Canadian portfolio tracker & retirement planner" },
+      { title: "Apis Financial — Canadian portfolio tracker & retirement planner" },
       {
         name: "description",
         content:
@@ -25,7 +26,7 @@ export const Route = createFileRoute("/")({
       },
       {
         property: "og:title",
-        content: "MapleWealth — Canadian portfolio tracker & retirement planner",
+        content: "Apis Financial — Canadian portfolio tracker & retirement planner",
       },
       {
         property: "og:description",
@@ -97,10 +98,8 @@ function Landing() {
     <div className="min-h-screen bg-surface">
       <header className="border-b border-border/60">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 md:px-6">
-          <span className="flex items-center gap-2 font-display text-lg font-semibold">
-            <Leaf className="h-5 w-5 text-primary" />
-            MapleWealth
-          </span>
+          <ApisLogo variant="full" size="sm" />
+
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm">
               <Link to="/auth">Sign in</Link>
@@ -121,7 +120,7 @@ function Landing() {
             Know what you own, what it earns, and when you can retire
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground">
-            MapleWealth tracks your registered and non-registered accounts in Canadian dollars,
+            Apis Financial tracks your registered and non-registered accounts in Canadian dollars,
             follows your dividend income, measures you against the market, and turns it all into a
             retirement plan that keeps tax and OAS clawback as low as possible.
           </p>
@@ -142,8 +141,9 @@ function Landing() {
           <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-16 md:grid-cols-3 md:px-6">
             {FEATURES.map((f) => (
               <div key={f.title} className="panel p-5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/20 text-accent-foreground">
                   <f.icon className="h-5 w-5" />
+
                 </span>
                 <h3 className="mt-3 text-base font-semibold">{f.title}</h3>
                 <p className="mt-1.5 text-sm text-muted-foreground">{f.body}</p>
@@ -246,7 +246,7 @@ function Landing() {
               See your retirement date, not just your balance
             </h2>
             <p className="mt-3 text-sm text-muted-foreground">
-              Add your accounts and MapleWealth does the rest — in today&apos;s dollars, with
+              Add your accounts and Apis Financial does the rest — in today&apos;s dollars, with
               Canadian tax rules built in.
             </p>
             <Button asChild size="lg" className="mt-7">
@@ -258,7 +258,7 @@ function Landing() {
 
       <footer className="border-t border-border/60">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-6 text-xs text-muted-foreground md:px-6">
-          <span>© {new Date().getFullYear()} MapleWealth</span>
+          <span>© {new Date().getFullYear()} Apis Financial</span>
           <span>Information only — not financial or tax advice.</span>
         </div>
       </footer>

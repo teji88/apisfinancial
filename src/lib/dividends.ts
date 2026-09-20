@@ -1,5 +1,5 @@
 /**
- * Dividend analytics for MapleWealth.
+ * Dividend analytics for Apis Financial.
  * Everything returned here is expressed in CAD unless stated otherwise.
  */
 

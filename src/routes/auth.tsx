@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Leaf } from "lucide-react";
+import { ApisLogo } from "@/components/brand/ApisLogo";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
@@ -12,13 +12,13 @@ import { Label } from "@/components/ui/label";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in — MapleWealth" },
+      { title: "Sign in — Apis Financial" },
       {
         name: "description",
         content:
-          "Sign in to MapleWealth to track your TFSA, RRSP and non-registered portfolios in Canadian dollars.",
+          "Sign in to Apis Financial to track your TFSA, RRSP and non-registered portfolios in Canadian dollars.",
       },
-      { property: "og:title", content: "Sign in — MapleWealth" },
+      { property: "og:title", content: "Sign in — Apis Financial" },
       {
         property: "og:description",
         content: "Canadian portfolio tracking with ACB, MWRR and TWRR built in.",
@@ -108,15 +108,11 @@ function AuthPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-12">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Leaf className="h-5 w-5" />
-          </span>
-          <div>
-            <h1 className="text-lg font-semibold leading-none">MapleWealth</h1>
-            <p className="text-xs text-muted-foreground">Canadian portfolio tracking</p>
-          </div>
+        <div className="mb-8 flex flex-col items-center gap-2">
+          <ApisLogo variant="stacked" size="lg" />
+          <p className="text-xs text-muted-foreground">Canadian portfolio tracking</p>
         </div>
+
 
         <div className="panel p-6">
           <h2 className="text-xl font-semibold">

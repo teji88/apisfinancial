@@ -41,13 +41,13 @@ export const Route = createFileRoute("/_authenticated/import")({
   component: ImportPage,
   head: () => ({
     meta: [
-      { title: "Import statements — MapleWealth" },
+      { title: "Import statements — Apis Financial" },
       {
         name: "description",
         content:
           "Drop a brokerage statement, CSV or screenshot and let AI turn it into ledger transactions you review before saving.",
       },
-      { property: "og:title", content: "Import statements — MapleWealth" },
+      { property: "og:title", content: "Import statements — Apis Financial" },
       {
         property: "og:description",
         content: "AI reads your Canadian brokerage statements and drafts ledger entries for review.",
@@ -549,7 +549,7 @@ function ImportPage() {
           upgradeReason
             ? upgradeReason
             : entitlement.readOnly
-            ? "Your plan has ended, so MapleWealth is view-only. Restart Pro to import again."
+            ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to import again."
             : "This import goes past the free plan's ten holdings. Pro removes the limit."
         }
       />

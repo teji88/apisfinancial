@@ -26,15 +26,15 @@ import {
 export const Route = createFileRoute("/_authenticated/invites")({
   head: () => ({
     meta: [
-      { title: "Invite codes — MapleWealth" },
+      { title: "Invite codes — Apis Financial" },
       {
         name: "description",
         content: "Create and manage free-access invite codes for friends and testers.",
       },
-      { property: "og:title", content: "Invite codes — MapleWealth" },
+      { property: "og:title", content: "Invite codes — Apis Financial" },
       {
         property: "og:description",
-        content: "Hand out codes that unlock MapleWealth Pro at no charge.",
+        content: "Hand out codes that unlock Apis Financial Pro at no charge.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -91,7 +91,7 @@ function InvitesPage() {
       <div className="rounded-lg border p-6">
         <h1 className="text-lg font-semibold">Invite codes</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          This page is only available to the MapleWealth owner.
+          This page is only available to the Apis Financial owner.
         </p>
       </div>
     );

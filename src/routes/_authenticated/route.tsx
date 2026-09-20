@@ -7,7 +7,7 @@ import {
   Gift,
   LayoutDashboard,
   FileUp,
-  Leaf,
+
   LogOut,
   Moon,
   Receipt,
@@ -22,6 +22,8 @@ import {
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
+import { ApisLogo } from "@/components/brand/ApisLogo";
+
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/lib/portfolio";
 import { useProfile, useUpdateProfile } from "@/lib/profile";
@@ -105,7 +107,7 @@ function ReadOnlyBanner() {
   if (!entitlement.readOnly) return null;
   return (
     <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-sm text-destructive">
-      Your plan ended on {formatDate(entitlement.accessEndsAt)} — MapleWealth is view-only. Nothing
+      Your plan ended on {formatDate(entitlement.accessEndsAt)} — Apis Financial is view-only. Nothing
       has been deleted.{" "}
       <Link to="/plan" className="font-medium underline">
         Restart Pro
@@ -150,11 +152,9 @@ function AppHeader() {
     <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-6">
         <Link to="/dashboard" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Leaf className="h-4 w-4" />
-          </span>
-          <span className="font-display text-base font-semibold">MapleWealth</span>
+          <ApisLogo variant="full" size="sm" />
         </Link>
+
 
         <div className="hidden items-center gap-1 rounded-lg bg-muted p-1 md:flex">
           {NAV.map((item) => (
@@ -285,7 +285,7 @@ function ProfileMenu() {
   async function deleteAccount() {
     if (
       !window.confirm(
-        "This permanently deletes your MapleWealth account and all of your accounts, holdings and transactions. This cannot be undone. Continue?",
+        "This permanently deletes your Apis Financial account and all of your accounts, holdings and transactions. This cannot be undone. Continue?",
       )
     ) {
       return;
