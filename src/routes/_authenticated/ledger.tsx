@@ -342,10 +342,17 @@ function LedgerPage() {
               <div className="flex gap-2">
                 <Input
                   id="symbol"
-                  placeholder="XEQT.TO"
+                  placeholder="XEQT.TO or AAPL"
+                  list="ticker-suggestions"
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                  onBlur={() => setSymbol((s) => normalizeTicker(s))}
                 />
+                <datalist id="ticker-suggestions">
+                  {symbolSuggestions.map((t) => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
                 <Button type="button" variant="outline" size="icon" onClick={handleLookup}>
                   {looking ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -354,7 +361,11 @@ function LedgerPage() {
                   )}
                 </Button>
               </div>
-              {symbolName && <p className="text-xs text-muted-foreground">{symbolName}</p>}
+              {symbolName ? (
+                <p className="text-xs text-muted-foreground">{symbolName}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">{TICKER_HINT}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Asset type</Label>
