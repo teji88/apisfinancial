@@ -92,22 +92,12 @@ function AppLayout() {
   }
 
   return (
-    <div className="relative min-h-screen bg-surface">
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[1100px] honey-cascade"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-[1100px] hex-cascade"
-        aria-hidden
-      />
-      <div className="relative">
-        <AppHeader />
-        <ReadOnlyBanner />
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">
-          <Outlet />
-        </main>
-      </div>
+    <div className="min-h-screen bg-surface">
+      <AppHeader />
+      <ReadOnlyBanner />
+      <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">
+        <Outlet />
+      </main>
     </div>
   );
 }
@@ -159,8 +149,9 @@ function AppHeader() {
   const dayPct = total - dayChange !== 0 ? (dayChange / (total - dayChange)) * 100 : 0;
 
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
-      <div className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.14]" aria-hidden />
+    <header className="sticky top-0 z-30 overflow-hidden border-b bg-background backdrop-blur">
+      <div className="pointer-events-none absolute inset-0 honey-cascade" aria-hidden />
+      <div className="pointer-events-none absolute inset-0 hex-mesh hex-cascade" aria-hidden />
       <div className="relative mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-6">
         <Link to="/dashboard" className="flex items-center gap-2">
           <ApisLogo variant="full" size="sm" />

@@ -96,8 +96,10 @@ function Landing() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <header className="border-b border-border/60">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 md:px-6">
+      <header className="relative overflow-hidden border-b border-border/60 bg-background">
+        <div className="pointer-events-none absolute inset-0 honey-cascade" aria-hidden />
+        <div className="pointer-events-none absolute inset-0 hex-mesh hex-cascade" aria-hidden />
+        <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 md:px-6">
           <ApisLogo variant="full" size="sm" />
 
           <div className="flex items-center gap-2">
@@ -114,13 +116,7 @@ function Landing() {
 
       <main>
         <section className="relative overflow-hidden">
-          <div className="pointer-events-none absolute inset-0 honey-cascade" aria-hidden />
-          <div className="pointer-events-none absolute inset-0 hex-cascade" aria-hidden />
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{ background: "var(--honey-glow)" }}
-            aria-hidden
-          />
+
 
           <div className="relative mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6 md:py-24">
             <p className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-primary">
@@ -196,10 +192,6 @@ function Landing() {
             </div>
 
             <div className="honey-card relative overflow-hidden border-accent/60 p-6 ring-1 ring-accent/30">
-              <div
-                className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.08]"
-                aria-hidden
-              />
               <div className="relative flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Pro</h3>
                 <span className="rounded-full bg-accent/25 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-accent/40">

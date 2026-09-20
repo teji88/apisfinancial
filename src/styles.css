@@ -201,47 +201,47 @@
   border-top: 2px solid var(--color-accent);
 }
 
+/* True interlocking honeycomb tile (seamless). */
 @utility hex-mesh {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='64' viewBox='0 0 56 64'%3E%3Cpath d='M28 1 54 16v32L28 63 2 48V16z' fill='none' stroke='%23B45309' stroke-width='2'/%3E%3C/svg%3E");
-  background-size: 56px 64px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath fill='%23B45309' d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81V33.5zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/svg%3E");
+  background-size: 42px 73.5px;
 }
 
-/* Honeycomb that is dark and solid at the top and dissolves into the flat
-   background further down the page. */
+.dark .hex-mesh {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath fill='%23FBBF24' d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81V33.5zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/svg%3E");
+}
+
+/* Honeycomb for the fixed top bar: solid and dark at the very top, fading out
+   before the flat page background begins. */
 @utility hex-cascade {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='64' viewBox='0 0 56 64'%3E%3Cpath d='M28 1 54 16v32L28 63 2 48V16z' fill='none' stroke='%23B45309' stroke-width='2.4'/%3E%3C/svg%3E");
-  background-size: 56px 64px;
-  opacity: 0.5;
+  opacity: 0.55;
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 0.62) 22%,
-    rgba(0, 0, 0, 0.3) 48%,
-    rgba(0, 0, 0, 0.1) 72%,
+    rgba(0, 0, 0, 0.75) 40%,
+    rgba(0, 0, 0, 0.3) 75%,
     rgba(0, 0, 0, 0) 100%
   );
   mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 0.62) 22%,
-    rgba(0, 0, 0, 0.3) 48%,
-    rgba(0, 0, 0, 0.1) 72%,
+    rgba(0, 0, 0, 0.75) 40%,
+    rgba(0, 0, 0, 0.3) 75%,
     rgba(0, 0, 0, 0) 100%
   );
 }
 
 .dark .hex-cascade {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='64' viewBox='0 0 56 64'%3E%3Cpath d='M28 1 54 16v32L28 63 2 48V16z' fill='none' stroke='%23FBBF24' stroke-width='2.4'/%3E%3C/svg%3E");
-  opacity: 0.32;
+  opacity: 0.35;
 }
 
-/* Warm honey wash: deeper at the top, clearing into flat colour below. */
+/* Warm honey wash for the top bar: deeper at the top, clearing at the bottom. */
 @utility honey-cascade {
   background-image: linear-gradient(
     to bottom,
-    rgba(180, 83, 9, 0.22) 0%,
-    rgba(217, 119, 6, 0.12) 30%,
-    rgba(245, 158, 11, 0.05) 60%,
+    rgba(180, 83, 9, 0.26) 0%,
+    rgba(217, 119, 6, 0.14) 45%,
+    rgba(245, 158, 11, 0.04) 80%,
     rgba(245, 158, 11, 0) 100%
   );
 }
@@ -249,9 +249,9 @@
 .dark .honey-cascade {
   background-image: linear-gradient(
     to bottom,
-    rgba(251, 191, 36, 0.16) 0%,
-    rgba(245, 158, 11, 0.08) 30%,
-    rgba(245, 158, 11, 0.03) 60%,
+    rgba(251, 191, 36, 0.18) 0%,
+    rgba(245, 158, 11, 0.09) 45%,
+    rgba(245, 158, 11, 0.02) 80%,
     rgba(245, 158, 11, 0) 100%
   );
 }
