@@ -104,6 +104,10 @@ function LedgerPage() {
   const [currency, setCurrency] = useState("CAD");
   const [fxRate, setFxRate] = useState("1");
   const [fxAuto, setFxAuto] = useState(false);
+  // Once the user types their own rate or price, we never overwrite it.
+  const [fxTouched, setFxTouched] = useState(false);
+  const [priceNote, setPriceNote] = useState<string | null>(null);
+  const [pricing, setPricing] = useState(false);
   const [fee, setFee] = useState("0");
   const [date, setDate] = useState(today());
   const [looking, setLooking] = useState(false);
