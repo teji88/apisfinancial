@@ -158,9 +158,41 @@ export function contributionFlows(
   return flows.sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/** Days between two ISO dates. */
+function dayGap(a: string, b: string): number {
+  return (Date.parse(b) - Date.parse(a)) / 86_400_000;
+}
+
+/**
+ * Price on a date for a holding with no market feed: a straight line drawn
+ * between the prices the user recorded, flat before the first and after the
+ * last one.
+ */
+function interpolatedLedgerPrice(
+  points: { date: string; price: number }[],
+  date: string,
+): number | null {
+  if (points.length === 0) return null;
+  if (date <= points[0]!.date) return points[0]!.price;
+  const last = points[points.length - 1]!;
+  if (date >= last.date) return last.price;
+  for (let i = 1; i < points.length; i++) {
+    const hi = points[i]!;
+    if (date <= hi.date) {
+      const lo = points[i - 1]!;
+      const span = dayGap(lo.date, hi.date);
+      if (span <= 0) return hi.price;
+      const t = dayGap(lo.date, date) / span;
+      return lo.price + (hi.price - lo.price) * t;
+    }
+  }
+  return last.price;
+}
+
 /**
  * Actual portfolio value on each grid date, valued with historical closes for
- * every holding (falling back to the last traded price in the ledger).
+ * every holding. Holdings with no market history (delisted, merged, private)
+ * are valued on a straight line between the prices recorded in the ledger.
  */
 export function portfolioValueSeries(
   grid: string[],
@@ -175,8 +207,21 @@ export function portfolioValueSeries(
   const txns = transactions.slice().sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
   let idx = 0;
   const units = new Map<string, number>();
-  const ledgerPrice = new Map<string, number>();
   let cash = 0;
+
+  // Every price the user recorded per holding, split-adjusted, in date order.
+  const ledgerPoints = new Map<string, { date: string; price: number }[]>();
+  for (const t of txns) {
+    if (!t.holding_id) continue;
+    const list = ledgerPoints.get(t.holding_id) ?? [];
+    if (t.transaction_type === "SPLIT") {
+      const ratio = (t.units || 0) > 0 ? t.units! : 1;
+      for (const p of list) p.price /= ratio;
+    } else if (t.price_per_unit) {
+      list.push({ date: t.transaction_date, price: t.price_per_unit });
+    }
+    ledgerPoints.set(t.holding_id, list);
+  }
 
   return grid.map((date) => {
     while (idx < txns.length && txns[idx]!.transaction_date <= date) {
@@ -189,15 +234,12 @@ export function portfolioValueSeries(
       if (t.holding_id && t.transaction_type === "SELL") {
         units.set(t.holding_id, (units.get(t.holding_id) ?? 0) - (t.units || 0));
       }
-      // A split moves no money; it only rescales units (and the ledger
-      // fallback price), so contributions and benchmarks are untouched.
+      // A split moves no money; it only rescales units, so contributions and
+      // benchmarks are untouched.
       if (t.holding_id && t.transaction_type === "SPLIT") {
-        const ratio = (t.units || 0) > 0 ? t.units : 1;
+        const ratio = (t.units || 0) > 0 ? t.units! : 1;
         units.set(t.holding_id, (units.get(t.holding_id) ?? 0) * ratio);
-        const prev = ledgerPrice.get(t.holding_id);
-        if (prev) ledgerPrice.set(t.holding_id, prev / ratio);
       }
-      if (t.holding_id && t.price_per_unit) ledgerPrice.set(t.holding_id, t.price_per_unit);
       idx++;
     }
 
@@ -208,7 +250,7 @@ export function portfolioValueSeries(
       if (!h) continue;
       const hist = history.get(h.symbol.toUpperCase());
       const close = hist ? closeOn(hist.points, date) : null;
-      const price = close ?? ledgerPrice.get(hid) ?? 0;
+      const price = close ?? interpolatedLedgerPrice(ledgerPoints.get(hid) ?? [], date) ?? 0;
       const currency = hist?.currency ?? h.currency;
       const rate = currency === "USD" ? fxOn(fx, date, fxNow) : 1;
       value += u * price * rate;
