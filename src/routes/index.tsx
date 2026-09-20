@@ -114,15 +114,14 @@ function Landing() {
 
       <main>
         <section className="relative overflow-hidden">
-          <div
-            className="pointer-events-none absolute inset-0 hex-mesh opacity-[0.07]"
-            aria-hidden
-          />
+          <div className="pointer-events-none absolute inset-0 honey-cascade" aria-hidden />
+          <div className="pointer-events-none absolute inset-0 hex-cascade" aria-hidden />
           <div
             className="pointer-events-none absolute inset-0"
             style={{ background: "var(--honey-glow)" }}
             aria-hidden
           />
+
           <div className="relative mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6 md:py-24">
             <p className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-primary">
               Built for Canadian investors
