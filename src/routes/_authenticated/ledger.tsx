@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/table";
 
 export const Route = createFileRoute("/_authenticated/ledger")({
+  staticData: { sitemap: false },
   head: () => ({
     meta: [
       { title: "Ledger — Apis Financial" },

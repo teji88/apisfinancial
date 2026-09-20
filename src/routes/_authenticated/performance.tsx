@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/table";
 
 export const Route = createFileRoute("/_authenticated/performance")({
+  staticData: { sitemap: false },
   head: () => ({
     meta: [
       { title: "Performance & Benchmarking — Apis Financial" },

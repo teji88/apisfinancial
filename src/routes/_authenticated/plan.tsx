@@ -18,6 +18,7 @@ import {
 } from "@/utils/payments.functions";
 
 export const Route = createFileRoute("/_authenticated/plan")({
+  staticData: { sitemap: false },
   validateSearch: (search: Record<string, unknown>): { session_id?: string } =>
     typeof search['session_id'] === "string" ? { session_id: search['session_id'] } : {},
   head: () => ({

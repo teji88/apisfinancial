@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated")({
+  staticData: { sitemap: "exclude-subtree" },
   component: AppLayout,
 });
 

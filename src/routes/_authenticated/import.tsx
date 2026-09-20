@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/table";
 
 export const Route = createFileRoute("/_authenticated/import")({
+  staticData: { sitemap: false },
   component: ImportPage,
   head: () => ({
     meta: [
