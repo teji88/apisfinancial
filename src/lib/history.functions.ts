@@ -46,3 +46,16 @@ export const getFxRateOn = createServerFn({ method: "POST" })
     const { fetchFxRateOn } = await import("./history.server");
     return { date: data.date, rate: await fetchFxRateOn(data.date) };
   });
+
+const QuoteOnDateInput = z.object({
+  symbol: z.string().min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+/** Official market close for a symbol on (or just before) a trade date. */
+export const getQuoteOnDate = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => QuoteOnDateInput.parse(data))
+  .handler(async ({ data }) => {
+    const { fetchQuoteOnDate } = await import("./history.server");
+    return fetchQuoteOnDate(data.symbol, data.date);
+  });
