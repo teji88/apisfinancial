@@ -7,7 +7,7 @@ import {
   Gift,
   LayoutDashboard,
   FileUp,
-  Leaf,
+  LogIn as _LogInUnused,
   LogOut,
   Moon,
   Receipt,
@@ -150,11 +150,9 @@ function AppHeader() {
     <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-6">
         <Link to="/dashboard" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Leaf className="h-4 w-4" />
-          </span>
-          <span className="font-display text-base font-semibold">Apis Financial</span>
+          <ApisLogo variant="full" size="sm" />
         </Link>
+
 
         <div className="hidden items-center gap-1 rounded-lg bg-muted p-1 md:flex">
           {NAV.map((item) => (
