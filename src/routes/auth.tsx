@@ -216,26 +216,10 @@ function AuthPage() {
                 <span className="h-px flex-1 bg-border" />
               </div>
 
-              <Button variant="outline" className="w-full" onClick={() => void handleOAuth("apple")}>
-                <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden="true">
-                  <path d="M17.05 20.28c-.98.95-2.05.86-3.08.41-1.09-.47-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.41C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8.98-.2 1.92-.87 3.19-.86 1.52.12 2.66.72 3.41 1.82-3.12 1.87-2.6 5.98.46 7.16-.57 1.49-1.3 2.96-2.14 4.05ZM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25Z" />
-                </svg>
-                Continue with Apple
-              </Button>
-
-              <Button variant="outline" className="w-full mt-2" onClick={() => void handleOAuth("google")}>
+              <Button variant="outline" className="w-full" onClick={() => void handleOAuth("google")}>
                 Continue with Google
               </Button>
 
-              <Button variant="outline" className="w-full mt-2" onClick={() => void handleOAuth("microsoft")}>
-                <svg viewBox="0 0 23 23" className="size-4" aria-hidden="true">
-                  <path fill="#f35325" d="M1 1h10v10H1z" />
-                  <path fill="#81bc06" d="M12 1h10v10H12z" />
-                  <path fill="#05a6f0" d="M1 12h10v10H1z" />
-                  <path fill="#ffba08" d="M12 12h10v10H12z" />
-                </svg>
-                Continue with Microsoft
-              </Button>
 
               <button
                 type="button"
