@@ -125,13 +125,12 @@ function AuthPage() {
   }
 
 
-  async function handleOAuth(provider: "google" | "microsoft") {
+  async function handleOAuth(provider: "google") {
     const result = await lovable.auth.signInWithOAuth(provider, {
       redirect_uri: window.location.origin,
     });
     if (result.error) {
-      const name = provider === "microsoft" ? "Microsoft" : "Google";
-      toast.error(`${name} sign-in failed. Try email instead.`);
+      toast.error("Google sign-in failed. Try email instead.");
       return;
     }
     if (result.redirected) return;
