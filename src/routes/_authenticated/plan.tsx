@@ -168,7 +168,12 @@ function PlanPage() {
                   }`
                 : isInvite
                   ? "Pro+ — invite code"
-                  : "Free"}
+                  : isTrial
+                    ? "Free trial — everything unlocked"
+                    : isReferral
+                      ? `${entitlement.plan === "pro_plus" ? "Pro+" : "Pro"} — free year from a referral`
+                      : "Free"}
+
           </p>
           {entitlement.readOnly && <Badge variant="destructive">View only</Badge>}
           {entitlement.cancelAtPeriodEnd && <Badge variant="secondary">Ends at period end</Badge>}
