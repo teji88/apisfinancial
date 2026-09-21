@@ -143,15 +143,17 @@ function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Button asChild size="lg" className="honey-fill">
-                <Link to="/auth">Start free</Link>
+                <Link to="/auth">Start your 30-day free trial</Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-accent/50">
                 <a href="#pricing">See pricing</a>
               </Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              Free plan covers one account and ten holdings. No card needed.
+              Every feature free for 30 days — no card needed. After that, the free plan keeps one
+              account and ten holdings.
             </p>
+
           </div>
         </section>
 
