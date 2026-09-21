@@ -130,7 +130,7 @@ function AuthPage() {
       redirect_uri: window.location.origin,
     });
     if (result.error) {
-      const name = provider === "apple" ? "Apple" : provider === "microsoft" ? "Microsoft" : "Google";
+      const name = provider === "microsoft" ? "Microsoft" : "Google";
       toast.error(`${name} sign-in failed. Try email instead.`);
       return;
     }
