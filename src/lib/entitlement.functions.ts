@@ -139,6 +139,34 @@ export const getEntitlement = createServerFn({ method: "POST" })
       };
     }
 
+    // A free year earned by referring a friend.
+    if (reward) {
+      return {
+        ...base,
+        tier: "referral",
+        readOnly: false,
+        graceUntil: null,
+        accessEndsAt: reward.access_until,
+        plan: reward.plan,
+        accountLimit: null,
+        holdingLimit: null,
+      };
+    }
+
+    // The 30-day trial: every feature unlocked, no card needed.
+    if (trialEndsAt) {
+      return {
+        ...base,
+        tier: "trial",
+        readOnly: false,
+        graceUntil: null,
+        accessEndsAt: trialEndsAt,
+        plan: "trial",
+        accountLimit: null,
+        holdingLimit: null,
+      };
+    }
+
 
     // A plan or invite that has ended: everything becomes read-only.
     const lapsedEnd =
