@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-export type Tier = "free" | "pro" | "pro_plus" | "invite";
+export type Tier = "free" | "pro" | "pro_plus" | "invite" | "trial" | "referral";
 
 export type Entitlement = {
   tier: Tier;
@@ -17,7 +17,10 @@ export type Entitlement = {
   accountLimit: number | null;
   holdingLimit: number | null;
   isAdmin: boolean;
+  /** When the 30-day free trial ends, if it has not already. */
+  trialEndsAt: string | null;
 };
+
 
 
 export const FREE_ACCOUNT_LIMIT = 1;
