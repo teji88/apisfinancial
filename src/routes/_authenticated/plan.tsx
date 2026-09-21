@@ -58,10 +58,13 @@ function PlanPage() {
   const isOwner = entitlement.plan === "owner";
   const isPaid = (entitlement.tier === "pro" || entitlement.tier === "pro_plus") && !isOwner;
   const isInvite = entitlement.tier === "invite";
+  const isTrial = entitlement.tier === "trial";
+  const isReferral = entitlement.tier === "referral";
   const currentPlan: PaidPlan = planOfPrice(entitlement.plan) ?? "pro";
   const billing = (entitlement.plan ?? "").endsWith("monthly") ? "monthly" : "yearly";
   const otherPlan: PaidPlan = currentPlan === "pro" ? "pro_plus" : "pro";
   const planName = (plan: PaidPlan) => (plan === "pro_plus" ? "Pro+" : "Pro");
+
 
 
   async function refreshFromProvider(quiet = false) {
