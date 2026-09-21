@@ -199,9 +199,14 @@ function PlanPage() {
           <p className="mt-3 text-sm text-muted-foreground">
             {isInvite
               ? `Free access runs until ${formatDate(entitlement.accessEndsAt)}.`
-              : entitlement.cancelAtPeriodEnd
-                ? `Pro stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
-                : `Renews on ${formatDate(entitlement.accessEndsAt)}.`}
+              : isTrial
+                ? `Every feature is unlocked until ${formatDate(entitlement.accessEndsAt)}. Pick a plan any time to keep them.`
+                : isReferral
+                  ? `Your referral reward keeps everything unlocked until ${formatDate(entitlement.accessEndsAt)}.`
+                  : entitlement.cancelAtPeriodEnd
+                    ? `Pro stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
+                    : `Renews on ${formatDate(entitlement.accessEndsAt)}.`}
+
           </p>
         ) : isInvite ? (
           <p className="mt-3 text-sm text-muted-foreground">Free access with no end date.</p>
