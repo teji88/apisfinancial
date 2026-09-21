@@ -45,7 +45,12 @@ async function upsertSubscription(subscription: any, env: StripeEnv) {
       },
       { onConflict: "stripe_subscription_id" },
     );
+
+  // A yearly plan bought by somebody who was referred earns the referrer a free year.
+  const { grantReferralReward } = await import("@/lib/referral.server");
+  await grantReferralReward(userId, priceIdOf(item), subscription.status);
 }
+
 
 async function markCanceled(subscription: any, env: StripeEnv) {
   await getSupabase()
