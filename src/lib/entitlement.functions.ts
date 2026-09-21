@@ -38,8 +38,14 @@ export const getEntitlement = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const now = Date.now();
 
-    const [{ data: subs }, { data: redemptions }, { data: isAdmin }, { data: limitState }] =
-      await Promise.all([
+    const [
+      { data: subs },
+      { data: redemptions },
+      { data: isAdmin },
+      { data: limitState },
+      { data: profile },
+      { data: rewards },
+    ] = await Promise.all([
         supabase
           .from("subscriptions")
           .select("status, price_id, current_period_end, cancel_at_period_end")
@@ -55,13 +61,29 @@ export const getEntitlement = createServerFn({ method: "POST" })
           .limit(5),
         supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" }),
         supabaseAdmin.rpc("free_limit_state", { _user_id: userId }),
+        supabase.from("profiles").select("trial_ends_at").eq("id", userId).maybeSingle(),
+        supabase
+          .from("referral_rewards")
+          .select("plan, access_until")
+          .eq("referrer_id", userId)
+          .order("access_until", { ascending: false })
+          .limit(1),
       ]);
+
+    const trialEndsAt =
+      profile?.trial_ends_at && new Date(profile.trial_ends_at).getTime() > now
+        ? profile.trial_ends_at
+        : null;
+
+    const reward = (rewards ?? []).find((r) => new Date(r.access_until).getTime() > now);
 
     const base = {
       cancelAtPeriodEnd: false,
       isAdmin: Boolean(isAdmin),
       readOnlyReason: null as Entitlement["readOnlyReason"],
+      trialEndsAt,
     };
+
 
     // The app owner always has full access.
     if (base.isAdmin) {
