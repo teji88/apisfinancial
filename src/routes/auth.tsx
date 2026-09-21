@@ -125,7 +125,7 @@ function AuthPage() {
   }
 
 
-  async function handleOAuth(provider: "google" | "apple" | "microsoft") {
+  async function handleOAuth(provider: "google" | "microsoft") {
     const result = await lovable.auth.signInWithOAuth(provider, {
       redirect_uri: window.location.origin,
     });
