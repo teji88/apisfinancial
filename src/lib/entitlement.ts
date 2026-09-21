@@ -17,6 +17,7 @@ const FREE_FALLBACK: Entitlement = {
   accountLimit: 1,
   holdingLimit: 10,
   isAdmin: false,
+  trialEndsAt: null,
 };
 
 
@@ -34,11 +35,18 @@ export function useEntitlement() {
     hasPro: entitlement.tier !== "free",
     /** Pro+ features: household/spouse planning, savings split, manual balance overrides. */
     hasProPlus:
-      entitlement.tier === "pro_plus" || entitlement.tier === "invite" || entitlement.isAdmin,
+      entitlement.tier === "pro_plus" ||
+      entitlement.tier === "invite" ||
+      entitlement.tier === "trial" ||
+      (entitlement.tier === "referral" && entitlement.plan === "pro_plus") ||
+      entitlement.isAdmin,
+    /** True while the free 30-day trial of everything is running. */
+    onTrial: entitlement.tier === "trial",
     loading: query.isLoading,
     refetch: query.refetch,
   };
 }
+
 
 
 export function formatDate(iso: string | null): string {
