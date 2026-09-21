@@ -13,7 +13,7 @@ export function ReferralCard() {
   const { data } = useQuery({
     queryKey: ["referral-info"],
     staleTime: 60 * 1000,
-    queryFn: async () => fetchInfo({ data: undefined as never }),
+    queryFn: async () => fetchInfo(undefined as never),
   });
   const [copied, setCopied] = useState(false);
 
