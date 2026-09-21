@@ -125,12 +125,13 @@ function AuthPage() {
   }
 
 
-  async function handleOAuth(provider: "google" | "apple") {
+  async function handleOAuth(provider: "google" | "apple" | "microsoft") {
     const result = await lovable.auth.signInWithOAuth(provider, {
       redirect_uri: window.location.origin,
     });
     if (result.error) {
-      toast.error(`${provider === "apple" ? "Apple" : "Google"} sign-in failed. Try email instead.`);
+      const name = provider === "apple" ? "Apple" : provider === "microsoft" ? "Microsoft" : "Google";
+      toast.error(`${name} sign-in failed. Try email instead.`);
       return;
     }
     if (result.redirected) return;
@@ -224,6 +225,16 @@ function AuthPage() {
 
               <Button variant="outline" className="w-full mt-2" onClick={() => void handleOAuth("google")}>
                 Continue with Google
+              </Button>
+
+              <Button variant="outline" className="w-full mt-2" onClick={() => void handleOAuth("microsoft")}>
+                <svg viewBox="0 0 23 23" className="size-4" aria-hidden="true">
+                  <path fill="#f35325" d="M1 1h10v10H1z" />
+                  <path fill="#81bc06" d="M12 1h10v10H12z" />
+                  <path fill="#05a6f0" d="M1 12h10v10H1z" />
+                  <path fill="#ffba08" d="M12 12h10v10H12z" />
+                </svg>
+                Continue with Microsoft
               </Button>
 
               <button
