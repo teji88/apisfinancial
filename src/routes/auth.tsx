@@ -5,12 +5,19 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/useAuth";
+import { useServerFn } from "@tanstack/react-start";
+import { applyReferralCode } from "@/lib/referral.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+const REF_KEY = "apis_referral_code";
+
 export const Route = createFileRoute("/auth")({
   staticData: { sitemap: false },
+  validateSearch: (search: Record<string, unknown>): { ref?: string } =>
+    typeof search['ref'] === "string" ? { ref: search['ref'] } : {},
+
   head: () => ({
     meta: [
       { title: "Sign in — Apis Financial" },
