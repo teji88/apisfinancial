@@ -17,6 +17,8 @@ import {
   xirr,
 } from "@/lib/finance";
 import { Button } from "@/components/ui/button";
+import { TrialBanner } from "@/components/TrialBanner";
+
 import {
   Table,
   TableBody,
@@ -163,6 +165,8 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <TrialBanner />
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
