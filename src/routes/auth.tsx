@@ -5,12 +5,19 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/useAuth";
+import { useServerFn } from "@tanstack/react-start";
+import { applyReferralCode } from "@/lib/referral.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+const REF_KEY = "apis_referral_code";
+
 export const Route = createFileRoute("/auth")({
   staticData: { sitemap: false },
+  validateSearch: (search: Record<string, unknown>): { ref?: string } =>
+    typeof search['ref'] === "string" ? { ref: search['ref'] } : {},
+
   head: () => ({
     meta: [
       { title: "Sign in — Apis Financial" },
@@ -34,10 +41,19 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "reset">("signin");
+  const { ref } = Route.useSearch();
+  const applyReferral = useServerFn(applyReferralCode);
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "reset">(ref ? "signup" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Remember who invited them until their account exists.
+  useEffect(() => {
+    if (ref && typeof window !== "undefined") {
+      window.localStorage.setItem(REF_KEY, ref.trim().toUpperCase());
+    }
+  }, [ref]);
 
   // Arriving from a password-reset email: let them set a new password.
   useEffect(() => {
@@ -51,8 +67,23 @@ function AuthPage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && session && mode !== "reset") void navigate({ to: "/dashboard" });
-  }, [loading, session, navigate, mode]);
+    if (loading || !session || mode === "reset") return;
+    const stored =
+      typeof window !== "undefined" ? window.localStorage.getItem(REF_KEY) : null;
+    void (async () => {
+      if (stored) {
+        try {
+          await applyReferral({ data: { code: stored } });
+        } catch {
+          // An invalid or already-used code simply does nothing.
+        }
+        window.localStorage.removeItem(REF_KEY);
+      }
+      void navigate({ to: "/dashboard" });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, session, mode]);
+
 
 
 

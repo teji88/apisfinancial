@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { PlanUpgrade } from "@/components/PlanUpgrade";
+import { ReferralCard } from "@/components/ReferralCard";
+
 import { useEntitlement, formatDate } from "@/lib/entitlement";
 import { getStripeEnvironment, PLAN_PRICES, planOfPrice, type PaidPlan } from "@/lib/stripe";
 import {
@@ -58,10 +60,13 @@ function PlanPage() {
   const isOwner = entitlement.plan === "owner";
   const isPaid = (entitlement.tier === "pro" || entitlement.tier === "pro_plus") && !isOwner;
   const isInvite = entitlement.tier === "invite";
+  const isTrial = entitlement.tier === "trial";
+  const isReferral = entitlement.tier === "referral";
   const currentPlan: PaidPlan = planOfPrice(entitlement.plan) ?? "pro";
   const billing = (entitlement.plan ?? "").endsWith("monthly") ? "monthly" : "yearly";
   const otherPlan: PaidPlan = currentPlan === "pro" ? "pro_plus" : "pro";
   const planName = (plan: PaidPlan) => (plan === "pro_plus" ? "Pro+" : "Pro");
+
 
 
   async function refreshFromProvider(quiet = false) {
@@ -165,7 +170,12 @@ function PlanPage() {
                   }`
                 : isInvite
                   ? "Pro+ — invite code"
-                  : "Free"}
+                  : isTrial
+                    ? "Free trial — everything unlocked"
+                    : isReferral
+                      ? `${entitlement.plan === "pro_plus" ? "Pro+" : "Pro"} — free year from a referral`
+                      : "Free"}
+
           </p>
           {entitlement.readOnly && <Badge variant="destructive">View only</Badge>}
           {entitlement.cancelAtPeriodEnd && <Badge variant="secondary">Ends at period end</Badge>}
@@ -191,9 +201,14 @@ function PlanPage() {
           <p className="mt-3 text-sm text-muted-foreground">
             {isInvite
               ? `Free access runs until ${formatDate(entitlement.accessEndsAt)}.`
-              : entitlement.cancelAtPeriodEnd
-                ? `Pro stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
-                : `Renews on ${formatDate(entitlement.accessEndsAt)}.`}
+              : isTrial
+                ? `Every feature is unlocked until ${formatDate(entitlement.accessEndsAt)}. Pick a plan any time to keep them.`
+                : isReferral
+                  ? `Your referral reward keeps everything unlocked until ${formatDate(entitlement.accessEndsAt)}.`
+                  : entitlement.cancelAtPeriodEnd
+                    ? `Pro stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
+                    : `Renews on ${formatDate(entitlement.accessEndsAt)}.`}
+
           </p>
         ) : isInvite ? (
           <p className="mt-3 text-sm text-muted-foreground">Free access with no end date.</p>
@@ -285,7 +300,10 @@ function PlanPage() {
         )}
       </div>
 
+      <ReferralCard />
+
       {!isPaid && !isInvite && !isOwner && <PlanUpgrade />}
+
     </div>
   );
 }

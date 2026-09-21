@@ -5,11 +5,14 @@ import {
   Check,
   Coins,
   FileUp,
+  Gift,
   Landmark,
   LayoutDashboard,
   Minus,
   Receipt,
+  Sparkles,
 } from "lucide-react";
+
 import { useAuth } from "@/hooks/useAuth";
 import { ApisLogo } from "@/components/brand/ApisLogo";
 import { BenchmarkSimulator } from "@/components/BenchmarkSimulator";
@@ -143,15 +146,17 @@ function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Button asChild size="lg" className="honey-fill">
-                <Link to="/auth">Start free</Link>
+                <Link to="/auth">Start your 30-day free trial</Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-accent/50">
                 <a href="#pricing">See pricing</a>
               </Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              Free plan covers one account and ten holdings. No card needed.
+              Every feature free for 30 days — no card needed. After that, the free plan keeps one
+              account and ten holdings.
             </p>
+
           </div>
         </section>
 
@@ -172,6 +177,45 @@ function Landing() {
                 <p className="mt-1.5 text-sm text-muted-foreground">{f.body}</p>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="mx-auto w-full max-w-6xl px-4 py-14 md:px-6">
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="honey-card p-6">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/25 text-primary ring-1 ring-accent/40">
+                <Sparkles className="h-5 w-5" />
+              </span>
+              <h3 className="mt-3 font-display text-xl font-semibold">
+                30 days of everything, free
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Every new account starts with a full 30-day trial: unlimited accounts and holdings,
+                statement uploads, combined benchmarking and the complete household retirement
+                planner. No card, no commitment — if you do nothing when it ends, you simply move
+                to the free plan and keep your data.
+              </p>
+              <Button asChild className="honey-fill mt-5">
+                <Link to="/auth">Start the free trial</Link>
+              </Button>
+            </div>
+
+            <div className="honey-card p-6">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/25 text-primary ring-1 ring-accent/40">
+                <Gift className="h-5 w-5" />
+              </span>
+              <h3 className="mt-3 font-display text-xl font-semibold">
+                Refer a friend, get a year free
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Share your personal invite link from inside the app. When a friend who joins through
+                it picks a yearly plan — $10 Pro or $20 Pro+ — you get a full year of that same plan
+                at no charge. Refer three friends, get three years. There is no limit.
+              </p>
+              <Button asChild variant="outline" className="mt-5 border-accent/50">
+                <Link to="/auth">Create your invite link</Link>
+              </Button>
+            </div>
           </div>
         </section>
 

@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-export type Tier = "free" | "pro" | "pro_plus" | "invite";
+export type Tier = "free" | "pro" | "pro_plus" | "invite" | "trial" | "referral";
 
 export type Entitlement = {
   tier: Tier;
@@ -17,7 +17,10 @@ export type Entitlement = {
   accountLimit: number | null;
   holdingLimit: number | null;
   isAdmin: boolean;
+  /** When the 30-day free trial ends, if it has not already. */
+  trialEndsAt: string | null;
 };
+
 
 
 export const FREE_ACCOUNT_LIMIT = 1;
@@ -35,8 +38,14 @@ export const getEntitlement = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const now = Date.now();
 
-    const [{ data: subs }, { data: redemptions }, { data: isAdmin }, { data: limitState }] =
-      await Promise.all([
+    const [
+      { data: subs },
+      { data: redemptions },
+      { data: isAdmin },
+      { data: limitState },
+      { data: profile },
+      { data: rewards },
+    ] = await Promise.all([
         supabase
           .from("subscriptions")
           .select("status, price_id, current_period_end, cancel_at_period_end")
@@ -52,13 +61,29 @@ export const getEntitlement = createServerFn({ method: "POST" })
           .limit(5),
         supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" }),
         supabaseAdmin.rpc("free_limit_state", { _user_id: userId }),
+        supabase.from("profiles").select("trial_ends_at").eq("id", userId).maybeSingle(),
+        supabase
+          .from("referral_rewards")
+          .select("plan, access_until")
+          .eq("referrer_id", userId)
+          .order("access_until", { ascending: false })
+          .limit(1),
       ]);
+
+    const trialEndsAt =
+      profile?.trial_ends_at && new Date(profile.trial_ends_at).getTime() > now
+        ? profile.trial_ends_at
+        : null;
+
+    const reward = (rewards ?? []).find((r) => new Date(r.access_until).getTime() > now);
 
     const base = {
       cancelAtPeriodEnd: false,
       isAdmin: Boolean(isAdmin),
       readOnlyReason: null as Entitlement["readOnlyReason"],
+      trialEndsAt,
     };
+
 
     // The app owner always has full access.
     if (base.isAdmin) {
@@ -109,6 +134,34 @@ export const getEntitlement = createServerFn({ method: "POST" })
         accessEndsAt: active.current_period_end ?? null,
         cancelAtPeriodEnd: Boolean(active.cancel_at_period_end),
         plan: active.price_id ?? null,
+        accountLimit: null,
+        holdingLimit: null,
+      };
+    }
+
+    // A free year earned by referring a friend.
+    if (reward) {
+      return {
+        ...base,
+        tier: "referral",
+        readOnly: false,
+        graceUntil: null,
+        accessEndsAt: reward.access_until,
+        plan: reward.plan,
+        accountLimit: null,
+        holdingLimit: null,
+      };
+    }
+
+    // The 30-day trial: every feature unlocked, no card needed.
+    if (trialEndsAt) {
+      return {
+        ...base,
+        tier: "trial",
+        readOnly: false,
+        graceUntil: null,
+        accessEndsAt: trialEndsAt,
+        plan: "trial",
         accountLimit: null,
         holdingLimit: null,
       };
