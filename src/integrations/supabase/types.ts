@@ -306,6 +306,8 @@ export type Database = {
           override_rrsp: number
           override_tfsa: number
           province: string
+          referral_code: string | null
+          referred_by: string | null
           save_pct_nonreg: number
           save_pct_rrsp: number
           save_pct_tfsa: number
@@ -323,6 +325,7 @@ export type Database = {
           spouse_rrsp: number
           spouse_tfsa: number
           target_retirement_age: number | null
+          trial_ends_at: string | null
           updated_at: string
         }
         Insert: {
@@ -351,6 +354,8 @@ export type Database = {
           override_rrsp?: number
           override_tfsa?: number
           province?: string
+          referral_code?: string | null
+          referred_by?: string | null
           save_pct_nonreg?: number
           save_pct_rrsp?: number
           save_pct_tfsa?: number
@@ -368,6 +373,7 @@ export type Database = {
           spouse_rrsp?: number
           spouse_tfsa?: number
           target_retirement_age?: number | null
+          trial_ends_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -396,6 +402,8 @@ export type Database = {
           override_rrsp?: number
           override_tfsa?: number
           province?: string
+          referral_code?: string | null
+          referred_by?: string | null
           save_pct_nonreg?: number
           save_pct_rrsp?: number
           save_pct_tfsa?: number
@@ -413,7 +421,41 @@ export type Database = {
           spouse_rrsp?: number
           spouse_tfsa?: number
           target_retirement_age?: number | null
+          trial_ends_at?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      referral_rewards: {
+        Row: {
+          access_from: string
+          access_until: string
+          created_at: string
+          id: string
+          plan: string
+          price_id: string | null
+          referred_user_id: string
+          referrer_id: string
+        }
+        Insert: {
+          access_from?: string
+          access_until: string
+          created_at?: string
+          id?: string
+          plan?: string
+          price_id?: string | null
+          referred_user_id: string
+          referrer_id: string
+        }
+        Update: {
+          access_from?: string
+          access_until?: string
+          created_at?: string
+          id?: string
+          plan?: string
+          price_id?: string | null
+          referred_user_id?: string
+          referrer_id?: string
         }
         Relationships: []
       }
@@ -558,6 +600,7 @@ export type Database = {
     }
     Functions: {
       free_limit_state: { Args: { _user_id: string }; Returns: string }
+      generate_referral_code: { Args: never; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
