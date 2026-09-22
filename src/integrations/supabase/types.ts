@@ -614,6 +614,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      invite_code_redeemable: { Args: { _code_id: string }; Returns: boolean }
       plan_state: { Args: { _user_id: string }; Returns: string }
     }
     Enums: {
