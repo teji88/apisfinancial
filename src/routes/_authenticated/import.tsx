@@ -229,20 +229,59 @@ function ImportPage() {
   }
 
   async function handleFile(file: File) {
-    if (!isPro) {
-      setUpgradeReason(
-        "Reading statements with AI is part of Pro. You can still type transactions in by hand.",
-      );
-      setUpgradeOpen(true);
-      return;
-    }
     if (file.size > 20 * 1024 * 1024) {
       toast.error("That file is larger than 20 MB.");
       return;
     }
+    const isCsv = /\.(csv|tsv)$/i.test(file.name);
+    // Spreadsheets are already structured, so they are read directly here:
+    // no AI, no size ceiling, no credits, and every row comes through.
+    if (!isCsv && !isPro) {
+      setUpgradeReason(
+        "Reading PDFs and photos with AI is part of Pro. CSV files and hand entry stay free.",
+      );
+      setUpgradeOpen(true);
+      return;
+    }
     setBusy(true);
+    setPage(0);
     try {
       const { dataUrl, text } = await readFile(file);
+      if (isCsv) {
+        const result = parseCsvText(text ?? "", file.name);
+        setBroker(`${result.broker} · read directly, no AI credits used`);
+        setRows(
+          result.transactions.map((t, i) => ({
+            account_type: mapping[t.portfolio]?.accountType ?? "Non-Registered",
+            account_hint: t.portfolio,
+            date: t.date,
+            type: t.type,
+            symbol: t.symbol,
+            name: null,
+            quantity: t.quantity,
+            price: t.price,
+            amount: t.amount,
+            currency: t.currency,
+            fee: t.fee,
+            confidence: 1,
+            note: t.note,
+            rowId: `csv-${i}`,
+            portfolio: t.portfolio,
+            fx: t.fx,
+            accountId: "",
+          })),
+        );
+        setPortfolios(result.portfolios);
+        setMapping(defaultMapping(result.portfolios));
+        if (result.transactions.length === 0) {
+          toast.warning("No transactions found in that file.");
+        } else {
+          toast.success(
+            `Read ${result.transactions.length} transactions${result.skipped ? ` (${result.skipped} lines skipped)` : ""} — choose where each portfolio goes.`,
+          );
+        }
+        return;
+      }
       const result = await parse({
         data: {
           fileName: file.name,
@@ -293,10 +332,13 @@ function ImportPage() {
     }
 
     setSaving(true);
+    setProgress(0);
     let saved = 0;
     const rateCache = new Map<string, number>();
-    const rateFor = async (currency: string, date: string): Promise<number> => {
+    const rateFor = async (currency: string, date: string, fx?: number): Promise<number> => {
       if (currency !== "USD") return 1;
+      // A rate supplied by the file is the actual trade-date rate — keep it.
+      if (fx && fx > 0 && fx !== 1) return fx;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 1;
       const cached = rateCache.get(date);
       if (cached) return cached;
