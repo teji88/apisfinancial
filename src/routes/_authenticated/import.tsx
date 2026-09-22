@@ -434,24 +434,11 @@ function ImportPage() {
             <p className="text-sm font-medium">Drag a file here</p>
             <p className="text-xs text-muted-foreground">
               {isPro
-                ? "CSV, PDF, PNG or JPEG · up to 20 MB"
-                : "Reading files with AI is a Pro feature — hand entry stays free"}
+                ? "CSV, PDF, PNG or JPEG · up to 20 MB · spreadsheets of any length"
+                : "CSV files are free and unlimited — PDFs and photos need Pro"}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (!isPro) {
-                    setUpgradeReason(
-                      "Reading statements with AI is part of Pro. You can still type transactions in by hand.",
-                    );
-                    setUpgradeOpen(true);
-                    return;
-                  }
-                  inputRef.current?.click();
-                }}
-              >
+              <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
                 {isPro ? (
                   <Sparkles className="mr-1.5 h-4 w-4" />
                 ) : (
