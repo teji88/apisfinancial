@@ -364,11 +364,14 @@ function ImportPage() {
             ? cashAmount
             : null,
           currency: row.currency,
-          fxRate: await rateFor(row.currency, row.date),
+          fxRate: await rateFor(row.currency, row.date, row.fx),
           fee: row.fee ?? 0,
           date: row.date,
         });
         saved += 1;
+        if (saved % 25 === 0 || saved === rows.length) setProgress(saved);
+        // Let the browser breathe between batches on very large imports.
+        if (saved % SAVE_BATCH === 0) await new Promise((r) => setTimeout(r, 0));
       }
       toast.success(`${saved} transactions added to your ledger.`);
       setRows([]);
