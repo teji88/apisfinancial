@@ -133,9 +133,10 @@ function AccountsPage() {
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
         reason={
-          entitlement.readOnly
+          familyReason ??
+          (entitlement.readOnly
             ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to make changes."
-            : "The free plan includes one account. Pro removes the limit."
+            : "The free plan includes one account. Pro removes the limit.")
         }
       />
 
@@ -192,6 +193,46 @@ function AccountsPage() {
             Add account
           </Button>
         </div>
+        <div className="space-y-1.5 md:col-span-2">
+          <Label>Whose account is this?</Label>
+          <Select
+            value={ownerType}
+            onValueChange={(v) => {
+              if (v !== "self" && !hasProPlus) {
+                setFamilyReason(FAMILY_REASON);
+                setUpgradeOpen(true);
+                return;
+              }
+              setOwnerType(v);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="self">{OWNER_LABELS["self"]}</SelectItem>
+              <SelectItem value="partner">
+                {OWNER_LABELS["partner"]}
+                {hasProPlus ? "" : " (Pro+)"}
+              </SelectItem>
+              <SelectItem value="child">
+                {OWNER_LABELS["child"]}
+                {hasProPlus ? "" : " (Pro+)"}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {ownerType !== "self" && (
+          <div className="space-y-1.5 md:col-span-3">
+            <Label htmlFor="member">Family member name</Label>
+            <Input
+              id="member"
+              placeholder={ownerType === "child" ? "Tejas" : "Partner's first name"}
+              value={memberName}
+              onChange={(e) => setMemberName(e.target.value)}
+            />
+          </div>
+        )}
         <div className="flex items-start gap-3 md:col-span-5">
           <Switch id="track-cash" checked={trackCash} onCheckedChange={setTrackCash} />
           <div className="space-y-0.5">
@@ -228,7 +269,14 @@ function AccountsPage() {
               );
               return (
                 <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.account_name}</TableCell>
+                  <TableCell className="font-medium">
+                    {a.account_name}
+                    {(a.owner_type ?? "self") !== "self" && (
+                      <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
+                        {ownerLabel(a)}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {a.account_type} · {a.currency}
                   </TableCell>
