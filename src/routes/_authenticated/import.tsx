@@ -471,7 +471,142 @@ function ImportPage() {
         )}
       </div>
 
-      {rows.length > 0 ? (
+      {portfolios.length > 0 ? (
+        <div className="panel overflow-hidden">
+          <div className="border-b px-5 py-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Map your portfolios
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              We found {portfolios.length} portfolios in that file. Choose where each one lands —
+              every transaction inside it follows in one step.
+            </p>
+          </div>
+          <div className="divide-y">
+            {portfolios.map((p) => {
+              const m = mapping[p.name];
+              if (!m) return null;
+              const setM = (patch: Partial<Mapping>) =>
+                setMapping((prev) => ({ ...prev, [p.name]: { ...m, ...patch } }));
+              return (
+                <div key={p.name} className="grid gap-3 px-5 py-4 md:grid-cols-4 md:items-end">
+                  <div>
+                    <p className="font-medium">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {p.count} transactions · {p.currency}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Goes to</Label>
+                    <Select value={m.target} onValueChange={(v) => setM({ target: v })}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accountList.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.account_name} · {a.account_type}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="new">+ Create a new account</SelectItem>
+                        <SelectItem value="skip">Skip this portfolio</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {m.target === "new" ? (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label>Account type</Label>
+                        <Select
+                          value={m.accountType}
+                          onValueChange={(v) => setM({ accountType: v })}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ACCOUNT_TYPES.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {t}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Whose account</Label>
+                        <div className="flex gap-2">
+                          <Select
+                            value={m.ownerType}
+                            onValueChange={(v) => {
+                              if (v !== "self" && !hasProPlus) {
+                                setUpgradeReason(
+                                  "Tracking a partner's or a child's accounts is part of Pro+ ($2 a month or $20 a year).",
+                                );
+                                setUpgradeOpen(true);
+                                return;
+                              }
+                              setM({ ownerType: v });
+                            }}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="self">{OWNER_LABELS["self"]}</SelectItem>
+                              <SelectItem value="partner">
+                                {OWNER_LABELS["partner"]}
+                                {hasProPlus ? "" : " (Pro+)"}
+                              </SelectItem>
+                              <SelectItem value="child">
+                                {OWNER_LABELS["child"]}
+                                {hasProPlus ? "" : " (Pro+)"}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {m.ownerType !== "self" ? (
+                            <Input
+                              className="h-9"
+                              placeholder="Name"
+                              value={m.memberName}
+                              onChange={(e) => setM({ memberName: e.target.value })}
+                            />
+                          ) : null}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="md:col-span-2 text-xs text-muted-foreground">
+                      {m.target === "skip"
+                        ? "These transactions will be dropped."
+                        : "Existing account — nothing new is created."}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap justify-end gap-2 border-t px-5 py-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setRows([]);
+                setPortfolios([]);
+                setBroker(null);
+              }}
+            >
+              Discard
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => void applyMapping()}>
+              {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Apply mapping
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {rows.length > 0 && portfolios.length === 0 ? (
         <div className="panel overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
             <div>
