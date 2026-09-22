@@ -114,7 +114,11 @@ function LedgerPage() {
   const [date, setDate] = useState(today());
   const [looking, setLooking] = useState(false);
   const [filterAccount, setFilterAccount] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Transaction | null>(null);
+
 
   const isCash = CASH_TYPES.includes(type);
   const isSplit = type === "SPLIT";
@@ -188,13 +192,30 @@ function LedgerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
-  const rows = useMemo(() => {
-    const list =
-      filterAccount === "all"
-        ? transactions
-        : transactions.filter((t) => t.account_id === filterAccount);
-    return list.slice(0, 300);
-  }, [transactions, filterAccount]);
+  const filtered = useMemo(() => {
+    const term = search.trim().toUpperCase();
+    const symbolById = new Map(holdings.map((h) => [h.id, h.symbol]));
+    return transactions.filter((t) => {
+      if (filterAccount !== "all" && t.account_id !== filterAccount) return false;
+      if (!term) return true;
+      const sym = t.holding_id ? (symbolById.get(t.holding_id) ?? "") : "";
+      return sym.includes(term) || t.transaction_type.includes(term);
+    });
+  }, [transactions, holdings, filterAccount, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const start = (currentPage - 1) * pageSize;
+  const rows = useMemo(
+    () => filtered.slice(start, start + pageSize),
+    [filtered, start, pageSize],
+  );
+
+  // Any change to the filters puts you back on the first page.
+  useEffect(() => {
+    setPage(1);
+  }, [filterAccount, search, pageSize]);
+
 
   async function handleLookup() {
     if (!symbol.trim()) return;
@@ -574,24 +595,48 @@ function LedgerPage() {
       </form>
 
       <div className="panel overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-b px-5 py-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Transactions
           </h2>
-          <Select value={filterAccount} onValueChange={setFilterAccount}>
-            <SelectTrigger className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All accounts</SelectItem>
-              {accounts.map((a) => (
-                <SelectItem key={a.id} value={a.id}>
-                  {a.account_type} · {a.account_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <span className="text-xs text-muted-foreground">
+            {filtered.length === 0
+              ? "No matches"
+              : `Showing ${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}`}
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Input
+              className="w-40"
+              placeholder="Search symbol"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <Select value={filterAccount} onValueChange={setFilterAccount}>
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accounts</SelectItem>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.account_type} · {a.account_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+              <SelectTrigger className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="50">50 rows</SelectItem>
+                <SelectItem value="100">100 rows</SelectItem>
+                <SelectItem value="250">250 rows</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -672,7 +717,44 @@ function LedgerPage() {
             </TableBody>
           </Table>
         </div>
+        {pageCount > 1 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3 text-sm">
+            <span className="text-muted-foreground">
+              Page {currentPage} of {pageCount}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage(1)}>
+                First
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === pageCount}
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              >
+                Next
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === pageCount}
+                onClick={() => setPage(pageCount)}
+              >
+                Last
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
+
 
       {editing ? (
         <EditTransactionDialog
