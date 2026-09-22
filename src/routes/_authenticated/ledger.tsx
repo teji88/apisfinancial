@@ -188,13 +188,30 @@ function LedgerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
-  const rows = useMemo(() => {
-    const list =
-      filterAccount === "all"
-        ? transactions
-        : transactions.filter((t) => t.account_id === filterAccount);
-    return list.slice(0, 300);
-  }, [transactions, filterAccount]);
+  const filtered = useMemo(() => {
+    const term = search.trim().toUpperCase();
+    const symbolById = new Map(holdings.map((h) => [h.id, h.symbol]));
+    return transactions.filter((t) => {
+      if (filterAccount !== "all" && t.account_id !== filterAccount) return false;
+      if (!term) return true;
+      const sym = t.holding_id ? (symbolById.get(t.holding_id) ?? "") : "";
+      return sym.includes(term) || t.transaction_type.includes(term);
+    });
+  }, [transactions, holdings, filterAccount, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const start = (currentPage - 1) * pageSize;
+  const rows = useMemo(
+    () => filtered.slice(start, start + pageSize),
+    [filtered, start, pageSize],
+  );
+
+  // Any change to the filters puts you back on the first page.
+  useEffect(() => {
+    setPage(1);
+  }, [filterAccount, search, pageSize]);
+
 
   async function handleLookup() {
     if (!symbol.trim()) return;
