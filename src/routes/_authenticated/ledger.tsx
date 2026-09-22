@@ -595,24 +595,48 @@ function LedgerPage() {
       </form>
 
       <div className="panel overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-b px-5 py-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Transactions
           </h2>
-          <Select value={filterAccount} onValueChange={setFilterAccount}>
-            <SelectTrigger className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All accounts</SelectItem>
-              {accounts.map((a) => (
-                <SelectItem key={a.id} value={a.id}>
-                  {a.account_type} · {a.account_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <span className="text-xs text-muted-foreground">
+            {filtered.length === 0
+              ? "No matches"
+              : `Showing ${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}`}
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Input
+              className="w-40"
+              placeholder="Search symbol"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <Select value={filterAccount} onValueChange={setFilterAccount}>
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accounts</SelectItem>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.account_type} · {a.account_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+              <SelectTrigger className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="50">50 rows</SelectItem>
+                <SelectItem value="100">100 rows</SelectItem>
+                <SelectItem value="250">250 rows</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
