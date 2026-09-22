@@ -630,7 +630,9 @@ function ImportPage() {
               </Button>
               <Button size="sm" onClick={() => void commit()} disabled={saving}>
                 {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                Approve &amp; add to ledger
+                {saving && rows.length > PAGE_SIZE
+                  ? `Saving ${progress} of ${rows.length}…`
+                  : "Approve & add to ledger"}
               </Button>
             </div>
           </div>
@@ -653,7 +655,7 @@ function ImportPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((row) => {
+                {pagedRows.map((row) => {
                   const low = row.confidence < 0.8;
                   return (
                     <TableRow key={row.rowId} className={low ? "bg-primary/5" : undefined}>
@@ -792,6 +794,32 @@ function ImportPage() {
               </TableBody>
             </Table>
           </div>
+          {totalPages > 1 ? (
+            <div className="flex items-center justify-between gap-3 border-t px-5 py-3 text-sm">
+              <span className="text-muted-foreground">
+                Showing {page * PAGE_SIZE + 1}–{Math.min(rows.length, (page + 1) * PAGE_SIZE)} of{" "}
+                {rows.length}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages - 1}
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
           <p className="border-t px-5 py-3 text-xs text-muted-foreground">
             Rows highlighted in red were uncertain — check the date, amount and account before
             approving. Account types recognised: {ACCOUNT_TYPES.join(", ")}.
