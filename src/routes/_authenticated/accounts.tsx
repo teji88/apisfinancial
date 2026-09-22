@@ -123,7 +123,15 @@ function AccountsPage() {
             Free plan: {accounts.length} of {accountLimit} account
             {accountLimit === 1 ? "" : "s"} · {holdings.length} of {holdingLimit} holdings used.
           </span>
-          <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setUpgradeOpen(true)}>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-auto"
+            onClick={() => {
+              setFamilyReason(null);
+              setUpgradeOpen(true);
+            }}
+          >
             Upgrade to Pro
           </Button>
         </div>
