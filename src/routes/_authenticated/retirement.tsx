@@ -38,6 +38,7 @@ import {
   type PlannerInputs,
 } from "@/lib/retirement";
 import { PROVINCES, PROVINCE_CODES, type ProvinceCode } from "@/lib/tax";
+import { projectResp, projectRdsp } from "@/lib/family-accounts";
 import { Button } from "@/components/ui/button";
 import { Lock } from "lucide-react";
 import { useEntitlement } from "@/lib/entitlement";
@@ -127,7 +128,22 @@ function RetirementPage() {
   /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
   const [clawbackTolerance, setClawbackTolerance] = useState(0);
   /** RESP/RDSP money counted as retirement savings only when switched on. */
-  const [includeRespRdsp, setIncludeRespRdsp] = useState(false);
+  // Education and disability plans are drawn by the child, not by you, so they
+  // get their own what-if settings rather than joining your retirement pots.
+  const [resp, setResp] = useState({
+    beneficiaryAge: 10,
+    studyStartAge: 18,
+    studyYears: 4,
+    contributionRatio: 0.6,
+    studentOtherIncome: 5000,
+  });
+  const [rdsp, setRdsp] = useState({
+    beneficiaryAge: 20,
+    paymentStartAge: 50,
+    paymentYears: 20,
+    contributionRatio: 0.3,
+    beneficiaryOtherIncome: 0,
+  });
 
 
 
