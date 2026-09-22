@@ -352,7 +352,11 @@ export function useUpdateAccount() {
       ownerType?: string;
       memberName?: string | null;
     }) => {
-      const patch: Record<string, unknown> = {};
+      const patch: {
+        track_cash?: boolean;
+        owner_type?: string;
+        member_name?: string | null;
+      } = {};
       if (input.trackCash !== undefined) patch["track_cash"] = input.trackCash;
       if (input.ownerType !== undefined) patch["owner_type"] = input.ownerType;
       if (input.memberName !== undefined) patch["member_name"] = input.memberName?.trim() || null;
