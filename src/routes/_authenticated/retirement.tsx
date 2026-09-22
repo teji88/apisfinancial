@@ -196,24 +196,32 @@ function RetirementPage() {
   }, [form, isPro]);
 
   const balances = useMemo(() => {
-    // RESP/RDSP are earmarked for education and disability support, so they are
-    // left out of retirement income unless the user opts them in.
-    const extra = includeRespRdsp ? byType.resp + byType.rdsp : 0;
+    // RESP and RDSP money belongs to the child or the beneficiary and is taxed
+    // in their hands, so it never joins your own retirement pots.
     if (p?.manual_override) {
       return {
         tfsa: p.override_tfsa ?? 0,
         rrsp: (p.override_rrsp ?? 0) + (p.override_fhsa ?? 0),
         lira: p.override_lira ?? 0,
-        nonreg: (p.override_nonreg ?? 0) + extra,
+        nonreg: p.override_nonreg ?? 0,
       };
     }
     return {
       tfsa: byType.tfsa,
       rrsp: byType.rrsp + byType.fhsa,
       lira: byType.lira,
-      nonreg: byType.nonreg + extra,
+      nonreg: byType.nonreg,
     };
-  }, [p, byType, includeRespRdsp]);
+  }, [p, byType]);
+
+  const respPlan = useMemo(
+    () => projectResp({ balance: byType.resp, ...resp }),
+    [byType.resp, resp],
+  );
+  const rdspPlan = useMemo(
+    () => projectRdsp({ balance: byType.rdsp, ...rdsp }),
+    [byType.rdsp, rdsp],
+  );
 
   const derived = useMemo(() => {
     if (!p) return null;
