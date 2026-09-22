@@ -114,7 +114,11 @@ function LedgerPage() {
   const [date, setDate] = useState(today());
   const [looking, setLooking] = useState(false);
   const [filterAccount, setFilterAccount] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Transaction | null>(null);
+
 
   const isCash = CASH_TYPES.includes(type);
   const isSplit = type === "SPLIT";
