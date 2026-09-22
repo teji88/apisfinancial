@@ -22,6 +22,8 @@ export type Database = {
           currency: string
           id: string
           institution: string | null
+          member_name: string | null
+          owner_type: string
           track_cash: boolean
           updated_at: string
           user_id: string
@@ -33,6 +35,8 @@ export type Database = {
           currency?: string
           id?: string
           institution?: string | null
+          member_name?: string | null
+          owner_type?: string
           track_cash?: boolean
           updated_at?: string
           user_id: string
@@ -44,6 +48,8 @@ export type Database = {
           currency?: string
           id?: string
           institution?: string | null
+          member_name?: string | null
+          owner_type?: string
           track_cash?: boolean
           updated_at?: string
           user_id?: string
