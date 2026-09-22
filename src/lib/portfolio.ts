@@ -24,15 +24,25 @@ export function useHoldings() {
   return useQuery({
     queryKey: ["holdings"],
     queryFn: async (): Promise<Holding[]> => {
-      const { data, error } = await supabase
-        .from("holdings")
-        .select("id, account_id, symbol, name, asset_type, currency")
-        .order("symbol");
-      if (error) throw error;
-      return data ?? [];
+      // Paged for the same reason as transactions: never silently stop at 1000.
+      const all: Holding[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase
+          .from("holdings")
+          .select("id, account_id, symbol, name, asset_type, currency")
+          .order("symbol")
+          .order("id", { ascending: true })
+          .range(from, from + 999);
+        if (error) throw error;
+        const batch = data ?? [];
+        all.push(...batch);
+        if (batch.length < 1000) break;
+      }
+      return all;
     },
   });
 }
+
 
 const PAGE = 1000;
 
