@@ -13,11 +13,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { parseStatement, type ParsedTransaction } from "@/lib/import.functions";
+import { parseCsvText, type CsvPortfolio } from "@/lib/csv-import";
 import { getFxRateOn } from "@/lib/history.functions";
-import { useAccounts, useHoldings, useAddTransaction } from "@/lib/portfolio";
+import { useAccounts, useHoldings, useAddTransaction, createAccount } from "@/lib/portfolio";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
-import { ACCOUNT_TYPES, TRANSACTION_TYPES } from "@/lib/finance";
+import { ACCOUNT_TYPES, OWNER_LABELS, TRANSACTION_TYPES } from "@/lib/finance";
+import { Label } from "@/components/ui/label";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,9 +61,28 @@ export const Route = createFileRoute("/_authenticated/import")({
   }),
 });
 
-type Row = ParsedTransaction & { rowId: string; accountId: string };
+type Row = ParsedTransaction & {
+  rowId: string;
+  accountId: string;
+  /** Portfolio label from the file, used for the mapping step. */
+  portfolio?: string;
+  /** Trade-date exchange rate already present in the file. */
+  fx?: number;
+};
+
+/** How each portfolio found in a file should land in Apis Financial. */
+type Mapping = {
+  /** An existing account id, or "new" to create one. */
+  target: string;
+  accountType: string;
+  currency: string;
+  ownerType: string;
+  memberName: string;
+};
 
 const ACCEPT = ".csv,.txt,.pdf,.png,.jpg,.jpeg";
+const PAGE_SIZE = 50;
+const SAVE_BATCH = 250;
 
 function readFile(file: File): Promise<{ dataUrl: string | null; text: string | null }> {
   const isText =
@@ -96,19 +117,90 @@ function ImportPage() {
   const [broker, setBroker] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [page, setPage] = useState(0);
+  const [portfolios, setPortfolios] = useState<CsvPortfolio[]>([]);
+  const [mapping, setMapping] = useState<Record<string, Mapping>>({});
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const holdings = holdingsQuery.data ?? [];
   const isPro = entitlement.tier !== "free";
+  const { hasProPlus } = useEntitlement();
   const [upgradeReason, setUpgradeReason] = useState<string | null>(null);
 
 
   const accountList = accounts.data ?? [];
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pagedRows = rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
-  function matchAccount(parsed: ParsedTransaction): string {
+  function matchAccount(parsed: { account_type: string }): string {
     const byType = accountList.find(
       (a) => a.account_type.toLowerCase() === parsed.account_type.toLowerCase(),
     );
     return byType?.id ?? accountList[0]?.id ?? "";
+  }
+
+  /** Pre-fills the mapping card: match on name first, then on tax wrapper. */
+  function defaultMapping(list: CsvPortfolio[]): Record<string, Mapping> {
+    const next: Record<string, Mapping> = {};
+    for (const p of list) {
+      const byName = accountList.find(
+        (a) => a.account_name.toLowerCase().trim() === p.name.toLowerCase().trim(),
+      );
+      const byType = accountList.find(
+        (a) => a.account_type.toLowerCase() === p.suggestedType.toLowerCase(),
+      );
+      next[p.name] = {
+        target: byName?.id ?? byType?.id ?? "new",
+        accountType: p.suggestedType,
+        currency: p.currency === "USD" ? "USD" : "CAD",
+        ownerType: "self",
+        memberName: "",
+      };
+    }
+    return next;
+  }
+
+  /** Creates any missing accounts and points every row at the right one. */
+  async function applyMapping() {
+    if (Object.values(mapping).some((m) => m.ownerType !== "self") && !hasProPlus) {
+      setUpgradeReason(
+        "Tracking a partner's or a child's accounts is part of Pro+ ($2 a month or $20 a year).",
+      );
+      setUpgradeOpen(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      const resolved: Record<string, string> = {};
+      for (const p of portfolios) {
+        const m = mapping[p.name];
+        if (!m) continue;
+        if (m.target === "new") {
+          resolved[p.name] = await createAccount({
+            accountType: m.accountType,
+            accountName: p.name,
+            currency: m.currency,
+            institution: "",
+            ownerType: m.ownerType,
+            memberName: m.memberName,
+          });
+        } else if (m.target !== "skip") {
+          resolved[p.name] = m.target;
+        }
+      }
+      await accounts.refetch();
+      setRows((prev) =>
+        prev
+          .filter((r) => !r.portfolio || resolved[r.portfolio])
+          .map((r) => ({ ...r, accountId: r.portfolio ? (resolved[r.portfolio] ?? r.accountId) : r.accountId })),
+      );
+      setPortfolios([]);
+      toast.success("Accounts mapped — review the transactions below.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create the accounts.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   /** Blank row so a transaction can be typed in without a file. */
