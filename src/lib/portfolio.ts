@@ -10,7 +10,9 @@ export function useAccounts() {
     queryFn: async (): Promise<Account[]> => {
       const { data, error } = await supabase
         .from("accounts")
-        .select("id, account_type, account_name, currency, institution, track_cash")
+        .select(
+          "id, account_type, account_name, currency, institution, track_cash, owner_type, member_name",
+        )
         .order("created_at");
       if (error) throw error;
       return data ?? [];
@@ -300,29 +302,43 @@ export function useDeleteTransaction() {
   });
 }
 
+export type NewAccount = {
+  accountType: string;
+  accountName: string;
+  currency: string;
+  institution: string;
+  trackCash?: boolean;
+  ownerType?: string;
+  memberName?: string | null;
+};
+
+/** Creates an account and returns its id, so imports can map straight onto it. */
+export async function createAccount(input: NewAccount): Promise<string> {
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error("You need to be signed in.");
+  const { data, error } = await supabase
+    .from("accounts")
+    .insert({
+      user_id: userId,
+      account_type: input.accountType,
+      account_name: input.accountName,
+      currency: input.currency,
+      institution: input.institution || null,
+      track_cash: input.trackCash ?? false,
+      owner_type: input.ownerType ?? "self",
+      member_name: input.memberName?.trim() || null,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
 export function useAddAccount() {
   const invalidate = useInvalidatePortfolio();
   return useMutation({
-    mutationFn: async (input: {
-      accountType: string;
-      accountName: string;
-      currency: string;
-      institution: string;
-      trackCash?: boolean;
-    }) => {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth.user?.id;
-      if (!userId) throw new Error("You need to be signed in.");
-      const { error } = await supabase.from("accounts").insert({
-        user_id: userId,
-        account_type: input.accountType,
-        account_name: input.accountName,
-        currency: input.currency,
-        institution: input.institution || null,
-        track_cash: input.trackCash ?? false,
-      });
-      if (error) throw error;
-    },
+    mutationFn: createAccount,
     onSuccess: invalidate,
   });
 }
@@ -330,11 +346,17 @@ export function useAddAccount() {
 export function useUpdateAccount() {
   const invalidate = useInvalidatePortfolio();
   return useMutation({
-    mutationFn: async (input: { id: string; trackCash: boolean }) => {
-      const { error } = await supabase
-        .from("accounts")
-        .update({ track_cash: input.trackCash })
-        .eq("id", input.id);
+    mutationFn: async (input: {
+      id: string;
+      trackCash?: boolean;
+      ownerType?: string;
+      memberName?: string | null;
+    }) => {
+      const patch: Record<string, unknown> = {};
+      if (input.trackCash !== undefined) patch["track_cash"] = input.trackCash;
+      if (input.ownerType !== undefined) patch["owner_type"] = input.ownerType;
+      if (input.memberName !== undefined) patch["member_name"] = input.memberName?.trim() || null;
+      const { error } = await supabase.from("accounts").update(patch).eq("id", input.id);
       if (error) throw error;
     },
     onSuccess: invalidate,
