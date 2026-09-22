@@ -13,11 +13,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { parseStatement, type ParsedTransaction } from "@/lib/import.functions";
+import { parseCsvText, type CsvPortfolio } from "@/lib/csv-import";
 import { getFxRateOn } from "@/lib/history.functions";
-import { useAccounts, useHoldings, useAddTransaction } from "@/lib/portfolio";
+import { useAccounts, useHoldings, useAddTransaction, createAccount } from "@/lib/portfolio";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
-import { ACCOUNT_TYPES, TRANSACTION_TYPES } from "@/lib/finance";
+import { ACCOUNT_TYPES, OWNER_LABELS, TRANSACTION_TYPES } from "@/lib/finance";
+import { Label } from "@/components/ui/label";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,9 +61,28 @@ export const Route = createFileRoute("/_authenticated/import")({
   }),
 });
 
-type Row = ParsedTransaction & { rowId: string; accountId: string };
+type Row = ParsedTransaction & {
+  rowId: string;
+  accountId: string;
+  /** Portfolio label from the file, used for the mapping step. */
+  portfolio?: string;
+  /** Trade-date exchange rate already present in the file. */
+  fx?: number;
+};
+
+/** How each portfolio found in a file should land in Apis Financial. */
+type Mapping = {
+  /** An existing account id, or "new" to create one. */
+  target: string;
+  accountType: string;
+  currency: string;
+  ownerType: string;
+  memberName: string;
+};
 
 const ACCEPT = ".csv,.txt,.pdf,.png,.jpg,.jpeg";
+const PAGE_SIZE = 50;
+const SAVE_BATCH = 250;
 
 function readFile(file: File): Promise<{ dataUrl: string | null; text: string | null }> {
   const isText =
@@ -96,19 +117,90 @@ function ImportPage() {
   const [broker, setBroker] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [page, setPage] = useState(0);
+  const [portfolios, setPortfolios] = useState<CsvPortfolio[]>([]);
+  const [mapping, setMapping] = useState<Record<string, Mapping>>({});
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const holdings = holdingsQuery.data ?? [];
   const isPro = entitlement.tier !== "free";
+  const { hasProPlus } = useEntitlement();
   const [upgradeReason, setUpgradeReason] = useState<string | null>(null);
 
 
   const accountList = accounts.data ?? [];
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pagedRows = rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
-  function matchAccount(parsed: ParsedTransaction): string {
+  function matchAccount(parsed: { account_type: string }): string {
     const byType = accountList.find(
       (a) => a.account_type.toLowerCase() === parsed.account_type.toLowerCase(),
     );
     return byType?.id ?? accountList[0]?.id ?? "";
+  }
+
+  /** Pre-fills the mapping card: match on name first, then on tax wrapper. */
+  function defaultMapping(list: CsvPortfolio[]): Record<string, Mapping> {
+    const next: Record<string, Mapping> = {};
+    for (const p of list) {
+      const byName = accountList.find(
+        (a) => a.account_name.toLowerCase().trim() === p.name.toLowerCase().trim(),
+      );
+      const byType = accountList.find(
+        (a) => a.account_type.toLowerCase() === p.suggestedType.toLowerCase(),
+      );
+      next[p.name] = {
+        target: byName?.id ?? byType?.id ?? "new",
+        accountType: p.suggestedType,
+        currency: p.currency === "USD" ? "USD" : "CAD",
+        ownerType: "self",
+        memberName: "",
+      };
+    }
+    return next;
+  }
+
+  /** Creates any missing accounts and points every row at the right one. */
+  async function applyMapping() {
+    if (Object.values(mapping).some((m) => m.ownerType !== "self") && !hasProPlus) {
+      setUpgradeReason(
+        "Tracking a partner's or a child's accounts is part of Pro+ ($2 a month or $20 a year).",
+      );
+      setUpgradeOpen(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      const resolved: Record<string, string> = {};
+      for (const p of portfolios) {
+        const m = mapping[p.name];
+        if (!m) continue;
+        if (m.target === "new") {
+          resolved[p.name] = await createAccount({
+            accountType: m.accountType,
+            accountName: p.name,
+            currency: m.currency,
+            institution: "",
+            ownerType: m.ownerType,
+            memberName: m.memberName,
+          });
+        } else if (m.target !== "skip") {
+          resolved[p.name] = m.target;
+        }
+      }
+      await accounts.refetch();
+      setRows((prev) =>
+        prev
+          .filter((r) => !r.portfolio || resolved[r.portfolio])
+          .map((r) => ({ ...r, accountId: r.portfolio ? (resolved[r.portfolio] ?? r.accountId) : r.accountId })),
+      );
+      setPortfolios([]);
+      toast.success("Accounts mapped — review the transactions below.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create the accounts.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   /** Blank row so a transaction can be typed in without a file. */
@@ -137,20 +229,59 @@ function ImportPage() {
   }
 
   async function handleFile(file: File) {
-    if (!isPro) {
-      setUpgradeReason(
-        "Reading statements with AI is part of Pro. You can still type transactions in by hand.",
-      );
-      setUpgradeOpen(true);
-      return;
-    }
     if (file.size > 20 * 1024 * 1024) {
       toast.error("That file is larger than 20 MB.");
       return;
     }
+    const isCsv = /\.(csv|tsv)$/i.test(file.name);
+    // Spreadsheets are already structured, so they are read directly here:
+    // no AI, no size ceiling, no credits, and every row comes through.
+    if (!isCsv && !isPro) {
+      setUpgradeReason(
+        "Reading PDFs and photos with AI is part of Pro. CSV files and hand entry stay free.",
+      );
+      setUpgradeOpen(true);
+      return;
+    }
     setBusy(true);
+    setPage(0);
     try {
       const { dataUrl, text } = await readFile(file);
+      if (isCsv) {
+        const result = parseCsvText(text ?? "", file.name);
+        setBroker(`${result.broker} · read directly, no AI credits used`);
+        setRows(
+          result.transactions.map((t, i) => ({
+            account_type: mapping[t.portfolio]?.accountType ?? "Non-Registered",
+            account_hint: t.portfolio,
+            date: t.date,
+            type: t.type,
+            symbol: t.symbol,
+            name: null,
+            quantity: t.quantity,
+            price: t.price,
+            amount: t.amount,
+            currency: t.currency,
+            fee: t.fee,
+            confidence: 1,
+            note: t.note,
+            rowId: `csv-${i}`,
+            portfolio: t.portfolio,
+            fx: t.fx,
+            accountId: "",
+          })),
+        );
+        setPortfolios(result.portfolios);
+        setMapping(defaultMapping(result.portfolios));
+        if (result.transactions.length === 0) {
+          toast.warning("No transactions found in that file.");
+        } else {
+          toast.success(
+            `Read ${result.transactions.length} transactions${result.skipped ? ` (${result.skipped} lines skipped)` : ""} — choose where each portfolio goes.`,
+          );
+        }
+        return;
+      }
       const result = await parse({
         data: {
           fileName: file.name,
@@ -201,10 +332,13 @@ function ImportPage() {
     }
 
     setSaving(true);
+    setProgress(0);
     let saved = 0;
     const rateCache = new Map<string, number>();
-    const rateFor = async (currency: string, date: string): Promise<number> => {
+    const rateFor = async (currency: string, date: string, fx?: number): Promise<number> => {
       if (currency !== "USD") return 1;
+      // A rate supplied by the file is the actual trade-date rate — keep it.
+      if (fx && fx > 0 && fx !== 1) return fx;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 1;
       const cached = rateCache.get(date);
       if (cached) return cached;
@@ -230,11 +364,14 @@ function ImportPage() {
             ? cashAmount
             : null,
           currency: row.currency,
-          fxRate: await rateFor(row.currency, row.date),
+          fxRate: await rateFor(row.currency, row.date, row.fx),
           fee: row.fee ?? 0,
           date: row.date,
         });
         saved += 1;
+        if (saved % 25 === 0 || saved === rows.length) setProgress(saved);
+        // Let the browser breathe between batches on very large imports.
+        if (saved % SAVE_BATCH === 0) await new Promise((r) => setTimeout(r, 0));
       }
       toast.success(`${saved} transactions added to your ledger.`);
       setRows([]);
@@ -297,24 +434,11 @@ function ImportPage() {
             <p className="text-sm font-medium">Drag a file here</p>
             <p className="text-xs text-muted-foreground">
               {isPro
-                ? "CSV, PDF, PNG or JPEG · up to 20 MB"
-                : "Reading files with AI is a Pro feature — hand entry stays free"}
+                ? "CSV, PDF, PNG or JPEG · up to 20 MB · spreadsheets of any length"
+                : "CSV files are free and unlimited — PDFs and photos need Pro"}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (!isPro) {
-                    setUpgradeReason(
-                      "Reading statements with AI is part of Pro. You can still type transactions in by hand.",
-                    );
-                    setUpgradeOpen(true);
-                    return;
-                  }
-                  inputRef.current?.click();
-                }}
-              >
+              <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
                 {isPro ? (
                   <Sparkles className="mr-1.5 h-4 w-4" />
                 ) : (
@@ -347,7 +471,142 @@ function ImportPage() {
         )}
       </div>
 
-      {rows.length > 0 ? (
+      {portfolios.length > 0 ? (
+        <div className="panel overflow-hidden">
+          <div className="border-b px-5 py-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Map your portfolios
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              We found {portfolios.length} portfolios in that file. Choose where each one lands —
+              every transaction inside it follows in one step.
+            </p>
+          </div>
+          <div className="divide-y">
+            {portfolios.map((p) => {
+              const m = mapping[p.name];
+              if (!m) return null;
+              const setM = (patch: Partial<Mapping>) =>
+                setMapping((prev) => ({ ...prev, [p.name]: { ...m, ...patch } }));
+              return (
+                <div key={p.name} className="grid gap-3 px-5 py-4 md:grid-cols-4 md:items-end">
+                  <div>
+                    <p className="font-medium">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {p.count} transactions · {p.currency}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Goes to</Label>
+                    <Select value={m.target} onValueChange={(v) => setM({ target: v })}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accountList.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.account_name} · {a.account_type}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="new">+ Create a new account</SelectItem>
+                        <SelectItem value="skip">Skip this portfolio</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {m.target === "new" ? (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label>Account type</Label>
+                        <Select
+                          value={m.accountType}
+                          onValueChange={(v) => setM({ accountType: v })}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ACCOUNT_TYPES.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {t}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Whose account</Label>
+                        <div className="flex gap-2">
+                          <Select
+                            value={m.ownerType}
+                            onValueChange={(v) => {
+                              if (v !== "self" && !hasProPlus) {
+                                setUpgradeReason(
+                                  "Tracking a partner's or a child's accounts is part of Pro+ ($2 a month or $20 a year).",
+                                );
+                                setUpgradeOpen(true);
+                                return;
+                              }
+                              setM({ ownerType: v });
+                            }}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="self">{OWNER_LABELS["self"]}</SelectItem>
+                              <SelectItem value="partner">
+                                {OWNER_LABELS["partner"]}
+                                {hasProPlus ? "" : " (Pro+)"}
+                              </SelectItem>
+                              <SelectItem value="child">
+                                {OWNER_LABELS["child"]}
+                                {hasProPlus ? "" : " (Pro+)"}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {m.ownerType !== "self" ? (
+                            <Input
+                              className="h-9"
+                              placeholder="Name"
+                              value={m.memberName}
+                              onChange={(e) => setM({ memberName: e.target.value })}
+                            />
+                          ) : null}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="md:col-span-2 text-xs text-muted-foreground">
+                      {m.target === "skip"
+                        ? "These transactions will be dropped."
+                        : "Existing account — nothing new is created."}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap justify-end gap-2 border-t px-5 py-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setRows([]);
+                setPortfolios([]);
+                setBroker(null);
+              }}
+            >
+              Discard
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => void applyMapping()}>
+              {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Apply mapping
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {rows.length > 0 && portfolios.length === 0 ? (
         <div className="panel overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
             <div>
@@ -371,7 +630,9 @@ function ImportPage() {
               </Button>
               <Button size="sm" onClick={() => void commit()} disabled={saving}>
                 {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                Approve &amp; add to ledger
+                {saving && rows.length > PAGE_SIZE
+                  ? `Saving ${progress} of ${rows.length}…`
+                  : "Approve & add to ledger"}
               </Button>
             </div>
           </div>
@@ -394,7 +655,7 @@ function ImportPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((row) => {
+                {pagedRows.map((row) => {
                   const low = row.confidence < 0.8;
                   return (
                     <TableRow key={row.rowId} className={low ? "bg-primary/5" : undefined}>
@@ -533,6 +794,32 @@ function ImportPage() {
               </TableBody>
             </Table>
           </div>
+          {totalPages > 1 ? (
+            <div className="flex items-center justify-between gap-3 border-t px-5 py-3 text-sm">
+              <span className="text-muted-foreground">
+                Showing {page * PAGE_SIZE + 1}–{Math.min(rows.length, (page + 1) * PAGE_SIZE)} of{" "}
+                {rows.length}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages - 1}
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
           <p className="border-t px-5 py-3 text-xs text-muted-foreground">
             Rows highlighted in red were uncertain — check the date, amount and account before
             approving. Account types recognised: {ACCOUNT_TYPES.join(", ")}.

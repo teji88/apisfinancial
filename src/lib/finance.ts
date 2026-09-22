@@ -63,7 +63,26 @@ export type Account = {
    * in from outside, so the account value is just the market value of what is held.
    */
   track_cash?: boolean;
+  /** Whose account this is: your own, your partner's, or a child's. */
+  owner_type?: string;
+  /** Family member label, e.g. the child's first name. */
+  member_name?: string | null;
 };
+
+export const OWNER_TYPES = ["self", "partner", "child"] as const;
+export type OwnerType = (typeof OWNER_TYPES)[number];
+
+export const OWNER_LABELS: Record<string, string> = {
+  self: "You",
+  partner: "Partner",
+  child: "Child",
+};
+
+/** Display label for whose account this is. */
+export function ownerLabel(account: Account): string {
+  const base = OWNER_LABELS[account.owner_type ?? "self"] ?? "You";
+  return account.member_name ? `${base} · ${account.member_name}` : base;
+}
 
 /** Ids of the accounts that keep an internal cash balance. */
 export function cashTrackingIds(accounts: Account[]): Set<string> {

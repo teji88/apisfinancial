@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { ACCOUNT_TYPES, formatCad, summariseAccount } from "@/lib/finance";
+import { ACCOUNT_TYPES, OWNER_LABELS, formatCad, ownerLabel, summariseAccount } from "@/lib/finance";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 import {
@@ -59,14 +59,20 @@ function AccountsPage() {
   const addAccount = useAddAccount();
   const updateAccount = useUpdateAccount();
   const deleteAccount = useDeleteAccount();
-  const { entitlement } = useEntitlement();
+  const { entitlement, hasProPlus } = useEntitlement();
 
   const [accountType, setAccountType] = useState<string>("TFSA");
   const [accountName, setAccountName] = useState("");
   const [currency, setCurrency] = useState("CAD");
   const [institution, setInstitution] = useState("");
   const [trackCash, setTrackCash] = useState(false);
+  const [ownerType, setOwnerType] = useState("self");
+  const [memberName, setMemberName] = useState("");
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [familyReason, setFamilyReason] = useState<string | null>(null);
+
+  const FAMILY_REASON =
+    "Tracking a partner's or a child's accounts — including their RESP and RDSP — is part of Pro+ ($2 a month or $20 a year).";
 
   const accountLimit = entitlement.accountLimit;
   const atAccountLimit = accountLimit != null && accounts.length >= accountLimit;
@@ -78,11 +84,25 @@ function AccountsPage() {
       setUpgradeOpen(true);
       return;
     }
+    if (ownerType !== "self" && !hasProPlus) {
+      setFamilyReason(FAMILY_REASON);
+      setUpgradeOpen(true);
+      return;
+    }
     try {
-      await addAccount.mutateAsync({ accountType, accountName, currency, institution, trackCash });
+      await addAccount.mutateAsync({
+        accountType,
+        accountName,
+        currency,
+        institution,
+        trackCash,
+        ownerType,
+        memberName,
+      });
       toast.success(`${accountName} added`);
       setAccountName("");
       setInstitution("");
+      setMemberName("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add the account");
     }
@@ -103,7 +123,15 @@ function AccountsPage() {
             Free plan: {accounts.length} of {accountLimit} account
             {accountLimit === 1 ? "" : "s"} · {holdings.length} of {holdingLimit} holdings used.
           </span>
-          <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setUpgradeOpen(true)}>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-auto"
+            onClick={() => {
+              setFamilyReason(null);
+              setUpgradeOpen(true);
+            }}
+          >
             Upgrade to Pro
           </Button>
         </div>
@@ -113,9 +141,10 @@ function AccountsPage() {
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
         reason={
-          entitlement.readOnly
+          familyReason ??
+          (entitlement.readOnly
             ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to make changes."
-            : "The free plan includes one account. Pro removes the limit."
+            : "The free plan includes one account. Pro removes the limit.")
         }
       />
 
@@ -172,6 +201,46 @@ function AccountsPage() {
             Add account
           </Button>
         </div>
+        <div className="space-y-1.5 md:col-span-2">
+          <Label>Whose account is this?</Label>
+          <Select
+            value={ownerType}
+            onValueChange={(v) => {
+              if (v !== "self" && !hasProPlus) {
+                setFamilyReason(FAMILY_REASON);
+                setUpgradeOpen(true);
+                return;
+              }
+              setOwnerType(v);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="self">{OWNER_LABELS["self"]}</SelectItem>
+              <SelectItem value="partner">
+                {OWNER_LABELS["partner"]}
+                {hasProPlus ? "" : " (Pro+)"}
+              </SelectItem>
+              <SelectItem value="child">
+                {OWNER_LABELS["child"]}
+                {hasProPlus ? "" : " (Pro+)"}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {ownerType !== "self" && (
+          <div className="space-y-1.5 md:col-span-3">
+            <Label htmlFor="member">Family member name</Label>
+            <Input
+              id="member"
+              placeholder={ownerType === "child" ? "Tejas" : "Partner's first name"}
+              value={memberName}
+              onChange={(e) => setMemberName(e.target.value)}
+            />
+          </div>
+        )}
         <div className="flex items-start gap-3 md:col-span-5">
           <Switch id="track-cash" checked={trackCash} onCheckedChange={setTrackCash} />
           <div className="space-y-0.5">
@@ -208,7 +277,14 @@ function AccountsPage() {
               );
               return (
                 <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.account_name}</TableCell>
+                  <TableCell className="font-medium">
+                    {a.account_name}
+                    {(a.owner_type ?? "self") !== "self" && (
+                      <span className="ml-2 rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
+                        {ownerLabel(a)}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {a.account_type} · {a.currency}
                   </TableCell>
