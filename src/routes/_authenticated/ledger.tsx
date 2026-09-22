@@ -717,7 +717,44 @@ function LedgerPage() {
             </TableBody>
           </Table>
         </div>
+        {pageCount > 1 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3 text-sm">
+            <span className="text-muted-foreground">
+              Page {currentPage} of {pageCount}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage(1)}>
+                First
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === pageCount}
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              >
+                Next
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === pageCount}
+                onClick={() => setPage(pageCount)}
+              >
+                Last
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
+
 
       {editing ? (
         <EditTransactionDialog
