@@ -206,28 +206,6 @@ async function readCoverage(symbol: string): Promise<Coverage | null> {
   return (data as Coverage | null) ?? null;
 }
 
-async function readStored(symbol: string, start: string, end: string): Promise<HistoryPoint[]> {
-  const db = await admin();
-  const points: HistoryPoint[] = [];
-  const pageSize = 1000;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await db
-      .from("price_history")
-      .select("date, close")
-      .eq("symbol", symbol)
-      .gte("date", start)
-      .lte("date", end)
-      .order("date", { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data) {
-      const close = Number(row.close);
-      if (Number.isFinite(close) && close > 0) points.push({ date: String(row.date), close });
-    }
-    if (data.length < pageSize) break;
-  }
-  return points;
-}
 
 async function storePoints(symbol: string, currency: string, points: HistoryPoint[]) {
   if (points.length === 0) return;
