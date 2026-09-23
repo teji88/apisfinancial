@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const Input = z.object({
-  symbols: z.array(z.string()).max(120),
+  symbols: z.array(z.string()).max(500),
   force: z.boolean().optional(),
 });
 
