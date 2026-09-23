@@ -107,6 +107,27 @@ export function dateGrid(start: string, end: string, maxPoints = 160): string[] 
   return out;
 }
 
+/**
+ * Coarse points before the window the user is looking at and fine points
+ * inside it. History before the window only has to carry the running balance
+ * forward, so monthly steps there cut the work without changing the chart.
+ */
+export function windowGrid(
+  start: string,
+  end: string,
+  windowStart: string,
+  finePoints = 90,
+  coarsePoints = 40,
+): string[] {
+  const from = windowStart > start ? windowStart : start;
+  if (from <= start) return dateGrid(start, end, finePoints);
+  const before = dateGrid(start, from, coarsePoints);
+  const inside = dateGrid(from, end, finePoints);
+  const seen = new Set<string>();
+  return [...before, ...inside].filter((d) => (seen.has(d) ? false : (seen.add(d), true)));
+}
+
+
 export type FlowPoint = { date: string; amount: number };
 
 function grossOf(t: Transaction): number {
