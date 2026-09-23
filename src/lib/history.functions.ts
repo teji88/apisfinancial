@@ -17,15 +17,16 @@ export type HistoryResponse = {
 export const getHistory = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => Input.parse(data))
   .handler(async ({ data }): Promise<HistoryResponse> => {
-    const { fetchSymbolHistory, fetchFxHistory, mapLimit } = await import("./history.server");
+    const { fetchSymbolHistories, fetchFxHistory } = await import("./history.server");
     const symbols = Array.from(
       new Set(data.symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)),
     );
 
     const [histories, fx] = await Promise.all([
-      mapLimit(symbols, 6, (s) => fetchSymbolHistory(s, data.start, data.end)),
+      fetchSymbolHistories(symbols, data.start, data.end),
       fetchFxHistory(data.start, data.end),
     ]);
+
 
     const series: HistoryResponse["series"] = [];
     const missing: string[] = [];
