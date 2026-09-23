@@ -83,8 +83,29 @@ async function fetchRetry(input: string, init?: RequestInit): Promise<Response |
 
 // ---------------------------------------------------------------- upstream
 
+/**
+ * Broker exports often prefix a ticker with its exchange (NASD:PUBM, CVE:DE,
+ * TSX:BCE). The price feeds only understand the plain ticker, with `.TO` for
+ * Canadian listings, so the prefix is translated away before any lookup.
+ */
+export function feedSymbol(raw: string): string {
+  const s = raw.trim().toUpperCase().replace(/\s+/g, "");
+  const m = /^([A-Z]{2,6}):(.+)$/.exec(s);
+  if (!m) return s;
+  const exchange = m[1]!;
+  const ticker = m[2]!;
+  if (exchange === "TSX" || exchange === "TSE" || exchange === "TOR") return `${ticker}.TO`;
+  if (exchange === "CVE" || exchange === "TSXV") return `${ticker}.V`;
+  return ticker; // NASD, NASDAQ, NYSE, AMEX, ARCA, BATS…
+}
+
 async function fetchTmx(symbol: string, start: string, end: string): Promise<SymbolHistory | null> {
-  const base = symbol.replace(/\.TO$/i, "").toUpperCase();
+  // TMX writes trust units as BEP.UN, while exports often use BEP-UN.
+  const base = symbol
+    .replace(/\.TO$/i, "")
+    .toUpperCase()
+    .replace(/-(UN|U)$/, ".$1");
+
   const res = await fetchRetry("https://app-money.tmx.com/graphql", {
     method: "POST",
     headers: { "User-Agent": UA, "Content-Type": "application/json", locale: "en" },
@@ -185,28 +206,6 @@ async function readCoverage(symbol: string): Promise<Coverage | null> {
   return (data as Coverage | null) ?? null;
 }
 
-async function readStored(symbol: string, start: string, end: string): Promise<HistoryPoint[]> {
-  const db = await admin();
-  const points: HistoryPoint[] = [];
-  const pageSize = 1000;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await db
-      .from("price_history")
-      .select("date, close")
-      .eq("symbol", symbol)
-      .gte("date", start)
-      .lte("date", end)
-      .order("date", { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error || !data || data.length === 0) break;
-    for (const row of data) {
-      const close = Number(row.close);
-      if (Number.isFinite(close) && close > 0) points.push({ date: String(row.date), close });
-    }
-    if (data.length < pageSize) break;
-  }
-  return points;
-}
 
 async function storePoints(symbol: string, currency: string, points: HistoryPoint[]) {
   if (points.length === 0) return;
@@ -251,6 +250,153 @@ async function writeCoverage(
   if (error) console.error(`[history] coverage ${symbol}: ${error.message}`);
 }
 
+/** All coverage rows for a set of symbols in one round-trip. */
+async function readCoverageMany(symbols: string[]): Promise<Map<string, Coverage>> {
+  const out = new Map<string, Coverage>();
+  if (symbols.length === 0) return out;
+  const db = await admin();
+  const chunk = 200;
+  for (let i = 0; i < symbols.length; i += chunk) {
+    const { data } = await db
+      .from("price_history_coverage")
+      .select("symbol, currency, first_date, last_date, unavailable, checked_at")
+      .in("symbol", symbols.slice(i, i + chunk));
+    for (const row of (data ?? []) as Coverage[]) out.set(String(row.symbol).toUpperCase(), row);
+  }
+  return out;
+}
+
+/** Every stored close for a set of symbols over a window, in one paged query. */
+async function readStoredMany(
+  symbols: string[],
+  start: string,
+  end: string,
+): Promise<Map<string, HistoryPoint[]>> {
+  const out = new Map<string, HistoryPoint[]>();
+  if (symbols.length === 0) return out;
+  const db = await admin();
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await db
+      .from("price_history")
+      .select("symbol, date, close")
+      .in("symbol", symbols)
+      .gte("date", start)
+      .lte("date", end)
+      .order("symbol", { ascending: true })
+      .order("date", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error || !data || data.length === 0) break;
+    for (const row of data) {
+      const close = Number(row.close);
+      if (!Number.isFinite(close) || close <= 0) continue;
+      const key = String(row.symbol).toUpperCase();
+      const list = out.get(key) ?? [];
+      list.push({ date: String(row.date), close });
+      out.set(key, list);
+    }
+    if (data.length < pageSize) break;
+  }
+  return out;
+}
+
+type Need = { needsBack: boolean; needsForward: boolean; recentlyChecked: boolean; giveUp: boolean };
+
+function assess(coverage: Coverage | null, start: string): Need {
+  const now = today();
+  const needsBack = !coverage?.first_date || coverage.first_date > start;
+  const needsForward = !coverage?.last_date || coverage.last_date < shiftDays(now, -FRESH_DAYS);
+  const recentlyChecked =
+    coverage != null && Date.now() - new Date(coverage.checked_at).getTime() < 6 * 60 * 60 * 1000;
+  return { needsBack, needsForward, recentlyChecked, giveUp: coverage?.unavailable === true && recentlyChecked };
+}
+
+/** Pull the missing part of a series from upstream and add it to the library. */
+async function topUp(
+  feed: string,
+  coverage: Coverage | null,
+  start: string,
+): Promise<SymbolHistory | null> {
+  const now = today();
+  const currency = coverage?.currency ?? (isTsx(feed) ? "CAD" : "USD");
+  const need = assess(coverage, start);
+  const floor = isTsx(feed) ? yearsAgo(TSX_YEARS) : yearsAgo(US_YEARS);
+  const from = need.needsBack ? minDate(start, floor) : shiftDays(coverage!.last_date!, -5);
+  const fetched = await fetchUpstream(feed, from, now);
+  if (fetched) {
+    await storePoints(feed, fetched.currency, fetched.points);
+    await writeCoverage(
+      feed,
+      fetched.currency,
+      fetched.points[0]!.date,
+      fetched.points[fetched.points.length - 1]!.date,
+      false,
+    );
+  } else if (!coverage?.last_date) {
+    await writeCoverage(feed, currency, null, null, true);
+  } else {
+    await writeCoverage(feed, currency, coverage.first_date, coverage.last_date, false);
+  }
+  return fetched;
+}
+
+/**
+ * Daily closes for many symbols at once. Coverage and stored prices are read
+ * in single batched queries instead of one round-trip per symbol, and only the
+ * symbols we are actually missing are pulled from upstream.
+ */
+export async function fetchSymbolHistories(
+  symbolsRaw: string[],
+  start: string,
+  end: string,
+): Promise<(SymbolHistory | null)[]> {
+  const requested = symbolsRaw.map((s) => s.trim().toUpperCase());
+  const feeds = requested.map((s) => feedSymbol(s));
+
+  const fresh = new Map<string, SymbolHistory | null>();
+  const pending: string[] = [];
+  for (const feed of new Set(feeds.filter(Boolean))) {
+    const hit = memory.get(`${feed}|${start}|${end}`);
+    if (hit && Date.now() - hit.at < MEM_TTL) fresh.set(feed, hit.value);
+    else pending.push(feed);
+  }
+
+  const coverages = await readCoverageMany(pending);
+  const toFetch = pending.filter((feed) => {
+    const need = assess(coverages.get(feed) ?? null, start);
+    return !need.giveUp && (need.needsBack || (need.needsForward && !need.recentlyChecked));
+  });
+
+  const fetched = new Map<string, SymbolHistory | null>();
+  await mapLimit(toFetch, 6, async (feed) => {
+    fetched.set(feed, await topUp(feed, coverages.get(feed) ?? null, start));
+  });
+
+  const stored = await readStoredMany(pending, start, end);
+
+  for (const feed of pending) {
+    const coverage = coverages.get(feed) ?? null;
+    const got = fetched.get(feed) ?? null;
+    const points = stored.get(feed) ?? [];
+    const currency = got?.currency ?? coverage?.currency ?? (isTsx(feed) ? "CAD" : "USD");
+    const value: SymbolHistory | null =
+      points.length > 0
+        ? { symbol: feed, currency, points }
+        : got
+          ? { ...got, points: got.points.filter((p) => p.date >= start && p.date <= end) }
+          : null;
+    const final = value && value.points.length > 0 ? value : null;
+    memory.set(`${feed}|${start}|${end}`, { at: Date.now(), value: final });
+    fresh.set(feed, final);
+  }
+
+  return requested.map((symbol, i) => {
+    const value = fresh.get(feeds[i]!) ?? null;
+    // Keep the caller's own ticker on the result so their holdings still match.
+    return value ? { ...value, symbol } : null;
+  });
+}
+
 /**
  * Daily closes for a symbol over a window, served from the shared library and
  * topped up from upstream only for the parts we are missing.
@@ -262,55 +408,11 @@ export async function fetchSymbolHistory(
 ): Promise<SymbolHistory | null> {
   const symbol = symbolRaw.trim().toUpperCase();
   if (!symbol) return null;
-
-  const memKey = `${symbol}|${start}|${end}`;
-  const hit = memory.get(memKey);
-  if (hit && Date.now() - hit.at < MEM_TTL) return hit.value;
-
-  const coverage = await readCoverage(symbol);
-  const currency = coverage?.currency ?? (isTsx(symbol) ? "CAD" : "USD");
-  const now = today();
-
-  const needsBack = !coverage?.first_date || coverage.first_date > start;
-  const needsForward = !coverage?.last_date || coverage.last_date < shiftDays(now, -FRESH_DAYS);
-  const recentlyChecked =
-    coverage != null && Date.now() - new Date(coverage.checked_at).getTime() < 6 * 60 * 60 * 1000;
-  const giveUp = coverage?.unavailable === true && recentlyChecked;
-
-  let fetched: SymbolHistory | null = null;
-  if (!giveUp && (needsBack || (needsForward && !recentlyChecked))) {
-    // First touch: grab everything the source will give so later users read
-    // straight from the library. After that, only top up the missing tail.
-    const floor = isTsx(symbol) ? yearsAgo(TSX_YEARS) : yearsAgo(US_YEARS);
-    const from = needsBack ? minDate(start, floor) : shiftDays(coverage!.last_date!, -5);
-    fetched = await fetchUpstream(symbol, from, now);
-    if (fetched) {
-      await storePoints(symbol, fetched.currency, fetched.points);
-      await writeCoverage(
-        symbol,
-        fetched.currency,
-        fetched.points[0]!.date,
-        fetched.points[fetched.points.length - 1]!.date,
-        false,
-      );
-    } else if (!coverage?.last_date) {
-      await writeCoverage(symbol, currency, null, null, true);
-    } else {
-      await writeCoverage(symbol, currency, coverage.first_date, coverage.last_date, false);
-    }
-  }
-
-  const stored = await readStored(symbol, start, end);
-  const value: SymbolHistory | null =
-    stored.length > 0
-      ? { symbol, currency: fetched?.currency ?? currency, points: stored }
-      : fetched
-        ? { ...fetched, points: fetched.points.filter((p) => p.date >= start && p.date <= end) }
-        : null;
-
-  memory.set(memKey, { at: Date.now(), value: value && value.points.length > 0 ? value : null });
-  return value && value.points.length > 0 ? value : null;
+  const [value] = await fetchSymbolHistories([symbol], start, end);
+  return value ?? null;
 }
+
+
 
 function minDate(a: string, b: string): string {
   return a < b ? a : b;

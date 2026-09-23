@@ -107,6 +107,27 @@ export function dateGrid(start: string, end: string, maxPoints = 160): string[] 
   return out;
 }
 
+/**
+ * Coarse points before the window the user is looking at and fine points
+ * inside it. History before the window only has to carry the running balance
+ * forward, so monthly steps there cut the work without changing the chart.
+ */
+export function windowGrid(
+  start: string,
+  end: string,
+  windowStart: string,
+  finePoints = 90,
+  coarsePoints = 40,
+): string[] {
+  const from = windowStart > start ? windowStart : start;
+  if (from <= start) return dateGrid(start, end, finePoints);
+  const before = dateGrid(start, from, coarsePoints);
+  const inside = dateGrid(from, end, finePoints);
+  const seen = new Set<string>();
+  return [...before, ...inside].filter((d) => (seen.has(d) ? false : (seen.add(d), true)));
+}
+
+
 export type FlowPoint = { date: string; amount: number };
 
 function grossOf(t: Transaction): number {
@@ -360,6 +381,8 @@ export function buildComparison(
   portfolioEndValue: number,
   selection: BenchmarkChoice[] = DEFAULT_BENCHMARKS,
   cashAccounts?: Set<string>,
+  /** Date resolution to plot; defaults to an even grid over the whole history. */
+  windowStart?: string,
 ): ComparisonResult | null {
   const flows = contributionFlows(transactions, cashAccounts);
   if (transactions.length === 0) return null;
@@ -367,7 +390,8 @@ export function buildComparison(
     .map((t) => t.transaction_date)
     .sort()[0]!;
   const end = new Date().toISOString().slice(0, 10);
-  const grid = dateGrid(start, end);
+  const grid = windowStart ? windowGrid(start, end, windowStart) : dateGrid(start, end);
+
 
   const portfolio = portfolioValueSeries(grid, transactions, holdings, history, fx, fxNow, cashAccounts);
   if (portfolio.length > 0) portfolio[portfolio.length - 1] = portfolioEndValue;

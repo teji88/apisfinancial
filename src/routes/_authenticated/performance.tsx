@@ -148,11 +148,22 @@ function PerformancePage() {
     [picked],
   );
 
+  const positions = useMemo(
+    () => computePositions(holdings, transactions, quotes, fxUsdCad),
+    [holdings, transactions, quotes, fxUsdCad],
+  );
+
+  /**
+   * Only positions still held need a price curve: a holding sold years ago is
+   * already realised as cash, so pulling its daily closes is pure waste.
+   */
   const symbols = useMemo(() => {
-    const own = holdings.map((h) => h.symbol.toUpperCase());
+    const own = positions
+      .filter((p) => Math.abs(p.units) > 1e-9)
+      .map((p) => p.symbol.toUpperCase());
     const benches = selection.map((b) => b.symbol);
     return Array.from(new Set([...own, ...benches])).sort();
-  }, [holdings, selection]);
+  }, [positions, selection]);
 
   const history = useQuery({
     queryKey: ["history", symbols, start, end],
@@ -162,10 +173,6 @@ function PerformancePage() {
     queryFn: async () => fetchHistory({ data: { symbols, start, end } }),
   });
 
-  const positions = useMemo(
-    () => computePositions(holdings, transactions, quotes, fxUsdCad),
-    [holdings, transactions, quotes, fxUsdCad],
-  );
   const cashAccounts = useMemo(() => cashTrackingIds(accounts), [accounts]);
   // Cash is floored at zero: a buy recorded without a matching deposit is
   // treated as an implied contribution rather than a negative cash balance.
@@ -179,24 +186,6 @@ function PerformancePage() {
   );
   const twrrTotal = twrr(valuation);
   const twrrAnnual = twrrTotal == null ? null : annualise(twrrTotal, valuation);
-
-  const comparison = useMemo(() => {
-    if (!history.data) return null;
-    const map: SeriesMap = new Map();
-    for (const s of history.data.series) {
-      map.set(s.symbol.toUpperCase(), { currency: s.currency, points: s.points });
-    }
-    return buildComparison(
-      transactions,
-      holdings,
-      map,
-      history.data.fx,
-      fxUsdCad,
-      portfolioValue,
-      selection,
-      cashAccounts,
-    );
-  }, [history.data, transactions, holdings, fxUsdCad, portfolioValue, selection, cashAccounts]);
 
   const [period, setPeriod] = useState<string>("ALL");
   const [mode, setMode] = useState<"TWR" | "MWR">("TWR");
@@ -215,6 +204,35 @@ function PerformancePage() {
     d.setMonth(d.getMonth() - months);
     return d.toISOString().slice(0, 10);
   }, [period, start]);
+
+  const comparison = useMemo(() => {
+    if (!history.data) return null;
+    const map: SeriesMap = new Map();
+    for (const s of history.data.series) {
+      map.set(s.symbol.toUpperCase(), { currency: s.currency, points: s.points });
+    }
+    return buildComparison(
+      transactions,
+      holdings,
+      map,
+      history.data.fx,
+      fxUsdCad,
+      portfolioValue,
+      selection,
+      cashAccounts,
+      periodStart,
+    );
+  }, [
+    history.data,
+    transactions,
+    holdings,
+    fxUsdCad,
+    portfolioValue,
+    selection,
+    cashAccounts,
+    periodStart,
+  ]);
+
 
   /**
    * Both views are rebased to the start of the selected window: time-weighted
