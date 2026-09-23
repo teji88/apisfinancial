@@ -193,20 +193,29 @@ async function fetchUsdCad(): Promise<ProviderQuote> {
 const defaultProvider: MarketProvider = {
   name: "cnbc+frankfurter",
   async fetchQuotes(symbols) {
+    const { feedSymbol } = await import("./history.server");
     const wanted = Array.from(new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean)));
     const tickers = wanted.filter((s) => s !== FX_SYMBOL);
     const out: ProviderQuote[] = [];
 
+    // Broker exports carry exchange prefixes (NASD:PUBM); the quote services
+    // only know the plain ticker, so we look that up and answer under the
+    // symbol the user actually holds.
+    const lookup = new Map(tickers.map((s) => [s, feedSymbol(s)]));
+    const feeds = Array.from(new Set(lookup.values()));
+
     // Batched primary source, in chunks so a long holdings list still works.
     const found = new Map<string, ProviderQuote>();
-    for (let i = 0; i < tickers.length; i += 40) {
-      const batch = await cnbcQuotes(tickers.slice(i, i + 40));
+    for (let i = 0; i < feeds.length; i += 40) {
+      const batch = await cnbcQuotes(feeds.slice(i, i + 40));
       batch.forEach((quote, symbol) => found.set(symbol, quote));
     }
 
     for (const symbol of tickers) {
-      const hit = found.get(symbol);
-      out.push(hit ?? (await yahooQuote(symbol)));
+      const feed = lookup.get(symbol) ?? symbol;
+      const hit = found.get(feed) ?? (feed === symbol ? null : found.get(symbol));
+      const quote = hit ?? (await yahooQuote(feed));
+      out.push({ ...quote, symbol });
     }
 
     if (wanted.includes(FX_SYMBOL)) {
@@ -217,6 +226,7 @@ const defaultProvider: MarketProvider = {
     return out;
   },
 };
+
 
 export function getMarketProvider(): MarketProvider {
   // Future providers (FMP, Polygon, Alpha Vantage) register here.
