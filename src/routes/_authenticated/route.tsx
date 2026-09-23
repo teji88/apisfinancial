@@ -7,7 +7,6 @@ import {
   Gift,
   LayoutDashboard,
   FileUp,
-
   LogOut,
   Menu,
   Moon,
@@ -33,7 +32,6 @@ import { deleteMyAccount } from "@/lib/account.functions";
 import { getStripeEnvironment } from "@/lib/stripe";
 import { PROVINCES, PROVINCE_CODES } from "@/lib/tax";
 import { formatCad, formatPct, summariseAccount } from "@/lib/finance";
-
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,13 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 export const Route = createFileRoute("/_authenticated")({
   staticData: { sitemap: "exclude-subtree" },
@@ -116,15 +108,14 @@ function ReadOnlyBanner() {
   if (!entitlement.readOnly) return null;
   return (
     <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-sm text-destructive">
-      Your plan ended on {formatDate(entitlement.accessEndsAt)} — Apis Financial is view-only. Nothing
-      has been deleted.{" "}
+      Your plan ended on {formatDate(entitlement.accessEndsAt)} — Apis Financial is view-only.
+      Nothing has been deleted.{" "}
       <Link to="/plan" className="font-medium underline">
         Restart Pro
       </Link>
     </div>
   );
 }
-
 
 function AppHeader() {
   const {
@@ -161,16 +152,12 @@ function AppHeader() {
     <header className="sticky top-0 z-30 overflow-hidden border-b bg-background backdrop-blur">
       <div className="pointer-events-none absolute inset-0 bg-card" aria-hidden />
       <div className="pointer-events-none absolute inset-0 honey-cascade" aria-hidden />
-      <div
-        className="pointer-events-none absolute inset-0 hex-mesh hex-cascade-soft"
-        aria-hidden
-      />
+      <div className="pointer-events-none absolute inset-0 hex-mesh hex-cascade-soft" aria-hidden />
       <div className="relative mx-auto flex w-full max-w-7xl flex-wrap items-center gap-4 px-4 py-3 md:px-6">
         <MobileNav />
         <Link to="/dashboard" className="flex items-center gap-2">
           <ApisLogo variant="full" size="sm" />
         </Link>
-
 
         <div className="hidden items-center gap-1 rounded-lg bg-secondary/70 p-1 md:flex">
           {NAV.map((item) => (
@@ -189,7 +176,6 @@ function AppHeader() {
             </Link>
           ))}
         </div>
-
 
         <div className="ml-auto flex items-center gap-4">
           <div className="hidden text-right sm:block">
@@ -211,7 +197,9 @@ function AppHeader() {
             <p className="num text-sm font-semibold">{fxUsdCad.toFixed(4)}</p>
           </div>
           <div className="hidden text-right lg:block">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Prices as of</p>
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Prices as of
+            </p>
             <p className="num text-sm font-semibold">{pricesAsOf ?? "—"}</p>
           </div>
           <Button
@@ -230,7 +218,6 @@ function AppHeader() {
           <ProfileMenu />
         </div>
       </div>
-
     </header>
   );
 }
@@ -272,7 +259,6 @@ function MobileNav() {
     </Sheet>
   );
 }
-
 
 function ProfileMenu() {
   const profileQuery = useProfile();
@@ -354,7 +340,6 @@ function ProfileMenu() {
       setDeleting(false);
     }
   }
-
 
   return (
     <>

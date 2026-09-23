@@ -43,7 +43,6 @@ export function useHoldings() {
   });
 }
 
-
 const PAGE = 1000;
 
 export function useTransactions() {
@@ -81,7 +80,6 @@ export function useTransactions() {
     },
   });
 }
-
 
 export function useQuotes(symbols: string[]) {
   const fetchQuotes = useServerFn(getQuotes);
@@ -160,7 +158,6 @@ export function usePortfolio(): PortfolioData {
     loading: accounts.isLoading || holdings.isLoading || transactions.isLoading,
   };
 }
-
 
 export function useInvalidatePortfolio() {
   const qc = useQueryClient();
@@ -392,7 +389,6 @@ export function useUpdateAccount() {
     onSuccess: invalidate,
   });
 }
-
 
 export function useDeleteAccount() {
   const invalidate = useInvalidatePortfolio();

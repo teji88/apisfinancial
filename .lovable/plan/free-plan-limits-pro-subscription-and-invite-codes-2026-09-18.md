@@ -27,6 +27,7 @@
 **Payments**: Lovable's built-in Stripe (seller country Canada, tax calculated and collected). Two products: Pro Monthly $1 CAD and Pro Yearly $10 CAD. Checkout via a server function; a webhook at `src/routes/api/public/stripe-webhook.ts` verifies the signature and writes subscription state.
 
 **Database** (migration, with GRANTs + RLS):
+
 - `subscriptions` — user_id, status (`active`/`past_due`/`canceled`), plan (`monthly`/`yearly`/`comp`), current_period_end, grace_until, stripe_customer_id, stripe_subscription_id. Users read their own row; only the webhook (service role) writes.
 - `invite_codes` — code, created_by, max_uses, uses, expires_at, access_until, revoked, note.
 - `invite_redemptions` — code_id, user_id, redeemed_at.

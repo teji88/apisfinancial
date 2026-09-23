@@ -27,7 +27,6 @@ export const getHistory = createServerFn({ method: "POST" })
       fetchFxHistory(data.start, data.end),
     ]);
 
-
     const series: HistoryResponse["series"] = [];
     const missing: string[] = [];
     histories.forEach((h, i) => {

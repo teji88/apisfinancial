@@ -18,12 +18,7 @@ import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 
 import { computePositions, formatCad, formatPct, formatUnits } from "@/lib/finance";
-import {
-  buildDividendRows,
-  monthlyIncome,
-  pendingDividends,
-  projectIncome,
-} from "@/lib/dividends";
+import { buildDividendRows, monthlyIncome, pendingDividends, projectIncome } from "@/lib/dividends";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -102,7 +97,6 @@ function DividendsPage() {
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
-
   useEffect(() => {
     setDismissed(loadDismissed());
   }, []);
@@ -115,7 +109,6 @@ function DividendsPage() {
       /* storage unavailable — dismissal lasts for this visit only */
     }
   };
-
 
   const [growth, setGrowth] = useState(6);
   const [priceGrowth, setPriceGrowth] = useState(6);
@@ -595,7 +588,6 @@ function DividendsPage() {
         reason="Apis Financial is view-only right now, so dividends cannot be recorded. Restart Pro to make changes again."
       />
     </div>
-
   );
 }
 

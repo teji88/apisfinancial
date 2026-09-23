@@ -133,10 +133,7 @@ export function PlanUpgrade({ onDone }: { onDone?: () => void }) {
               </li>
             ))}
           </ul>
-          <Button
-            className="mt-4 w-full"
-            onClick={() => setCheckout(PLAN_PRICES.pro[billing].id)}
-          >
+          <Button className="mt-4 w-full" onClick={() => setCheckout(PLAN_PRICES.pro[billing].id)}>
             Start Pro — {PLAN_PRICES.pro[billing].label}
           </Button>
         </div>
@@ -187,7 +184,11 @@ export function PlanUpgrade({ onDone }: { onDone?: () => void }) {
               className="w-44 font-mono"
             />
           </div>
-          <Button variant="secondary" disabled={!code.trim() || redeeming} onClick={() => void applyCode()}>
+          <Button
+            variant="secondary"
+            disabled={!code.trim() || redeeming}
+            onClick={() => void applyCode()}
+          >
             Apply code
           </Button>
         </div>

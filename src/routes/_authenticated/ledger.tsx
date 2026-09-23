@@ -119,7 +119,6 @@ function LedgerPage() {
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Transaction | null>(null);
 
-
   const isCash = CASH_TYPES.includes(type);
   const isSplit = type === "SPLIT";
   const selectedAccount = accounts.find((a) => a.id === accountId) ?? accounts[0];
@@ -141,7 +140,6 @@ function LedgerPage() {
     }
     return u;
   }, [symbol, accountId, accounts, holdings, transactions]);
-
 
   // Historical USD→CAD rate for the chosen trade date.
   useEffect(() => {
@@ -206,16 +204,12 @@ function LedgerPage() {
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const start = (currentPage - 1) * pageSize;
-  const rows = useMemo(
-    () => filtered.slice(start, start + pageSize),
-    [filtered, start, pageSize],
-  );
+  const rows = useMemo(() => filtered.slice(start, start + pageSize), [filtered, start, pageSize]);
 
   // Any change to the filters puts you back on the first page.
   useEffect(() => {
     setPage(1);
   }, [filterAccount, search, pageSize]);
-
 
   async function handleLookup() {
     if (!symbol.trim()) return;
@@ -251,9 +245,7 @@ function LedgerPage() {
       // A price the user typed themselves always wins.
       const wantsHistory = /^\d{4}-\d{2}-\d{2}$/.test(date) && date < today();
       const onDate =
-        wantsHistory && !priceTouched
-          ? await quoteOnDate({ data: { symbol: used, date } })
-          : null;
+        wantsHistory && !priceTouched ? await quoteOnDate({ data: { symbol: used, date } }) : null;
       if (onDate) {
         setPrice(onDate.close.toFixed(2));
         setPriceNote(`Close on ${onDate.date}`);
@@ -264,9 +256,7 @@ function LedgerPage() {
       }
       if (!priceTouched) {
         setPrice(quote.price.toFixed(2));
-        setPriceNote(
-          wantsHistory ? "No close stored for that date — today's price shown" : null,
-        );
+        setPriceNote(wantsHistory ? "No close stored for that date — today's price shown" : null);
       }
       toast.success(
         `${quote.name ?? used} · ${market} · ${quote.price.toFixed(2)} ${quote.currency ?? ""}`,
@@ -355,7 +345,12 @@ function LedgerPage() {
           <span>
             Free plan: {holdings.length} of {entitlement.holdingLimit} holdings used.
           </span>
-          <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setUpgradeOpen(true)}>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-auto"
+            onClick={() => setUpgradeOpen(true)}
+          >
             Upgrade to Pro
           </Button>
         </div>
@@ -370,8 +365,6 @@ function LedgerPage() {
             : "The free plan includes ten holdings. Pro removes the limit."
         }
       />
-
-
 
       <form onSubmit={handleSubmit} className="panel space-y-4 p-5">
         <div className="grid gap-4 md:grid-cols-4">
@@ -527,9 +520,7 @@ function LedgerPage() {
                       setPriceNote("Your own price");
                     }}
                   />
-                  {priceNote ? (
-                    <p className="text-xs text-muted-foreground">{priceNote}</p>
-                  ) : null}
+                  {priceNote ? <p className="text-xs text-muted-foreground">{priceNote}</p> : null}
                 </div>
               </>
             )}
@@ -658,9 +649,8 @@ function LedgerPage() {
                 const split = t.transaction_type === "SPLIT";
                 const cad = split
                   ? 0
-                  : (t.amount != null && t.amount !== 0
-                      ? t.amount
-                      : t.units * t.price_per_unit) * t.fx_rate;
+                  : (t.amount != null && t.amount !== 0 ? t.amount : t.units * t.price_per_unit) *
+                    t.fx_rate;
                 return (
                   <TableRow key={t.id}>
                     <TableCell className="num">{t.transaction_date}</TableCell>
@@ -723,7 +713,12 @@ function LedgerPage() {
               Page {currentPage} of {pageCount}
             </span>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setPage(1)}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setPage(1)}
+              >
                 First
               </Button>
               <Button
@@ -754,7 +749,6 @@ function LedgerPage() {
           </div>
         ) : null}
       </div>
-
 
       {editing ? (
         <EditTransactionDialog
@@ -789,7 +783,9 @@ function EditTransactionDialog({
   const [date, setDate] = useState(transaction.transaction_date);
   const [units, setUnits] = useState(String(transaction.units ?? 0));
   const [price, setPrice] = useState(String(transaction.price_per_unit ?? 0));
-  const [amount, setAmount] = useState(transaction.amount == null ? "" : String(transaction.amount));
+  const [amount, setAmount] = useState(
+    transaction.amount == null ? "" : String(transaction.amount),
+  );
   const [currency, setCurrency] = useState(transaction.currency);
   const [fxRate, setFxRate] = useState(String(transaction.fx_rate ?? 1));
   const [fee, setFee] = useState(String(transaction.fee ?? 0));
@@ -826,8 +822,7 @@ function EditTransactionDialog({
         transactionType: type,
         units: isCash ? 0 : Number(units || 0),
         pricePerUnit: isCash || isSplit ? 0 : Number(price || 0),
-        amount:
-          (isCash || type === "DIVIDEND") && !isSplit ? Number(amount || 0) || null : null,
+        amount: (isCash || type === "DIVIDEND") && !isSplit ? Number(amount || 0) || null : null,
         currency,
         fxRate: isSplit ? 1 : Number(fxRate || 1),
         fee: isSplit ? 0 : Number(fee || 0),
