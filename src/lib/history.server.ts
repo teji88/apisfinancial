@@ -83,8 +83,29 @@ async function fetchRetry(input: string, init?: RequestInit): Promise<Response |
 
 // ---------------------------------------------------------------- upstream
 
+/**
+ * Broker exports often prefix a ticker with its exchange (NASD:PUBM, CVE:DE,
+ * TSX:BCE). The price feeds only understand the plain ticker, with `.TO` for
+ * Canadian listings, so the prefix is translated away before any lookup.
+ */
+export function feedSymbol(raw: string): string {
+  const s = raw.trim().toUpperCase().replace(/\s+/g, "");
+  const m = /^([A-Z]{2,6}):(.+)$/.exec(s);
+  if (!m) return s;
+  const exchange = m[1]!;
+  const ticker = m[2]!;
+  if (exchange === "TSX" || exchange === "TSE" || exchange === "TOR") return `${ticker}.TO`;
+  if (exchange === "CVE" || exchange === "TSXV") return `${ticker}.V`;
+  return ticker; // NASD, NASDAQ, NYSE, AMEX, ARCA, BATS…
+}
+
 async function fetchTmx(symbol: string, start: string, end: string): Promise<SymbolHistory | null> {
-  const base = symbol.replace(/\.TO$/i, "").toUpperCase();
+  // TMX writes trust units as BEP.UN, while exports often use BEP-UN.
+  const base = symbol
+    .replace(/\.TO$/i, "")
+    .toUpperCase()
+    .replace(/-(UN|U)$/, ".$1");
+
   const res = await fetchRetry("https://app-money.tmx.com/graphql", {
     method: "POST",
     headers: { "User-Agent": UA, "Content-Type": "application/json", locale: "en" },
