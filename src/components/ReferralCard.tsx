@@ -17,7 +17,8 @@ export function ReferralCard() {
   });
   const [copied, setCopied] = useState(false);
 
-  const origin = typeof window === "undefined" ? "https://apisfinancial.app" : window.location.origin;
+  const origin =
+    typeof window === "undefined" ? "https://apisfinancial.app" : window.location.origin;
   const link = data?.code ? `${origin}/auth?ref=${data.code}` : "";
 
   async function copy() {
@@ -39,8 +40,8 @@ export function ReferralCard() {
         <p className="font-medium">Invite a friend, get a free year</p>
       </div>
       <p className="mt-2 text-sm text-muted-foreground">
-        Share your link. When someone who joins through it takes a yearly plan ($10 or $20), you
-        get a full year of that same plan free. Every friend adds another year.
+        Share your link. When someone who joins through it takes a yearly plan ($10 or $20), you get
+        a full year of that same plan free. Every friend adds another year.
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">

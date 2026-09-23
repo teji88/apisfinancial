@@ -1,10 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import {
-  type StripeEnv,
-  createStripeClient,
-  getStripeErrorMessage,
-} from "@/lib/stripe.server";
+import { type StripeEnv, createStripeClient, getStripeErrorMessage } from "@/lib/stripe.server";
 
 type CheckoutSessionResult = { clientSecret: string } | { error: string };
 type PortalSessionResult = { url: string } | { error: string };
@@ -77,9 +73,7 @@ async function syncFromStripe(
     };
   });
 
-  await supabaseAdmin
-    .from("subscriptions")
-    .upsert(rows, { onConflict: "stripe_subscription_id" });
+  await supabaseAdmin.from("subscriptions").upsert(rows, { onConflict: "stripe_subscription_id" });
 
   // Safety net for referral rewards when the provider callback was missed.
   const { grantReferralReward } = await import("@/lib/referral.server");
@@ -88,7 +82,6 @@ async function syncFromStripe(
   }
   return rows.length;
 }
-
 
 /** The subscription Stripe currently considers live for this user, if any. */
 async function activeStripeSubscription(
@@ -165,7 +158,12 @@ export const syncSubscription = createServerFn({ method: "POST" })
     } = await supabase.auth.getUser();
     try {
       const stripe = createStripeClient(data.environment);
-      const synced = await syncFromStripe(stripe, userId, user?.email ?? undefined, data.environment);
+      const synced = await syncFromStripe(
+        stripe,
+        userId,
+        user?.email ?? undefined,
+        data.environment,
+      );
       return { synced };
     } catch (error) {
       return { error: getStripeErrorMessage(error) };
@@ -225,7 +223,6 @@ export const setSubscriptionCancel = createServerFn({ method: "POST" })
       return { error: getStripeErrorMessage(error) };
     }
   });
-
 
 export const createPortalSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

@@ -162,8 +162,6 @@
   --hex-stroke: rgba(251, 191, 36, 0.4);
 }
 
-
-
 @layer base {
   * {
     border-color: var(--color-border);
@@ -306,5 +304,3 @@
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 14px -8px rgba(180, 83, 9, 0.35);
 }
-
-

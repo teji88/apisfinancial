@@ -41,7 +41,8 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       { property: "og:title", content: "Dashboard — Apis Financial" },
       {
         property: "og:description",
-        content: "Portfolio value, ACB, MWRR and TWRR across all your registered and taxable accounts.",
+        content:
+          "Portfolio value, ACB, MWRR and TWRR across all your registered and taxable accounts.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -69,16 +70,8 @@ function CurrencyBadge({ code }: { code: string }) {
 }
 
 function Dashboard() {
-  const {
-    accounts,
-    holdings,
-    transactions,
-    quotes,
-    fxUsdCad,
-    pricesAsOf,
-    loading,
-  } = usePortfolio();
-
+  const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
+    usePortfolio();
 
   const positions = useMemo(
     () => computePositions(holdings, transactions, quotes, fxUsdCad),
@@ -138,7 +131,10 @@ function Dashboard() {
 
   const pieData = summaries
     .filter((s) => s.totalValue > 0)
-    .map((s) => ({ name: `${s.account.account_type} · ${s.account.account_name}`, value: s.totalValue }));
+    .map((s) => ({
+      name: `${s.account.account_type} · ${s.account.account_name}`,
+      value: s.totalValue,
+    }));
 
   if (!loading && accounts.length === 0) {
     return (
@@ -147,8 +143,8 @@ function Dashboard() {
         <div>
           <h2 className="text-xl font-semibold">Let&apos;s set up your first account</h2>
           <p className="mt-1 max-w-md text-sm text-muted-foreground">
-            Add a TFSA, RRSP, FHSA, or non-registered account, then record your trades. Apis Financial
-            handles the CAD conversion, adjusted cost base and return math for you.
+            Add a TFSA, RRSP, FHSA, or non-registered account, then record your trades. Apis
+            Financial handles the CAD conversion, adjusted cost base and return math for you.
           </p>
         </div>
         <Button asChild>
@@ -178,7 +174,11 @@ function Dashboard() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total value" value={formatCad(totals.totalValue)} hint={`Cash ${formatCad(totals.cash)}`} />
+        <StatCard
+          label="Total value"
+          value={formatCad(totals.totalValue)}
+          hint={`Cash ${formatCad(totals.cash)}`}
+        />
         <StatCard
           label="Day change"
           value={formatCad(totals.dayChange)}
@@ -213,7 +213,11 @@ function Dashboard() {
             <ReturnStat
               label="Time-weighted (TWRR)"
               value={formatPct(totals.twrrAnnual ?? totals.twrrTotal)}
-              note={totals.twrrAnnual != null ? "Annualised, deposit-timing neutral" : "Since first trade"}
+              note={
+                totals.twrrAnnual != null
+                  ? "Annualised, deposit-timing neutral"
+                  : "Since first trade"
+              }
             />
             <ReturnStat
               label="Net deposits"
@@ -235,7 +239,14 @@ function Dashboard() {
             <div className="mt-2 h-52">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={78} paddingAngle={2}>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={45}
+                    outerRadius={78}
+                    paddingAngle={2}
+                  >
                     {pieData.map((_, i) => (
                       <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
@@ -311,8 +322,8 @@ function Dashboard() {
             Holdings
           </h2>
           <span className="text-xs text-muted-foreground">
-            Prices as of {pricesAsOf ?? "—"} · refreshed once daily after market close ·
-            USD/CAD {fxUsdCad.toFixed(4)}
+            Prices as of {pricesAsOf ?? "—"} · refreshed once daily after market close · USD/CAD{" "}
+            {fxUsdCad.toFixed(4)}
           </span>
         </div>
         <div className="overflow-x-auto">

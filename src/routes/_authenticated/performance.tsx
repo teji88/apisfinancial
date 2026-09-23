@@ -92,7 +92,6 @@ function sumFlows(flows: number[], from: number, to: number): number {
   return sum;
 }
 
-
 function PerformancePage() {
   const {
     accounts,
@@ -143,7 +142,6 @@ function PerformancePage() {
           note: option.note,
           annualYield: option.annualYield,
         };
-
       }),
     [picked],
   );
@@ -195,12 +193,17 @@ function PerformancePage() {
     const d = new Date();
     if (period === "YTD") return `${d.getFullYear()}-01-01`;
     const months =
-      period === "1M" ? 1
-      : period === "3M" ? 3
-      : period === "6M" ? 6
-      : period === "1Y" ? 12
-      : period === "3Y" ? 36
-      : 60; // 5Y
+      period === "1M"
+        ? 1
+        : period === "3M"
+          ? 3
+          : period === "6M"
+            ? 6
+            : period === "1Y"
+              ? 12
+              : period === "3Y"
+                ? 36
+                : 60; // 5Y
     d.setMonth(d.getMonth() - months);
     return d.toISOString().slice(0, 10);
   }, [period, start]);
@@ -232,7 +235,6 @@ function PerformancePage() {
     cashAccounts,
     periodStart,
   ]);
-
 
   /**
    * Both views are rebased to the start of the selected window: time-weighted
@@ -301,7 +303,6 @@ function PerformancePage() {
     fontSize: 12,
   };
 
-
   const gainPct =
     comparison && comparison.invested > 0
       ? ((comparison.portfolioEnd - comparison.invested) / comparison.invested) * 100
@@ -358,9 +359,7 @@ function PerformancePage() {
           icon={<Landmark className="h-4 w-4" />}
           label="Gain on contributions"
           value={formatPct(gainPct)}
-          hint={
-            comparison ? formatCad(comparison.portfolioEnd - comparison.invested) : undefined
-          }
+          hint={comparison ? formatCad(comparison.portfolioEnd - comparison.invested) : undefined}
         />
       </div>
 
@@ -370,7 +369,7 @@ function PerformancePage() {
             Your portfolio vs the benchmarks
           </h2>
           <span className="text-xs text-muted-foreground">
-            {(periodStart > start ? periodStart : start)} → {end}
+            {periodStart > start ? periodStart : start} → {end}
           </span>
         </div>
 
@@ -417,7 +416,6 @@ function PerformancePage() {
               : "Growth on your money after contributions, starting at $0 for this window."}
           </span>
         </div>
-
 
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           {BENCHMARK_GROUPS.map((g) => (
@@ -536,44 +534,50 @@ function PerformancePage() {
               </TableCell>
               <TableCell className="num text-right text-muted-foreground">—</TableCell>
             </TableRow>
-            {(comparison?.benchmarks ?? selection.map((b) => ({ ...b, available: false, endValue: 0, mwrr: null, values: [] }))).map(
-              (b) => {
-                const diff = b.available ? portfolioValue - b.endValue : null;
-                return (
-                  <TableRow key={b.id}>
-                    <TableCell className="font-medium">{b.label}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {b.symbol} · {b.note}
-                    </TableCell>
-                    <TableCell className="num text-right">
-                      {b.available ? formatCad(b.endValue) : "—"}
-                    </TableCell>
-                    <TableCell className="num text-right">{formatPct(b.mwrr)}</TableCell>
-                    <TableCell
-                      className={`num text-right ${
-                        diff == null ? "" : diff >= 0 ? "text-emerald-500" : "text-destructive"
-                      }`}
-                    >
-                      {diff == null ? "—" : `${diff >= 0 ? "+" : "−"}${formatCad(Math.abs(diff))}`}
-                    </TableCell>
-                  </TableRow>
-                );
-              },
-            )}
+            {(
+              comparison?.benchmarks ??
+              selection.map((b) => ({
+                ...b,
+                available: false,
+                endValue: 0,
+                mwrr: null,
+                values: [],
+              }))
+            ).map((b) => {
+              const diff = b.available ? portfolioValue - b.endValue : null;
+              return (
+                <TableRow key={b.id}>
+                  <TableCell className="font-medium">{b.label}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {b.symbol} · {b.note}
+                  </TableCell>
+                  <TableCell className="num text-right">
+                    {b.available ? formatCad(b.endValue) : "—"}
+                  </TableCell>
+                  <TableCell className="num text-right">{formatPct(b.mwrr)}</TableCell>
+                  <TableCell
+                    className={`num text-right ${
+                      diff == null ? "" : diff >= 0 ? "text-emerald-500" : "text-destructive"
+                    }`}
+                  >
+                    {diff == null ? "—" : `${diff >= 0 ? "+" : "−"}${formatCad(Math.abs(diff))}`}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
         <p className="mt-3 text-xs text-muted-foreground">
           Simulation assumes every deposit bought the benchmark ETF at that day's closing price, in
           Canadian dollars. Benchmarks are shown on a total-return basis: each fund's distributions
           accrue over time and are reinvested, so dividends are included in the comparison. Your own
-          side counts the dividends recorded in your ledger. Holdings are valued at the actual market
-          close on each date, so an early point can differ from the price you typed in the ledger.
-          Canadian-listed prices go back 25 years; US-listed prices go back 10.
+          side counts the dividends recorded in your ledger. Holdings are valued at the actual
+          market close on each date, so an early point can differ from the price you typed in the
+          ledger. Canadian-listed prices go back 25 years; US-listed prices go back 10.
           {history.data?.missing?.length
             ? ` No price history found for ${history.data.missing.join(", ")} — those holdings are valued at your last recorded price.`
             : ""}
         </p>
-
       </div>
     </div>
   );

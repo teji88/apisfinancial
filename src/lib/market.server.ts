@@ -227,7 +227,6 @@ const defaultProvider: MarketProvider = {
   },
 };
 
-
 export function getMarketProvider(): MarketProvider {
   // Future providers (FMP, Polygon, Alpha Vantage) register here.
   return defaultProvider;

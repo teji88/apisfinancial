@@ -17,7 +17,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { ApisLogo } from "@/components/brand/ApisLogo";
 import { BenchmarkSimulator } from "@/components/BenchmarkSimulator";
 
-
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/")({
@@ -99,7 +98,6 @@ const COMPARISON: Array<{
   { label: "Savings split and what-if balances", free: false, pro: false, plus: true },
 ];
 
-
 function Landing() {
   const { session, loading } = useAuth();
   const navigate = useNavigate();
@@ -123,15 +121,12 @@ function Landing() {
             <Button asChild size="sm" className="honey-fill">
               <Link to="/auth">Get started</Link>
             </Button>
-
           </div>
         </div>
       </header>
 
       <main>
         <section className="relative overflow-hidden">
-
-
           <div className="relative mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6 md:py-24">
             <p className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-primary">
               Built for Canadian investors
@@ -156,7 +151,6 @@ function Landing() {
               Every feature free for 30 days — no card needed. After that, the free plan keeps one
               account and ten holdings.
             </p>
-
           </div>
         </section>
 
@@ -165,13 +159,11 @@ function Landing() {
         </section>
 
         <section className="border-y border-border/60 bg-background/40">
-
           <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-16 md:grid-cols-3 md:px-6">
             {FEATURES.map((f) => (
               <div key={f.title} className="honey-card p-5">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/25 text-primary ring-1 ring-accent/40">
                   <f.icon className="h-5 w-5" />
-
                 </span>
                 <h3 className="mt-3 text-base font-semibold">{f.title}</h3>
                 <p className="mt-1.5 text-sm text-muted-foreground">{f.body}</p>
@@ -192,8 +184,8 @@ function Landing() {
               <p className="mt-2 text-sm text-muted-foreground">
                 Every new account starts with a full 30-day trial: unlimited accounts and holdings,
                 statement uploads, combined benchmarking and the complete household retirement
-                planner. No card, no commitment — if you do nothing when it ends, you simply move
-                to the free plan and keep your data.
+                planner. No card, no commitment — if you do nothing when it ends, you simply move to
+                the free plan and keep your data.
               </p>
               <Button asChild className="honey-fill mt-5">
                 <Link to="/auth">Start the free trial</Link>
@@ -218,7 +210,6 @@ function Landing() {
             </div>
           </div>
         </section>
-
 
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
           <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
@@ -290,9 +281,7 @@ function Landing() {
               <p className="num mt-2 text-3xl font-semibold">
                 $2<span className="text-base font-normal text-muted-foreground">/month</span>
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                or $20 a year · cancel any time
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground">or $20 a year · cancel any time</p>
               <ul className="mt-5 space-y-2 text-sm">
                 {[
                   "Everything in Pro",
@@ -350,7 +339,6 @@ function Landing() {
             </h2>
             <p className="mt-3 text-sm text-muted-foreground">
               Add your accounts and Apis Financial does the rest — in today&apos;s dollars, with
-
               Canadian tax rules built in.
             </p>
             <Button asChild size="lg" className="honey-fill mt-7">

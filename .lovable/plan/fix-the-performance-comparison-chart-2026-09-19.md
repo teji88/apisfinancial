@@ -2,7 +2,7 @@
 
 ## What's actually wrong
 
-The chart asks for price history for every holding you own *plus* all six benchmark funds in a single request. That request has a hard cap of 40 symbols built in. You currently hold 39 different investments, so the request asks for 44 and is rejected outright before any data is fetched — which is why you always see "Market history could not be loaded right now", every time, regardless of the market data services.
+The chart asks for price history for every holding you own _plus_ all six benchmark funds in a single request. That request has a hard cap of 40 symbols built in. You currently hold 39 different investments, so the request asks for 44 and is rejected outright before any data is fetched — which is why you always see "Market history could not be loaded right now", every time, regardless of the market data services.
 
 I checked the three data services the app uses directly, and all three are healthy right now:
 
@@ -47,4 +47,3 @@ No reduction in which benchmarks you can compare against is needed — all three
 - `src/lib/history.functions.ts`: raise `symbols` cap from 40 to 150; report per-symbol misses instead of dropping silently.
 - `src/routes/_authenticated/performance.tsx`: request only `selection` symbols plus holdings (not `BENCHMARK_GROUPS.flatMap`); render the chart whenever `history.data` exists, even with `missing` entries; replace the blanket `isError` branch with a reason + retry.
 - Nightly backfill added to the existing `PRICE_REFRESH_CRON_KEY` job: append yesterday's close for every symbol in `price_history_coverage`, and warm any holding symbol with no coverage row yet.
-

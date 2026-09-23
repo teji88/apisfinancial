@@ -13,7 +13,12 @@ const Input = z.object({
   holdings: z
     .array(
       z.object({
-        symbol: z.string().trim().min(1).max(16).regex(/^[A-Za-z0-9.\-]+$/),
+        symbol: z
+          .string()
+          .trim()
+          .min(1)
+          .max(16)
+          .regex(/^[A-Za-z0-9.\-]+$/),
         weight: z.number().min(0).max(100),
       }),
     )
@@ -31,7 +36,10 @@ function shiftYears(iso: string, years: number): string {
 }
 
 /** Value of a series on every grid date, carrying the last close forward. */
-function align(points: Array<{ date: string; close: number }>, grid: string[]): Array<number | null> {
+function align(
+  points: Array<{ date: string; close: number }>,
+  grid: string[],
+): Array<number | null> {
   const out: Array<number | null> = [];
   let i = 0;
   let last: number | null = null;
@@ -142,7 +150,6 @@ export const simulateBenchmark = createServerFn({ method: "POST" })
     const included = [...pickSymbols, ...usableBenchmarks];
     const lastDate = included.map(lastOf).reduce((a, b) => (a < b ? a : b), end);
 
-
     const gridSet = new Set<string>();
     for (const s of included) {
       for (const p of series.get(s)!.points) {
@@ -157,7 +164,10 @@ export const simulateBenchmark = createServerFn({ method: "POST" })
     const rate = (i: number) => fx[i] ?? fxFallback;
 
     /** Grid values in CAD for one symbol, price-only and total-return. */
-    function cadSeries(symbol: string): { price: Array<number | null>; total: Array<number | null> } {
+    function cadSeries(symbol: string): {
+      price: Array<number | null>;
+      total: Array<number | null>;
+    } {
       const s = series.get(symbol)!;
       const raw = align(s.points, grid);
       const usd = (s.currency ?? "USD").toUpperCase() === "USD";

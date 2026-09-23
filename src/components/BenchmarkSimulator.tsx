@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
-import { Line, LineChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Line,
+  LineChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Loader2, Plus, Sparkle, Trash2, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -101,13 +109,11 @@ export function BenchmarkSimulator() {
         <p className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-background/60 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-primary">
           <Sparkle className="h-3.5 w-3.5" /> No sign-in needed
         </p>
-        <h2 className="mt-3 font-display text-2xl font-semibold md:text-3xl">
-          Did you beat XEQT?
-        </h2>
+        <h2 className="mt-3 font-display text-2xl font-semibold md:text-3xl">Did you beat XEQT?</h2>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Put in up to {SIM_MAX_HOLDINGS} of your biggest holdings and see how {cad(SIM_START_AMOUNT)}{" "}
-          would have grown against Canada&apos;s all-in-one funds and the S&amp;P 500 — in Canadian
-          dollars, with distributions reinvested.
+          Put in up to {SIM_MAX_HOLDINGS} of your biggest holdings and see how{" "}
+          {cad(SIM_START_AMOUNT)} would have grown against Canada&apos;s all-in-one funds and the
+          S&amp;P 500 — in Canadian dollars, with distributions reinvested.
         </p>
       </div>
 
@@ -259,7 +265,9 @@ export function BenchmarkSimulator() {
 
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="rounded-lg border border-accent/40 bg-accent/10 p-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Your picks</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Your picks
+                  </p>
                   <p className="num text-xl font-semibold">{cad(summary.you)}</p>
                   <p className="text-xs text-muted-foreground">
                     {summary.youCagr.toFixed(1)}% a year
@@ -287,7 +295,8 @@ export function BenchmarkSimulator() {
                 {withDividends
                   ? "Distributions are reinvested at each fund's indicative yield."
                   : "Share price only — distributions are excluded."}
-                {result.missing.length > 0 && ` We have no history for ${result.missing.join(", ")}.`}
+                {result.missing.length > 0 &&
+                  ` We have no history for ${result.missing.join(", ")}.`}
                 {withDividends &&
                   result.noDividendData.length > 0 &&
                   ` No distribution data for ${result.noDividendData.join(", ")}, so they are treated as paying nothing.`}

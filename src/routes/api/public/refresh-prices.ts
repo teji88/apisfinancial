@@ -21,7 +21,6 @@ async function handleRefresh(request: Request): Promise<Response> {
     if (!timingSafeEqual(digest(token), digest(refreshKey))) return authFailure;
   }
 
-
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { refreshPrices } = await import("@/lib/market.server");
 
