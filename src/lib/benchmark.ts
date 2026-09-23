@@ -381,6 +381,8 @@ export function buildComparison(
   portfolioEndValue: number,
   selection: BenchmarkChoice[] = DEFAULT_BENCHMARKS,
   cashAccounts?: Set<string>,
+  /** Date resolution to plot; defaults to an even grid over the whole history. */
+  windowStart?: string,
 ): ComparisonResult | null {
   const flows = contributionFlows(transactions, cashAccounts);
   if (transactions.length === 0) return null;
@@ -388,7 +390,8 @@ export function buildComparison(
     .map((t) => t.transaction_date)
     .sort()[0]!;
   const end = new Date().toISOString().slice(0, 10);
-  const grid = dateGrid(start, end);
+  const grid = windowStart ? windowGrid(start, end, windowStart) : dateGrid(start, end);
+
 
   const portfolio = portfolioValueSeries(grid, transactions, holdings, history, fx, fxNow, cashAccounts);
   if (portfolio.length > 0) portfolio[portfolio.length - 1] = portfolioEndValue;
