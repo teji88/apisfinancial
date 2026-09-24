@@ -189,6 +189,42 @@ export type Database = {
           },
         ]
       }
+      portfolio_monthly_snapshots: {
+        Row: {
+          benchmarks: Json
+          created_at: string
+          id: string
+          ledger_hash: string
+          month_end: string
+          portfolio_value: number
+          scope: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          benchmarks?: Json
+          created_at?: string
+          id?: string
+          ledger_hash: string
+          month_end: string
+          portfolio_value?: number
+          scope: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          benchmarks?: Json
+          created_at?: string
+          id?: string
+          ledger_hash?: string
+          month_end?: string
+          portfolio_value?: number
+          scope?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       price_cache: {
         Row: {
           as_of: string | null
