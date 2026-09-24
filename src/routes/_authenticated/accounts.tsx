@@ -118,36 +118,15 @@ function AccountsPage() {
         </p>
       </div>
 
-      {accountLimit != null && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-          <span>
-            Free plan: {accounts.length} of {accountLimit} account
-            {accountLimit === 1 ? "" : "s"} · {holdings.length} of {holdingLimit} holdings used.
-          </span>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="ml-auto"
-            onClick={() => {
-              setFamilyReason(null);
-              setUpgradeOpen(true);
-            }}
-          >
-            Upgrade to Pro
-          </Button>
-        </div>
-      )}
-
       <UpgradeDialog
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
         reason={
           familyReason ??
-          (entitlement.readOnly
-            ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to make changes."
-            : "The free plan includes one account. Pro removes the limit.")
+          "Accounts, holdings and family tracking are all free — no subscription needed."
         }
       />
+
 
       <form onSubmit={handleAdd} className="panel grid gap-4 p-5 md:grid-cols-5">
         <div className="space-y-1.5">
