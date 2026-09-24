@@ -29,7 +29,6 @@ import { Button } from "@/components/ui/button";
 import {
   BENCHMARK_GROUPS,
   DEFAULT_BENCHMARKS,
-  buildComparison,
   type BenchmarkChoice,
   type SeriesMap,
 } from "@/lib/benchmark";
@@ -113,6 +112,7 @@ function PerformancePage() {
     loading,
   } = usePortfolio();
   const fetchHistory = useServerFn(getHistory);
+  const { user } = useAuth();
 
   const [accountFilter, setAccountFilter] = useState<string>("all");
 
