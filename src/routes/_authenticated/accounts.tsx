@@ -60,7 +60,7 @@ function AccountsPage() {
   const addAccount = useAddAccount();
   const updateAccount = useUpdateAccount();
   const deleteAccount = useDeleteAccount();
-  const { entitlement, hasProPlus } = useEntitlement();
+  const { hasProPlus } = useEntitlement();
 
   const [accountType, setAccountType] = useState<string>("TFSA");
   const [accountName, setAccountName] = useState("");
@@ -70,26 +70,13 @@ function AccountsPage() {
   const [ownerType, setOwnerType] = useState("self");
   const [memberName, setMemberName] = useState("");
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [familyReason, setFamilyReason] = useState<string | null>(null);
+  const [familyReason] = useState<string | null>(null);
 
-  const FAMILY_REASON =
-    "Tracking a partner's or a child's accounts — including their RESP and RDSP — is part of Pro+ ($2 a month or $20 a year).";
-
-  const accountLimit = entitlement.accountLimit;
-  const atAccountLimit = accountLimit != null && accounts.length >= accountLimit;
-  const holdingLimit = entitlement.holdingLimit;
+  void hasProPlus;
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
-    if (atAccountLimit || entitlement.readOnly) {
-      setUpgradeOpen(true);
-      return;
-    }
-    if (ownerType !== "self" && !hasProPlus) {
-      setFamilyReason(FAMILY_REASON);
-      setUpgradeOpen(true);
-      return;
-    }
+
     try {
       await addAccount.mutateAsync({
         accountType,
