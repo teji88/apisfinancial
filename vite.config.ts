@@ -13,6 +13,19 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // envDefine — that would leak secrets into the client bundle.
 Object.assign(process.env, loadEnv(process.env["NODE_ENV"] ?? "development", process.cwd(), ""));
 
+// The client (src/integrations/supabase/client.ts) reads the VITE_-prefixed
+// names so Vite inlines them into the browser bundle. This project only ships
+// the non-prefixed SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY, so mirror them into
+// the VITE_ names when the prefixed ones are absent. Both values are public
+// client credentials (anon/publishable), so exposing them to the client is safe
+// — the SERVICE_ROLE key is never mirrored here.
+if (!process.env["VITE_SUPABASE_URL"] && process.env["SUPABASE_URL"]) {
+  process.env["VITE_SUPABASE_URL"] = process.env["SUPABASE_URL"];
+}
+if (!process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] && process.env["SUPABASE_PUBLISHABLE_KEY"]) {
+  process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] = process.env["SUPABASE_PUBLISHABLE_KEY"];
+}
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
