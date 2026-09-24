@@ -30,19 +30,30 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
+function getServerEnv(name: string): string | undefined {
+  // `process` is not guaranteed to exist in a browser bundle. Keeping this
+  // lookup guarded prevents auth initialization from throwing a ReferenceError
+  // before it can report a useful missing-configuration message.
+  if (typeof process === "undefined") return undefined;
+  return process.env[name];
+}
+
 function createSupabaseClient() {
-  // Use import.meta.env for client-side (Vite build-time replacement)
-  // Fall back to process.env for SSR (server-side rendering)
-  const SUPABASE_URL = import.meta.env["VITE_SUPABASE_URL"] || process.env["SUPABASE_URL"];
+  // VITE_* values are inlined into the browser bundle by Vite. The guarded
+  // process.env fallback is for SSR only; it must never be evaluated as an
+  // unbound browser global when a deployment is missing its public variables.
+  const SUPABASE_URL =
+    import.meta.env["VITE_SUPABASE_URL"]?.trim() || getServerEnv("SUPABASE_URL")?.trim();
   const SUPABASE_PUBLISHABLE_KEY =
-    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] || process.env["SUPABASE_PUBLISHABLE_KEY"];
+    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"]?.trim() ||
+    getServerEnv("SUPABASE_PUBLISHABLE_KEY")?.trim();
 
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     const missing = [
       ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
       ...(!SUPABASE_PUBLISHABLE_KEY ? ["SUPABASE_PUBLISHABLE_KEY"] : []),
     ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud.`;
+    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud or configure the Vercel environment variables.`;
     console.error(`[Supabase] ${message}`);
     throw new Error(message);
   }
