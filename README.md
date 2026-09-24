@@ -4,7 +4,7 @@
 
 Build a web application called **MapleWealth**: a Canadian-focused portfolio tracker, AI-powered document parser, dividend projecting engine, and tax-optimized retirement planning suite.
 
-If in doubt at any point, ask question to me before building the app. I want to use my credits in this app if responsible manner, efficiently while getting all these features. 
+If in doubt at any point, ask question to me before building the app. I want to use my credits in this app if responsible manner, efficiently while getting all these features.
 
 ---
 

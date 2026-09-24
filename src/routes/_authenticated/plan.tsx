@@ -22,7 +22,7 @@ import {
 export const Route = createFileRoute("/_authenticated/plan")({
   staticData: { sitemap: false },
   validateSearch: (search: Record<string, unknown>): { session_id?: string } =>
-    typeof search['session_id'] === "string" ? { session_id: search['session_id'] } : {},
+    typeof search["session_id"] === "string" ? { session_id: search["session_id"] } : {},
   head: () => ({
     meta: [
       { title: "Your plan — Apis Financial" },
@@ -66,8 +66,6 @@ function PlanPage() {
   const billing = (entitlement.plan ?? "").endsWith("monthly") ? "monthly" : "yearly";
   const otherPlan: PaidPlan = currentPlan === "pro" ? "pro_plus" : "pro";
   const planName = (plan: PaidPlan) => (plan === "pro_plus" ? "Pro+" : "Pro");
-
-
 
   async function refreshFromProvider(quiet = false) {
     const result = await sync({ data: { environment: getStripeEnvironment() } });
@@ -175,7 +173,6 @@ function PlanPage() {
                     : isReferral
                       ? `${entitlement.plan === "pro_plus" ? "Pro+" : "Pro"} — free year from a referral`
                       : "Free"}
-
           </p>
           {entitlement.readOnly && <Badge variant="destructive">View only</Badge>}
           {entitlement.cancelAtPeriodEnd && <Badge variant="secondary">Ends at period end</Badge>}
@@ -208,7 +205,6 @@ function PlanPage() {
                   : entitlement.cancelAtPeriodEnd
                     ? `Pro stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
                     : `Renews on ${formatDate(entitlement.accessEndsAt)}.`}
-
           </p>
         ) : isInvite ? (
           <p className="mt-3 text-sm text-muted-foreground">Free access with no end date.</p>
@@ -263,7 +259,6 @@ function PlanPage() {
               {PLAN_PRICES[otherPlan][billing].label})
             </Button>
 
-
             {entitlement.cancelAtPeriodEnd ? (
               <Button
                 variant="outline"
@@ -303,7 +298,6 @@ function PlanPage() {
       <ReferralCard />
 
       {!isPaid && !isInvite && !isOwner && <PlanUpgrade />}
-
     </div>
   );
 }

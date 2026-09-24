@@ -16,7 +16,7 @@ const REF_KEY = "apis_referral_code";
 export const Route = createFileRoute("/auth")({
   staticData: { sitemap: false },
   validateSearch: (search: Record<string, unknown>): { ref?: string } =>
-    typeof search['ref'] === "string" ? { ref: search['ref'] } : {},
+    typeof search["ref"] === "string" ? { ref: search["ref"] } : {},
 
   head: () => ({
     meta: [
@@ -43,7 +43,9 @@ function AuthPage() {
   const { session, loading } = useAuth();
   const { ref } = Route.useSearch();
   const applyReferral = useServerFn(applyReferralCode);
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "reset">(ref ? "signup" : "signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "reset">(
+    ref ? "signup" : "signin",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -68,8 +70,7 @@ function AuthPage() {
 
   useEffect(() => {
     if (loading || !session || mode === "reset") return;
-    const stored =
-      typeof window !== "undefined" ? window.localStorage.getItem(REF_KEY) : null;
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem(REF_KEY) : null;
     void (async () => {
       if (stored) {
         try {
@@ -83,9 +84,6 @@ function AuthPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, session, mode]);
-
-
-
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -124,7 +122,6 @@ function AuthPage() {
     }
   }
 
-
   async function handleOAuth(provider: "google") {
     const result = await lovable.auth.signInWithOAuth(provider, {
       redirect_uri: window.location.origin,
@@ -144,7 +141,6 @@ function AuthPage() {
           <ApisLogo variant="stacked" size="lg" />
           <p className="text-xs text-muted-foreground">Canadian portfolio tracking</p>
         </div>
-
 
         <div className="panel p-6">
           <h2 className="text-xl font-semibold">
@@ -180,9 +176,7 @@ function AuthPage() {
             )}
             {mode !== "forgot" && (
               <div className="space-y-1.5">
-                <Label htmlFor="password">
-                  {mode === "reset" ? "New password" : "Password"}
-                </Label>
+                <Label htmlFor="password">{mode === "reset" ? "New password" : "Password"}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -215,14 +209,19 @@ function AuthPage() {
                 <span className="h-px flex-1 bg-border" />
               </div>
 
-              <Button variant="outline" className="w-full" onClick={() => void handleOAuth("google")}>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => void handleOAuth("google")}
+              >
                 Continue with Google
               </Button>
 
-
               <button
                 type="button"
-                onClick={() => setMode(mode === "signup" ? "signin" : mode === "forgot" ? "signin" : "signup")}
+                onClick={() =>
+                  setMode(mode === "signup" ? "signin" : mode === "forgot" ? "signin" : "signup")
+                }
                 className="mt-5 w-full text-sm text-muted-foreground underline-offset-4 hover:underline"
               >
                 {mode === "signin"
@@ -242,7 +241,6 @@ function AuthPage() {
             </>
           )}
         </div>
-
       </div>
     </div>
   );

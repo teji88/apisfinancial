@@ -53,7 +53,8 @@ export const Route = createFileRoute("/_authenticated/import")({
       { property: "og:title", content: "Import statements — Apis Financial" },
       {
         property: "og:description",
-        content: "AI reads your Canadian brokerage statements and drafts ledger entries for review.",
+        content:
+          "AI reads your Canadian brokerage statements and drafts ledger entries for review.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -127,7 +128,6 @@ function ImportPage() {
   const { hasProPlus } = useEntitlement();
   const [upgradeReason, setUpgradeReason] = useState<string | null>(null);
 
-
   const accountList = accounts.data ?? [];
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pagedRows = rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
@@ -192,7 +192,10 @@ function ImportPage() {
       setRows((prev) =>
         prev
           .filter((r) => !r.portfolio || resolved[r.portfolio])
-          .map((r) => ({ ...r, accountId: r.portfolio ? (resolved[r.portfolio] ?? r.accountId) : r.accountId })),
+          .map((r) => ({
+            ...r,
+            accountId: r.portfolio ? (resolved[r.portfolio] ?? r.accountId) : r.accountId,
+          })),
       );
       setPortfolios([]);
       toast.success("Accounts mapped — review the transactions below.");
@@ -613,9 +616,7 @@ function ImportPage() {
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Review {rows.length} transactions
               </h2>
-              {broker ? (
-                <p className="text-xs text-muted-foreground">Detected: {broker}</p>
-              ) : null}
+              {broker ? <p className="text-xs text-muted-foreground">Detected: {broker}</p> : null}
             </div>
             <div className="flex gap-2">
               <Button
@@ -743,7 +744,9 @@ function ImportPage() {
                         <Input
                           className="num h-8 w-24 text-right"
                           value={row.price ?? ""}
-                          onChange={(e) => update(row.rowId, { price: Number(e.target.value) || 0 })}
+                          onChange={(e) =>
+                            update(row.rowId, { price: Number(e.target.value) || 0 })
+                          }
                         />
                       </TableCell>
                       <TableCell>
@@ -837,11 +840,10 @@ function ImportPage() {
           upgradeReason
             ? upgradeReason
             : entitlement.readOnly
-            ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to import again."
-            : "This import goes past the free plan's ten holdings. Pro removes the limit."
+              ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to import again."
+              : "This import goes past the free plan's ten holdings. Pro removes the limit."
         }
       />
     </div>
-
   );
 }

@@ -64,7 +64,6 @@ export const DEFAULT_BENCHMARKS: BenchmarkChoice[] = BENCHMARK_GROUPS.map((g) =>
 /** Default proxies, kept for callers that don't offer a choice. */
 export const BENCHMARKS = DEFAULT_BENCHMARKS;
 
-
 export type BenchmarkId = string;
 
 export type SeriesMap = Map<string, { currency: string; points: HistoryPoint[] }>;
@@ -84,7 +83,7 @@ export function closeOn(points: HistoryPoint[], date: string): number | null {
       hi = mid - 1;
     }
   }
-  return best ?? (points[0]?.close ?? null);
+  return best ?? points[0]?.close ?? null;
 }
 
 export function fxOn(fx: HistoryPoint[], date: string, fallback: number): number {
@@ -96,7 +95,8 @@ export function fxOn(fx: HistoryPoint[], date: string, fallback: number): number
 export function dateGrid(start: string, end: string, maxPoints = 160): string[] {
   const s = new Date(`${start}T00:00:00Z`).getTime();
   const e = new Date(`${end}T00:00:00Z`).getTime();
-  if (!isFinite(s) || !isFinite(e) || e <= s) return [start, end].filter((v, i, a) => a.indexOf(v) === i);
+  if (!isFinite(s) || !isFinite(e) || e <= s)
+    return [start, end].filter((v, i, a) => a.indexOf(v) === i);
   const day = 86_400_000;
   const span = (e - s) / day;
   const step = Math.max(1, Math.ceil(span / maxPoints));
@@ -127,12 +127,12 @@ export function windowGrid(
   return [...before, ...inside].filter((d) => (seen.has(d) ? false : (seen.add(d), true)));
 }
 
-
 export type FlowPoint = { date: string; amount: number };
 
 function grossOf(t: Transaction): number {
   const fx = t.fx_rate || 1;
-  const base = t.amount != null && t.amount !== 0 ? t.amount : (t.units || 0) * (t.price_per_unit || 0);
+  const base =
+    t.amount != null && t.amount !== 0 ? t.amount : (t.units || 0) * (t.price_per_unit || 0);
   return base * fx;
 }
 
@@ -237,7 +237,9 @@ export function portfolioValueSeries(
   cashAccounts?: Set<string>,
 ): number[] {
   const holdingById = new Map(holdings.map((h) => [h.id, h]));
-  const txns = transactions.slice().sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
+  const txns = transactions
+    .slice()
+    .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
   let idx = 0;
   const units = new Map<string, number>();
   let cash = 0;
@@ -348,7 +350,6 @@ export function stepFlowSeries(grid: string[], flows: FlowPoint[]): number[] {
   });
 }
 
-
 export type BenchmarkResult = {
   id: string;
   label: string;
@@ -371,7 +372,6 @@ export type ComparisonResult = {
   benchmarks: BenchmarkResult[];
 };
 
-
 export function buildComparison(
   transactions: Transaction[],
   holdings: Holding[],
@@ -386,20 +386,27 @@ export function buildComparison(
 ): ComparisonResult | null {
   const flows = contributionFlows(transactions, cashAccounts);
   if (transactions.length === 0) return null;
-  const start = transactions
-    .map((t) => t.transaction_date)
-    .sort()[0]!;
+  const start = transactions.map((t) => t.transaction_date).sort()[0]!;
   const end = new Date().toISOString().slice(0, 10);
   const grid = windowStart ? windowGrid(start, end, windowStart) : dateGrid(start, end);
 
-
-  const portfolio = portfolioValueSeries(grid, transactions, holdings, history, fx, fxNow, cashAccounts);
+  const portfolio = portfolioValueSeries(
+    grid,
+    transactions,
+    holdings,
+    history,
+    fx,
+    fxNow,
+    cashAccounts,
+  );
   if (portfolio.length > 0) portfolio[portfolio.length - 1] = portfolioEndValue;
 
   const invested = flows.reduce((s, f) => s + f.amount, 0);
   const xirrFlows = flows.map((f) => ({ date: new Date(f.date), amount: -f.amount }));
   const portfolioMwrr =
-    flows.length > 0 ? xirr([...xirrFlows, { date: new Date(end), amount: portfolioEndValue }]) : null;
+    flows.length > 0
+      ? xirr([...xirrFlows, { date: new Date(end), amount: portfolioEndValue }])
+      : null;
 
   const benchmarks: BenchmarkResult[] = selection.map((b) => {
     const hist = history.get(b.symbol.toUpperCase());
@@ -422,5 +429,4 @@ export function buildComparison(
     stepFlows: stepFlowSeries(grid, flows),
     benchmarks,
   };
-
 }

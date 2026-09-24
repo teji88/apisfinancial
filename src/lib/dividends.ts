@@ -97,9 +97,7 @@ export function buildDividendRows(
         acb: p.acb,
         ratePerShare: rate,
         forwardIncome,
-        yieldPct:
-          quote?.dividendYield ??
-          (rate != null && p.price ? (rate / p.price) * 100 : null),
+        yieldPct: quote?.dividendYield ?? (rate != null && p.price ? (rate / p.price) * 100 : null),
         yieldOnCostPct: p.acb > 0 && forwardIncome > 0 ? (forwardIncome / p.acb) * 100 : null,
         received12m,
         exDivDate: quote?.exDivDate ?? null,
@@ -172,8 +170,7 @@ export function projectIncome(input: ProjectionInput, years = 10): ProjectionYea
     // yield on the original cost rises; yield on market value drifts with
     // the gap between dividend growth and price growth.
     yieldOnValue =
-      yieldOnValue *
-      ((1 + input.dividendGrowthPct / 100) / (1 + input.priceGrowthPct / 100));
+      yieldOnValue * ((1 + input.dividendGrowthPct / 100) / (1 + input.priceGrowthPct / 100));
     out.push({
       year,
       portfolioValue: value,

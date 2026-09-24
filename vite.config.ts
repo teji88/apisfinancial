@@ -11,10 +11,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // Load all env vars into process.env for server-side code (server routes need
 // non-VITE_ vars like SUPABASE_SERVICE_ROLE_KEY). Never expose these via
 // envDefine — that would leak secrets into the client bundle.
-Object.assign(
-  process.env,
-  loadEnv(process.env["NODE_ENV"] ?? "development", process.cwd(), ""),
-);
+Object.assign(process.env, loadEnv(process.env["NODE_ENV"] ?? "development", process.cwd(), ""));
 
 export default defineConfig({
   tanstackStart: {
@@ -26,14 +23,8 @@ export default defineConfig({
     resolve: {
       alias: {
         // Force the hoisted entities v4.5.0 copy; nested v7 breaks SSR.
-        "entities/lib/decode.js": path.resolve(
-          __dirname,
-          "node_modules/entities/lib/decode.js",
-        ),
-        "entities/lib/encode.js": path.resolve(
-          __dirname,
-          "node_modules/entities/lib/encode.js",
-        ),
+        "entities/lib/decode.js": path.resolve(__dirname, "node_modules/entities/lib/decode.js"),
+        "entities/lib/encode.js": path.resolve(__dirname, "node_modules/entities/lib/encode.js"),
         entities: path.resolve(__dirname, "node_modules/entities"),
       },
     },

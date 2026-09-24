@@ -2,15 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { ACCOUNT_TYPES, OWNER_LABELS, formatCad, ownerLabel, summariseAccount } from "@/lib/finance";
+import {
+  ACCOUNT_TYPES,
+  OWNER_LABELS,
+  formatCad,
+  ownerLabel,
+  summariseAccount,
+} from "@/lib/finance";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
-import {
-  useAddAccount,
-  useDeleteAccount,
-  usePortfolio,
-  useUpdateAccount,
-} from "@/lib/portfolio";
+import { useAddAccount, useDeleteAccount, usePortfolio, useUpdateAccount } from "@/lib/portfolio";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,7 +149,6 @@ function AccountsPage() {
         }
       />
 
-
       <form onSubmit={handleAdd} className="panel grid gap-4 p-5 md:grid-cols-5">
         <div className="space-y-1.5">
           <Label>Account type</Label>
@@ -246,13 +246,12 @@ function AccountsPage() {
           <div className="space-y-0.5">
             <Label htmlFor="track-cash">Keep a cash balance in this account</Label>
             <p className="text-xs text-muted-foreground">
-              Off by default: a purchase is treated as money you brought in, so the account is
-              worth what you hold. Turn it on only if you record deposits first and then buy.
+              Off by default: a purchase is treated as money you brought in, so the account is worth
+              what you hold. Turn it on only if you record deposits first and then buy.
             </p>
           </div>
         </div>
       </form>
-
 
       <div className="panel overflow-x-auto">
         <Table>

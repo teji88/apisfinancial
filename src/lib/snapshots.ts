@@ -69,7 +69,9 @@ export function monthEndHashes(
   const sym = new Map(holdings.map((h) => [h.id, h.symbol.toUpperCase()]));
   const txns = transactions
     .slice()
-    .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date) || a.id.localeCompare(b.id));
+    .sort(
+      (a, b) => a.transaction_date.localeCompare(b.transaction_date) || a.id.localeCompare(b.id),
+    );
   let h = fnv(2166136261, `v1|${scope}|${cashAccounts ? [...cashAccounts].sort().join(",") : "*"}`);
   let i = 0;
   return monthEnds.map((me) => {
@@ -77,8 +79,18 @@ export function monthEndHashes(
       const t = txns[i]!;
       h = fnv(
         h,
-        [t.id, t.transaction_date, t.transaction_type, t.account_id, t.holding_id ? sym.get(t.holding_id) : "",
-          t.units, t.price_per_unit, t.amount, t.fx_rate, t.fee].join("|"),
+        [
+          t.id,
+          t.transaction_date,
+          t.transaction_type,
+          t.account_id,
+          t.holding_id ? sym.get(t.holding_id) : "",
+          t.units,
+          t.price_per_unit,
+          t.amount,
+          t.fx_rate,
+          t.fee,
+        ].join("|"),
       );
       i++;
     }
@@ -126,7 +138,17 @@ export function buildAnchoredComparison(args: {
   monthEnds: string[];
   hashes: string[];
 }): { comparison: ComparisonResult | null; fresh: Snapshot[] } {
-  const { transactions, holdings, history, fx, fxNow, portfolioEndValue, selection, cashAccounts, anchors } = args;
+  const {
+    transactions,
+    holdings,
+    history,
+    fx,
+    fxNow,
+    portfolioEndValue,
+    selection,
+    cashAccounts,
+    anchors,
+  } = args;
   if (transactions.length === 0) return { comparison: null, fresh: [] };
   const flows = contributionFlows(transactions, cashAccounts);
   const start = transactions.map((t) => t.transaction_date).sort()[0]!;
@@ -135,12 +157,24 @@ export function buildAnchoredComparison(args: {
   const tailStart = anchor?.month_end ?? start;
 
   const pendingMonths = args.monthEnds.filter((m) => m > tailStart || (!anchor && m >= start));
-  const fine = windowGrid(tailStart, end, args.windowStart > tailStart ? args.windowStart : tailStart);
+  const fine = windowGrid(
+    tailStart,
+    end,
+    args.windowStart > tailStart ? args.windowStart : tailStart,
+  );
   const tailSet = new Set([...fine, ...pendingMonths]);
   if (anchor) tailSet.delete(anchor.month_end);
   const tailGrid = [...tailSet].filter((d) => d >= start).sort();
 
-  const tailPortfolio = portfolioValueSeries(tailGrid, transactions, holdings, history, fx, fxNow, cashAccounts);
+  const tailPortfolio = portfolioValueSeries(
+    tailGrid,
+    transactions,
+    holdings,
+    history,
+    fx,
+    fxNow,
+    cashAccounts,
+  );
 
   const tailFlows = anchor ? flows.filter((f) => f.date > anchor.month_end) : flows;
   const benchTails = selection.map((b) => {
@@ -194,7 +228,8 @@ export function buildAnchoredComparison(args: {
 
   const invested = flows.reduce((s, f) => s + f.amount, 0);
   const xirrFlows = flows.map((f) => ({ date: new Date(f.date), amount: -f.amount }));
-  const mw = (v: number) => (flows.length > 0 ? xirr([...xirrFlows, { date: new Date(end), amount: v }]) : null);
+  const mw = (v: number) =>
+    flows.length > 0 ? xirr([...xirrFlows, { date: new Date(end), amount: v }]) : null;
 
   const benchmarks: BenchmarkResult[] = selection.map((b, j) => {
     const t = benchTails[j];

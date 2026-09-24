@@ -73,8 +73,18 @@ function toNumber(raw: string | undefined): number | null {
 }
 
 const MONTHS: Record<string, string> = {
-  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
-  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+  jan: "01",
+  feb: "02",
+  mar: "03",
+  apr: "04",
+  may: "05",
+  jun: "06",
+  jul: "07",
+  aug: "08",
+  sep: "09",
+  oct: "10",
+  nov: "11",
+  dec: "12",
 };
 
 /** Normalises the common brokerage date spellings to YYYY-MM-DD. */
@@ -115,15 +125,34 @@ export function guessAccountType(name: string): string {
 }
 
 const TYPE_MAP: Record<string, string> = {
-  buy: "BUY", bought: "BUY", purchase: "BUY", "buy to open": "BUY",
-  sell: "SELL", sold: "SELL", "sell to close": "SELL",
-  div: "DIVIDEND", dividend: "DIVIDEND", "cash dividend": "DIVIDEND",
-  distribution: "DIVIDEND", interest: "DIVIDEND",
-  reinv: "DRIP", drip: "DRIP", "dividend reinvestment": "DRIP", reinvest: "DRIP",
-  split: "SPLIT", "stock split": "SPLIT",
-  deposit: "DEPOSIT", contribution: "DEPOSIT", "cash deposit": "DEPOSIT", transferin: "DEPOSIT",
-  withdrawl: "WITHDRAWAL", withdrawal: "WITHDRAWAL", "cash withdrawal": "WITHDRAWAL",
-  fee: "FEE", commission: "FEE", "management fee": "FEE",
+  buy: "BUY",
+  bought: "BUY",
+  purchase: "BUY",
+  "buy to open": "BUY",
+  sell: "SELL",
+  sold: "SELL",
+  "sell to close": "SELL",
+  div: "DIVIDEND",
+  dividend: "DIVIDEND",
+  "cash dividend": "DIVIDEND",
+  distribution: "DIVIDEND",
+  interest: "DIVIDEND",
+  reinv: "DRIP",
+  drip: "DRIP",
+  "dividend reinvestment": "DRIP",
+  reinvest: "DRIP",
+  split: "SPLIT",
+  "stock split": "SPLIT",
+  deposit: "DEPOSIT",
+  contribution: "DEPOSIT",
+  "cash deposit": "DEPOSIT",
+  transferin: "DEPOSIT",
+  withdrawl: "WITHDRAWAL",
+  withdrawal: "WITHDRAWAL",
+  "cash withdrawal": "WITHDRAWAL",
+  fee: "FEE",
+  commission: "FEE",
+  "management fee": "FEE",
 };
 
 export function normaliseType(raw: string): string | null {
@@ -325,7 +354,10 @@ function parseGeneric(text: string, fileName: string): CsvParseResult {
   const counts = new Map<string, { count: number; currency: string }>();
   for (const t of trades) {
     const cur = counts.get(t.portfolio);
-    counts.set(t.portfolio, { count: (cur?.count ?? 0) + 1, currency: cur?.currency ?? t.currency });
+    counts.set(t.portfolio, {
+      count: (cur?.count ?? 0) + 1,
+      currency: cur?.currency ?? t.currency,
+    });
   }
 
   return {
