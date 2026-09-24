@@ -105,23 +105,19 @@ function RetirementPage() {
   const profileQuery = useProfile();
   const updateProfile = useUpdateProfile();
 
-  const { entitlement, hasPro, hasProPlus } = useEntitlement();
-  const isPro = hasPro;
-  const isProPlus = hasProPlus;
+  const { entitlement } = useEntitlement();
+  // Every planning control is free now — nothing on this page is locked.
+  const isPro = true;
+  const isProPlus = true;
   const [proPromptOpen, setProPromptOpen] = useState(false);
-  const [promptReason, setPromptReason] = useState<string>("");
-  const PRO_REASON =
-    "The free plan runs the retirement plan on standard assumptions — retirement at 65, CPP and OAS at 65, 2.5% inflation, 6% growth, to age 95. Pro lets you change all of them.";
-  const PLUS_REASON =
-    "Couple and household planning, the savings split and what-if balances are part of Pro+ ($2 a month or $20 a year).";
-  const openPrompt = (reason: string) => {
-    setPromptReason(reason);
-    setProPromptOpen(true);
-  };
-  const lockProps = isPro ? {} : { locked: true, onLocked: () => openPrompt(PRO_REASON) };
-  const plusProps = isProPlus
-    ? {}
-    : { locked: true, planLabel: "Pro+", onLocked: () => openPrompt(PLUS_REASON) };
+  const [promptReason] = useState<string>("");
+  const PRO_REASON = "Everything in the retirement planner is free.";
+  const lockProps = {};
+  const plusProps = {};
+  void entitlement;
+  void isPro;
+  void isProPlus;
+
 
   const [form, setForm] = useState<Profile | null>(null);
   /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
