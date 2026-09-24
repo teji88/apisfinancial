@@ -340,31 +340,12 @@ function LedgerPage() {
         </p>
       </div>
 
-      {entitlement.holdingLimit != null && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-          <span>
-            Free plan: {holdings.length} of {entitlement.holdingLimit} holdings used.
-          </span>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="ml-auto"
-            onClick={() => setUpgradeOpen(true)}
-          >
-            Upgrade to Pro
-          </Button>
-        </div>
-      )}
-
       <UpgradeDialog
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
-        reason={
-          entitlement.readOnly
-            ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to make changes."
-            : "The free plan includes ten holdings. Pro removes the limit."
-        }
+        reason="Everything here is free — including unlimited accounts, holdings and transactions."
       />
+
 
       <form onSubmit={handleSubmit} className="panel space-y-4 p-5">
         <div className="grid gap-4 md:grid-cols-4">
