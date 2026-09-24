@@ -34,10 +34,25 @@ export const SUBSCRIPTION_PRICE = {
   period: "per year",
 } as const;
 
-export type PaidPlan = "pro";
+export type PaidPlan = "pro" | "pro_plus";
+export type ProBilling = "monthly" | "yearly";
+
+export const PLAN_PRICES: Record<PaidPlan, Record<ProBilling, { id: string; label: string }>> = {
+  pro: {
+    monthly: { id: "pro_monthly", label: "$1 / month" },
+    yearly: { id: "pro_yearly", label: "$10 / year" },
+  },
+  pro_plus: {
+    monthly: { id: "pro_plus_monthly", label: "$2 / month" },
+    yearly: { id: "pro_plus_yearly", label: "$20 / year" },
+  },
+};
 
 /** Which plan a stored price id belongs to (legacy ids all map to the one plan). */
 export function planOfPrice(priceId: string | null): PaidPlan | null {
-  return priceId && priceId.startsWith("pro") ? "pro" : null;
+  if (!priceId) return null;
+  if (priceId.startsWith("pro_plus")) return "pro_plus";
+  if (priceId.startsWith("pro")) return "pro";
+  return null;
 }
 
