@@ -60,7 +60,7 @@ function AccountsPage() {
   const addAccount = useAddAccount();
   const updateAccount = useUpdateAccount();
   const deleteAccount = useDeleteAccount();
-  const { entitlement, hasProPlus } = useEntitlement();
+  const { hasProPlus } = useEntitlement();
 
   const [accountType, setAccountType] = useState<string>("TFSA");
   const [accountName, setAccountName] = useState("");
@@ -70,26 +70,13 @@ function AccountsPage() {
   const [ownerType, setOwnerType] = useState("self");
   const [memberName, setMemberName] = useState("");
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [familyReason, setFamilyReason] = useState<string | null>(null);
+  const [familyReason] = useState<string | null>(null);
 
-  const FAMILY_REASON =
-    "Tracking a partner's or a child's accounts — including their RESP and RDSP — is part of Pro+ ($2 a month or $20 a year).";
-
-  const accountLimit = entitlement.accountLimit;
-  const atAccountLimit = accountLimit != null && accounts.length >= accountLimit;
-  const holdingLimit = entitlement.holdingLimit;
+  void hasProPlus;
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
-    if (atAccountLimit || entitlement.readOnly) {
-      setUpgradeOpen(true);
-      return;
-    }
-    if (ownerType !== "self" && !hasProPlus) {
-      setFamilyReason(FAMILY_REASON);
-      setUpgradeOpen(true);
-      return;
-    }
+
     try {
       await addAccount.mutateAsync({
         accountType,
@@ -118,36 +105,15 @@ function AccountsPage() {
         </p>
       </div>
 
-      {accountLimit != null && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-          <span>
-            Free plan: {accounts.length} of {accountLimit} account
-            {accountLimit === 1 ? "" : "s"} · {holdings.length} of {holdingLimit} holdings used.
-          </span>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="ml-auto"
-            onClick={() => {
-              setFamilyReason(null);
-              setUpgradeOpen(true);
-            }}
-          >
-            Upgrade to Pro
-          </Button>
-        </div>
-      )}
-
       <UpgradeDialog
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
         reason={
           familyReason ??
-          (entitlement.readOnly
-            ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to make changes."
-            : "The free plan includes one account. Pro removes the limit.")
+          "Accounts, holdings and family tracking are all free — no subscription needed."
         }
       />
+
 
       <form onSubmit={handleAdd} className="panel grid gap-4 p-5 md:grid-cols-5">
         <div className="space-y-1.5">
@@ -203,32 +169,17 @@ function AccountsPage() {
         </div>
         <div className="space-y-1.5 md:col-span-2">
           <Label>Whose account is this?</Label>
-          <Select
-            value={ownerType}
-            onValueChange={(v) => {
-              if (v !== "self" && !hasProPlus) {
-                setFamilyReason(FAMILY_REASON);
-                setUpgradeOpen(true);
-                return;
-              }
-              setOwnerType(v);
-            }}
-          >
+          <Select value={ownerType} onValueChange={setOwnerType}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="self">{OWNER_LABELS["self"]}</SelectItem>
-              <SelectItem value="partner">
-                {OWNER_LABELS["partner"]}
-                {hasProPlus ? "" : " (Pro+)"}
-              </SelectItem>
-              <SelectItem value="child">
-                {OWNER_LABELS["child"]}
-                {hasProPlus ? "" : " (Pro+)"}
-              </SelectItem>
+              <SelectItem value="partner">{OWNER_LABELS["partner"]}</SelectItem>
+              <SelectItem value="child">{OWNER_LABELS["child"]}</SelectItem>
             </SelectContent>
           </Select>
+
         </div>
         {ownerType !== "self" && (
           <div className="space-y-1.5 md:col-span-3">
