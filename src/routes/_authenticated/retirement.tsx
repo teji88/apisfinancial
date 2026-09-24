@@ -107,16 +107,19 @@ function RetirementPage() {
 
   const { entitlement } = useEntitlement();
   // Every planning control is free now — nothing on this page is locked.
-  const isPro = true;
-  const isProPlus = true;
+  const isPro: boolean = true;
+  const isProPlus: boolean = true;
   const [proPromptOpen, setProPromptOpen] = useState(false);
   const [promptReason] = useState<string>("");
   const PRO_REASON = "Everything in the retirement planner is free.";
+  const PLUS_REASON = PRO_REASON;
+  const openPrompt = (_reason: string) => setProPromptOpen(true);
   const lockProps = {};
   const plusProps = {};
   void entitlement;
-  void isPro;
-  void isProPlus;
+  void PLUS_REASON;
+  void openPrompt;
+
 
 
   const [form, setForm] = useState<Profile | null>(null);
