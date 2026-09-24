@@ -26,27 +26,18 @@ export function getStripeEnvironment(): StripeEnv {
   return paymentsEnvironment();
 }
 
-/** The two paid plans, each billed monthly or yearly. */
-export const PLAN_PRICES = {
-  pro: {
-    monthly: { id: "pro_monthly", label: "$1 / month" },
-    yearly: { id: "pro_yearly", label: "$10 / year" },
-  },
-  pro_plus: {
-    monthly: { id: "pro_plus_monthly", label: "$2 / month" },
-    yearly: { id: "pro_plus_yearly", label: "$20 / year" },
-  },
+/** The one and only paid plan: $10 a year, for AI statement reading. */
+export const SUBSCRIPTION_PRICE = {
+  id: "pro_yearly",
+  label: "$10 / year",
+  amount: "$10",
+  period: "per year",
 } as const;
 
-export const PRO_PRICES = PLAN_PRICES.pro;
+export type PaidPlan = "pro";
 
-export type PaidPlan = keyof typeof PLAN_PRICES;
-export type ProBilling = "monthly" | "yearly";
-
-/** Which plan a stored price id belongs to. */
+/** Which plan a stored price id belongs to (legacy ids all map to the one plan). */
 export function planOfPrice(priceId: string | null): PaidPlan | null {
-  if (!priceId) return null;
-  if (priceId.startsWith("pro_plus")) return "pro_plus";
-  if (priceId.startsWith("pro_")) return "pro";
-  return null;
+  return priceId && priceId.startsWith("pro") ? "pro" : null;
 }
+
