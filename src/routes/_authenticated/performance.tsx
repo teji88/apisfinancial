@@ -1,5 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  buildAnchoredComparison,
+  completedMonthEnds,
+  historyStartFor,
+  monthEndHashes,
+  validPrefix,
+  type Snapshot,
+} from "@/lib/snapshots";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -165,15 +175,48 @@ function PerformancePage() {
     return Array.from(new Set([...own, ...benches])).sort();
   }, [positions, selection]);
 
+  const cashAccounts = useMemo(() => cashTrackingIds(accounts), [accounts]);
+
+  // Month-end anchors: completed months come from stored snapshots, only the
+  // months after the last valid one are valued live.
+  const monthEnds = useMemo(() => completedMonthEnds(start, end), [start, end]);
+  const hashes = useMemo(
+    () => monthEndHashes(monthEnds, transactions, holdings, cashAccounts, accountFilter),
+    [monthEnds, transactions, holdings, cashAccounts, accountFilter],
+  );
+  const stored = useQuery({
+    queryKey: ["snapshots", user?.id, accountFilter],
+    enabled: !!user && transactions.length > 0,
+    staleTime: Infinity,
+    queryFn: async (): Promise<Snapshot[]> => {
+      const out: Snapshot[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase
+          .from("portfolio_monthly_snapshots")
+          .select("month_end, ledger_hash, portfolio_value, benchmarks")
+          .eq("scope", accountFilter)
+          .order("month_end")
+          .range(from, from + 999);
+        if (error) return out; // fall back to a full live calculation
+        out.push(...((data ?? []) as unknown as Snapshot[]));
+        if (!data || data.length < 1000) return out;
+      }
+    },
+  });
+  const benchSymbols = useMemo(() => selection.map((b) => b.symbol), [selection]);
+  const anchors = useMemo(
+    () => (stored.data ? validPrefix(monthEnds, hashes, stored.data, benchSymbols) : []),
+    [stored.data, monthEnds, hashes, benchSymbols],
+  );
+  const historyStart = historyStartFor(anchors[anchors.length - 1], start);
+
   const history = useQuery({
-    queryKey: ["history", symbols, start, end],
-    enabled: transactions.length > 0,
+    queryKey: ["history", symbols, historyStart, end],
+    enabled: transactions.length > 0 && (!user || !stored.isLoading),
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
-    queryFn: async () => fetchHistory({ data: { symbols, start, end } }),
+    queryFn: async () => fetchHistory({ data: { symbols, start: historyStart, end } }),
   });
-
-  const cashAccounts = useMemo(() => cashTrackingIds(accounts), [accounts]);
   // Cash is floored at zero: a buy recorded without a matching deposit is
   // treated as an implied contribution rather than a negative cash balance.
   const portfolioValue =
@@ -205,23 +248,26 @@ function PerformancePage() {
     return d.toISOString().slice(0, 10);
   }, [period, start]);
 
-  const comparison = useMemo(() => {
+  const anchored = useMemo(() => {
     if (!history.data) return null;
     const map: SeriesMap = new Map();
     for (const s of history.data.series) {
       map.set(s.symbol.toUpperCase(), { currency: s.currency, points: s.points });
     }
-    return buildComparison(
+    return buildAnchoredComparison({
       transactions,
       holdings,
-      map,
-      history.data.fx,
-      fxUsdCad,
-      portfolioValue,
+      history: map,
+      fx: history.data.fx,
+      fxNow: fxUsdCad,
+      portfolioEndValue: portfolioValue,
       selection,
       cashAccounts,
-      periodStart,
-    );
+      windowStart: periodStart,
+      anchors,
+      monthEnds,
+      hashes,
+    });
   }, [
     history.data,
     transactions,
@@ -231,7 +277,35 @@ function PerformancePage() {
     selection,
     cashAccounts,
     periodStart,
+    anchors,
+    monthEnds,
+    hashes,
   ]);
+  const comparison = anchored?.comparison ?? null;
+
+  // Save newly completed months so the next visit starts from them.
+  useEffect(() => {
+    const fresh = anchored?.fresh ?? [];
+    if (!user || fresh.length === 0) return;
+    const existing = new Map((stored.data ?? []).map((s) => [s.month_end, s]));
+    const rows = fresh.map((f) => {
+      const old = existing.get(f.month_end);
+      const benchmarks =
+        old && old.ledger_hash === f.ledger_hash ? { ...old.benchmarks, ...f.benchmarks } : f.benchmarks;
+      return { user_id: user.id, scope: accountFilter, ...f, benchmarks };
+    });
+    (async () => {
+      for (let i = 0; i < rows.length; i += 500) {
+        const { error } = await supabase
+          .from("portfolio_monthly_snapshots")
+          .upsert(rows.slice(i, i + 500), { onConflict: "user_id,scope,month_end" });
+        if (error) {
+          console.warn("[snapshots] save failed", error.message);
+          return;
+        }
+      }
+    })();
+  }, [anchored, user, accountFilter, stored.data]);
 
 
   /**
