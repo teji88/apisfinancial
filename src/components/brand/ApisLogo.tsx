@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
 
-import logoLight from "@/assets/apis-logo.png.asset.json";
-import logoDark from "@/assets/apis-logo-dark.png.asset.json";
-import markLight from "@/assets/apis-mark.png.asset.json";
-import markDark from "@/assets/apis-mark-dark.png.asset.json";
+const logoLight = { url: "/brand/apis-logo.png" };
+const logoDark = { url: "/brand/apis-logo-dark.png" };
+const markLight = { url: "/brand/apis-mark.png" };
+const markDark = { url: "/brand/apis-mark-dark.png" };
 
 type Size = "sm" | "md" | "lg" | "xl";
 type Variant = "full" | "stacked" | "icon-only";
