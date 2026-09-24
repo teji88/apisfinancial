@@ -30,30 +30,29 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
-function getServerEnv(name: string): string | undefined {
-  // `process` is not guaranteed to exist in a browser bundle. Keeping this
-  // lookup guarded prevents auth initialization from throwing a ReferenceError.
-  if (typeof process === "undefined") return undefined;
-  return process.env[name];
+type RuntimeEnv = { env?: Record<string, string | undefined> };
+
+function getRuntimeEnv(name: string): string | undefined {
+  // Read server variables without referring directly to the Node `process`
+  // global. Direct process references can break browser/edge bundles during
+  // SSR even when guarded with `typeof process`.
+  const runtimeProcess = (globalThis as typeof globalThis & { process?: RuntimeEnv }).process;
+  return runtimeProcess?.env?.[name];
 }
 
-// These are Supabase's public client values. They are intentionally safe to
-// ship in the browser, unlike SUPABASE_SECRET_KEY or a service-role key.
 const DEFAULT_SUPABASE_URL = "https://hksjusbiipwglybrudim.supabase.co";
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_Q8eZUOZweZj3ztnNl3DpXw_-47Usv80";
 
 function createSupabaseClient() {
-  // Prefer deployment configuration, but keep a public fallback so a Vercel
-  // deployment cannot take the entire login page down when VITE_* variables
-  // were not added to the project environment.
+  const env = import.meta.env as Record<string, string | undefined>;
   const SUPABASE_URL =
-    import.meta.env["VITE_SUPABASE_URL"]?.trim() ||
-    getServerEnv("SUPABASE_URL")?.trim() ||
+    env["VITE_SUPABASE_URL"]?.trim() ||
+    getRuntimeEnv("SUPABASE_URL")?.trim() ||
     DEFAULT_SUPABASE_URL;
   const SUPABASE_PUBLISHABLE_KEY =
-    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"]?.trim() ||
-    getServerEnv("SUPABASE_PUBLISHABLE_KEY")?.trim() ||
+    env["VITE_SUPABASE_PUBLISHABLE_KEY"]?.trim() ||
+    getRuntimeEnv("SUPABASE_PUBLISHABLE_KEY")?.trim() ||
     DEFAULT_SUPABASE_PUBLISHABLE_KEY;
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
