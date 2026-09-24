@@ -30,29 +30,19 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
-type RuntimeEnv = { env?: Record<string, string | undefined> };
-
-function getRuntimeEnv(name: string): string | undefined {
-  // Read server variables without referring directly to the Node `process`
-  // global. Direct process references can break browser/edge bundles during
-  // SSR even when guarded with `typeof process`.
-  const runtimeProcess = (globalThis as typeof globalThis & { process?: RuntimeEnv }).process;
-  return runtimeProcess?.env?.[name];
-}
-
+// Public Supabase client configuration. These values are safe for the browser;
+// never put a secret/service-role key in this file or in a VITE_ variable.
 const DEFAULT_SUPABASE_URL = "https://hksjusbiipwglybrudim.supabase.co";
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_Q8eZUOZweZj3ztnNl3DpXw_-47Usv80";
 
 function createSupabaseClient() {
-  const env = import.meta.env as Record<string, string | undefined>;
+  // Read only Vite's browser-exposed env object here. Avoid process.env and
+  // globalThis process lookups: they can make SSR/edge bundles fail at startup.
   const SUPABASE_URL =
-    env["VITE_SUPABASE_URL"]?.trim() ||
-    getRuntimeEnv("SUPABASE_URL")?.trim() ||
-    DEFAULT_SUPABASE_URL;
+    import.meta.env["VITE_SUPABASE_URL"]?.trim() || DEFAULT_SUPABASE_URL;
   const SUPABASE_PUBLISHABLE_KEY =
-    env["VITE_SUPABASE_PUBLISHABLE_KEY"]?.trim() ||
-    getRuntimeEnv("SUPABASE_PUBLISHABLE_KEY")?.trim() ||
+    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"]?.trim() ||
     DEFAULT_SUPABASE_PUBLISHABLE_KEY;
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
