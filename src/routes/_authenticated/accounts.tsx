@@ -169,32 +169,17 @@ function AccountsPage() {
         </div>
         <div className="space-y-1.5 md:col-span-2">
           <Label>Whose account is this?</Label>
-          <Select
-            value={ownerType}
-            onValueChange={(v) => {
-              if (v !== "self" && !hasProPlus) {
-                setFamilyReason(FAMILY_REASON);
-                setUpgradeOpen(true);
-                return;
-              }
-              setOwnerType(v);
-            }}
-          >
+          <Select value={ownerType} onValueChange={setOwnerType}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="self">{OWNER_LABELS["self"]}</SelectItem>
-              <SelectItem value="partner">
-                {OWNER_LABELS["partner"]}
-                {hasProPlus ? "" : " (Pro+)"}
-              </SelectItem>
-              <SelectItem value="child">
-                {OWNER_LABELS["child"]}
-                {hasProPlus ? "" : " (Pro+)"}
-              </SelectItem>
+              <SelectItem value="partner">{OWNER_LABELS["partner"]}</SelectItem>
+              <SelectItem value="child">{OWNER_LABELS["child"]}</SelectItem>
             </SelectContent>
           </Select>
+
         </div>
         {ownerType !== "self" && (
           <div className="space-y-1.5 md:col-span-3">
