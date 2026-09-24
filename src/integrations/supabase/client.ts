@@ -32,31 +32,29 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 
 function getServerEnv(name: string): string | undefined {
   // `process` is not guaranteed to exist in a browser bundle. Keeping this
-  // lookup guarded prevents auth initialization from throwing a ReferenceError
-  // before it can report a useful missing-configuration message.
+  // lookup guarded prevents auth initialization from throwing a ReferenceError.
   if (typeof process === "undefined") return undefined;
   return process.env[name];
 }
 
+// These are Supabase's public client values. They are intentionally safe to
+// ship in the browser, unlike SUPABASE_SECRET_KEY or a service-role key.
+const DEFAULT_SUPABASE_URL = "https://hksjusbiipwglybrudim.supabase.co";
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
+  "sb_publishable_Q8eZUOZweZj3ztnNl3DpXw_-47Usv80";
+
 function createSupabaseClient() {
-  // VITE_* values are inlined into the browser bundle by Vite. The guarded
-  // process.env fallback is for SSR only; it must never be evaluated as an
-  // unbound browser global when a deployment is missing its public variables.
+  // Prefer deployment configuration, but keep a public fallback so a Vercel
+  // deployment cannot take the entire login page down when VITE_* variables
+  // were not added to the project environment.
   const SUPABASE_URL =
-    import.meta.env["VITE_SUPABASE_URL"]?.trim() || getServerEnv("SUPABASE_URL")?.trim();
+    import.meta.env["VITE_SUPABASE_URL"]?.trim() ||
+    getServerEnv("SUPABASE_URL")?.trim() ||
+    DEFAULT_SUPABASE_URL;
   const SUPABASE_PUBLISHABLE_KEY =
     import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"]?.trim() ||
-    getServerEnv("SUPABASE_PUBLISHABLE_KEY")?.trim();
-
-  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-    const missing = [
-      ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
-      ...(!SUPABASE_PUBLISHABLE_KEY ? ["SUPABASE_PUBLISHABLE_KEY"] : []),
-    ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud or configure the Vercel environment variables.`;
-    console.error(`[Supabase] ${message}`);
-    throw new Error(message);
-  }
+    getServerEnv("SUPABASE_PUBLISHABLE_KEY")?.trim() ||
+    DEFAULT_SUPABASE_PUBLISHABLE_KEY;
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     global: {
