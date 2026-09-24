@@ -30,20 +30,22 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
-// Public Supabase client configuration. These values are safe for the browser;
-// never put a secret/service-role key in this file or in a VITE_ variable.
-const DEFAULT_SUPABASE_URL = "https://hksjusbiipwglybrudim.supabase.co";
-const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
-  "sb_publishable_Q8eZUOZweZj3ztnNl3DpXw_-47Usv80";
-
 function createSupabaseClient() {
-  // Read only Vite's browser-exposed env object here. Avoid process.env and
-  // globalThis process lookups: they can make SSR/edge bundles fail at startup.
-  const SUPABASE_URL =
-    import.meta.env["VITE_SUPABASE_URL"]?.trim() || DEFAULT_SUPABASE_URL;
+  // Use import.meta.env for client-side (Vite build-time replacement)
+  // Fall back to process.env for SSR (server-side rendering)
+  const SUPABASE_URL = import.meta.env["VITE_SUPABASE_URL"] || process.env["SUPABASE_URL"];
   const SUPABASE_PUBLISHABLE_KEY =
-    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"]?.trim() ||
-    DEFAULT_SUPABASE_PUBLISHABLE_KEY;
+    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] || process.env["SUPABASE_PUBLISHABLE_KEY"];
+
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    const missing = [
+      ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
+      ...(!SUPABASE_PUBLISHABLE_KEY ? ["SUPABASE_PUBLISHABLE_KEY"] : []),
+    ];
+    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud.`;
+    console.error(`[Supabase] ${message}`);
+    throw new Error(message);
+  }
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     global: {
