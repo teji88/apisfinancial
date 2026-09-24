@@ -20,7 +20,6 @@ const FREE_FALLBACK: Entitlement = {
   trialEndsAt: null,
 };
 
-
 export function useEntitlement() {
   const fetchEntitlement = useServerFn(getEntitlement);
   const query = useQuery({
@@ -46,8 +45,6 @@ export function useEntitlement() {
     refetch: query.refetch,
   };
 }
-
-
 
 export function formatDate(iso: string | null): string {
   if (!iso) return "—";

@@ -90,17 +90,57 @@ export function oasClawback(netIncome: number, oasReceived: number, threshold: n
 /* ------------------------------- RRIF / LIF ----------------------------------- */
 
 const RRIF_MIN: Record<number, number> = {
-  71: 0.0528, 72: 0.054, 73: 0.0553, 74: 0.0567, 75: 0.0582, 76: 0.0598,
-  77: 0.0617, 78: 0.0636, 79: 0.0658, 80: 0.0682, 81: 0.0708, 82: 0.0738,
-  83: 0.0771, 84: 0.0808, 85: 0.0851, 86: 0.0899, 87: 0.0955, 88: 0.1021,
-  89: 0.1099, 90: 0.1192, 91: 0.1306, 92: 0.1449, 93: 0.1634, 94: 0.1879,
+  71: 0.0528,
+  72: 0.054,
+  73: 0.0553,
+  74: 0.0567,
+  75: 0.0582,
+  76: 0.0598,
+  77: 0.0617,
+  78: 0.0636,
+  79: 0.0658,
+  80: 0.0682,
+  81: 0.0708,
+  82: 0.0738,
+  83: 0.0771,
+  84: 0.0808,
+  85: 0.0851,
+  86: 0.0899,
+  87: 0.0955,
+  88: 0.1021,
+  89: 0.1099,
+  90: 0.1192,
+  91: 0.1306,
+  92: 0.1449,
+  93: 0.1634,
+  94: 0.1879,
 };
 
 const LIF_MAX: Record<number, number> = {
-  71: 0.0738, 72: 0.0752, 73: 0.0767, 74: 0.0782, 75: 0.0798, 76: 0.0815,
-  77: 0.0833, 78: 0.0853, 79: 0.0875, 80: 0.0899, 81: 0.0927, 82: 0.0958,
-  83: 0.0993, 84: 0.1033, 85: 0.1079, 86: 0.1133, 87: 0.1196, 88: 0.1271,
-  89: 0.1362, 90: 0.1473, 91: 0.1612, 92: 0.1792, 93: 0.2035, 94: 0.2381,
+  71: 0.0738,
+  72: 0.0752,
+  73: 0.0767,
+  74: 0.0782,
+  75: 0.0798,
+  76: 0.0815,
+  77: 0.0833,
+  78: 0.0853,
+  79: 0.0875,
+  80: 0.0899,
+  81: 0.0927,
+  82: 0.0958,
+  83: 0.0993,
+  84: 0.1033,
+  85: 0.1079,
+  86: 0.1133,
+  87: 0.1196,
+  88: 0.1271,
+  89: 0.1362,
+  90: 0.1473,
+  91: 0.1612,
+  92: 0.1792,
+  93: 0.2035,
+  94: 0.2381,
 };
 
 export function rrifMinFactor(age: number): number {
@@ -299,9 +339,7 @@ export function projectRetirement(input: PlannerInputs): Projection {
         ? oasAt(p.spec.oasStartAge, p.spec.oasFraction)
         : 0,
     );
-    const other = people.map((p, i) =>
-      ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome : 0,
-    );
+    const other = people.map((p, i) => (ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome : 0));
 
     // Step 4a — melt-down lookahead. Roll each person's registered money forward
     // at the real growth rate with only the mandatory minimums coming out. If a
@@ -325,17 +363,12 @@ export function projectRetirement(input: PlannerInputs): Projection {
       }
       return false;
     });
-    const ceilings = people.map((_, i) =>
-      effectiveCeiling(ages[i]!, meltdown[i] ? tolerance : 0),
-    );
-
+    const ceilings = people.map((_, i) => effectiveCeiling(ages[i]!, meltdown[i] ? tolerance : 0));
 
     /** Household tax for a set of draws, choosing the best pension split. */
     const evaluate = (draws: Draw[]) => {
       const pension = people.map((_, i) => draws[i]!.reg + draws[i]!.lif);
-      const base = people.map(
-        (_, i) => cpp[i]! + oasGross[i]! + other[i]! + pension[i]!,
-      );
+      const base = people.map((_, i) => cpp[i]! + oasGross[i]! + other[i]! + pension[i]!);
 
       let bestSplit = 0;
       let best: ReturnType<typeof scoreSplit> | null = null;
@@ -366,8 +399,7 @@ export function projectRetirement(input: PlannerInputs): Projection {
           const ordinary = base[i]! + adj;
           const gainRatio = p.nonreg > 0 ? Math.max(0, 1 - p.acb / p.nonreg) : 0;
           const gains = d.nonreg * gainRatio;
-          const pensionCredit =
-            ages[i]! >= 65 ? Math.max(0, pension[i]! + adj) : 0;
+          const pensionCredit = ages[i]! >= 65 ? Math.max(0, pension[i]! + adj) : 0;
           const t = computeTax({
             ordinary,
             capitalGains: gains,
@@ -428,7 +460,10 @@ export function projectRetirement(input: PlannerInputs): Projection {
       const lifCap = Math.max(0, Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - draws[i]!.lif);
       const regCap = Math.max(0, p.rrsp - draws[i]!.reg);
       const headroom = Math.max(0, ceiling - draws[i]!.reg - draws[i]!.lif);
-      return { lif: Math.min(lifCap, headroom), reg: Math.min(regCap, Math.max(0, headroom - Math.min(lifCap, headroom))) };
+      return {
+        lif: Math.min(lifCap, headroom),
+        reg: Math.min(regCap, Math.max(0, headroom - Math.min(lifCap, headroom))),
+      };
     });
     const regTotal = regRoom.reduce((s, r) => s + r.lif + r.reg, 0);
     if (res.net < need && regTotal > 0) {

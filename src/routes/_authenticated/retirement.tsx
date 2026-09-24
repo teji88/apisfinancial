@@ -123,7 +123,6 @@ function RetirementPage() {
     ? {}
     : { locked: true, planLabel: "Pro+", onLocked: () => openPrompt(PLUS_REASON) };
 
-
   const [form, setForm] = useState<Profile | null>(null);
   /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
   const [clawbackTolerance, setClawbackTolerance] = useState(0);
@@ -144,8 +143,6 @@ function RetirementPage() {
     contributionRatio: 0.3,
     beneficiaryOtherIncome: 0,
   });
-
-
 
   useEffect(() => {
     if (profileQuery.data && !form) setForm(profileQuery.data);
@@ -352,7 +349,9 @@ function RetirementPage() {
     balances.rrsp +
     balances.lira +
     balances.nonreg +
-    (married ? (p.spouse_tfsa ?? 0) + (p.spouse_rrsp ?? 0) + (p.spouse_lira ?? 0) + (p.spouse_nonreg ?? 0) : 0);
+    (married
+      ? (p.spouse_tfsa ?? 0) + (p.spouse_rrsp ?? 0) + (p.spouse_lira ?? 0) + (p.spouse_nonreg ?? 0)
+      : 0);
 
   const balanceChart = rows.map((r) => ({
     age: r.age,
@@ -430,7 +429,6 @@ function RetirementPage() {
           }
           tone={totalClawback > 1 ? "warn" : "good"}
         />
-
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -465,7 +463,6 @@ function RetirementPage() {
           </div>
         </div>
       </div>
-
 
       <Tabs defaultValue="plan">
         <TabsList>
@@ -530,7 +527,6 @@ function RetirementPage() {
                 Each bar is a retirement year: benefits and withdrawals stacked against the spending
                 line, with tax shown below the axis. Amounts {moneyNote}.
               </p>
-
             </div>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -572,7 +568,6 @@ function RetirementPage() {
                 {(((1 + inputs.growth / 100) / (1 + inputs.inflation / 100) - 1) * 100).toFixed(2)}%
                 ({inputs.growth}% growth less {inputs.inflation}% inflation). Amounts {moneyNote}.
               </p>
-
             </div>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -604,7 +599,6 @@ function RetirementPage() {
                       fillOpacity={0.45}
                     />
                   ))}
-
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -783,7 +777,6 @@ function RetirementPage() {
           </Section>
 
           {married && isProPlus && (
-
             <Section
               title="Your spouse"
               subtitle={`Their CPP and OAS count towards the household income. Estimated CPP entitlement: ${derived.spousePct}% of the maximum.`}
@@ -913,7 +906,6 @@ function RetirementPage() {
                       return;
                     }
                     set({ manual_override: v });
-
                   }}
                 />
               </div>
@@ -1000,7 +992,10 @@ function RetirementPage() {
                         onChange={(e) =>
                           setResp((r) => ({
                             ...r,
-                            contributionRatio: Math.min(1, Math.max(0, num(e.target.value, 60) / 100)),
+                            contributionRatio: Math.min(
+                              1,
+                              Math.max(0, num(e.target.value, 60) / 100),
+                            ),
                           }))
                         }
                       />
@@ -1017,8 +1012,8 @@ function RetirementPage() {
                   </div>
                   <div className="rounded-lg bg-muted/40 p-3 text-xs">
                     <p className="text-sm font-medium">
-                      {formatCad(respPlan.totalWithdrawn)} out · {formatCad(respPlan.totalTax)} tax (
-                      {respPlan.effectiveRate.toFixed(1)}%)
+                      {formatCad(respPlan.totalWithdrawn)} out · {formatCad(respPlan.totalTax)} tax
+                      ({respPlan.effectiveRate.toFixed(1)}%)
                     </p>
                     <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
                       {respPlan.notes.map((n) => (
@@ -1067,7 +1062,10 @@ function RetirementPage() {
                         onChange={(e) =>
                           setRdsp((r) => ({
                             ...r,
-                            contributionRatio: Math.min(1, Math.max(0, num(e.target.value, 30) / 100)),
+                            contributionRatio: Math.min(
+                              1,
+                              Math.max(0, num(e.target.value, 30) / 100),
+                            ),
                           }))
                         }
                       />
@@ -1084,8 +1082,8 @@ function RetirementPage() {
                   </div>
                   <div className="rounded-lg bg-muted/40 p-3 text-xs">
                     <p className="text-sm font-medium">
-                      {formatCad(rdspPlan.totalWithdrawn)} out · {formatCad(rdspPlan.totalTax)} tax (
-                      {rdspPlan.effectiveRate.toFixed(1)}%)
+                      {formatCad(rdspPlan.totalWithdrawn)} out · {formatCad(rdspPlan.totalTax)} tax
+                      ({rdspPlan.effectiveRate.toFixed(1)}%)
                     </p>
                     <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
                       {rdspPlan.notes.map((n) => (
@@ -1110,10 +1108,12 @@ function RetirementPage() {
           <div className="panel space-y-3 p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="font-display text-lg font-semibold">Tax-efficient withdrawal plan</h2>
+                <h2 className="font-display text-lg font-semibold">
+                  Tax-efficient withdrawal plan
+                </h2>
                 <p className="text-sm text-muted-foreground">
-                  {married ? "Household totals" : "Your withdrawals"}, year by year. Rows in red fall
-                  short of the spending target; amber rows lose some OAS to the clawback.
+                  {married ? "Household totals" : "Your withdrawals"}, year by year. Rows in red
+                  fall short of the spending target; amber rows lose some OAS to the clawback.
                 </p>
               </div>
               {projection.totalClawback > 1 ? (
@@ -1177,16 +1177,16 @@ function RetirementPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               All amounts {moneyNote}. Planning estimates on projected 2026 tax brackets. RRSPs
-              become a RRIF and LIRAs a LIF
-
-              at 71 with the mandatory minimums; eligible pension income is split with a spouse after
-              65 wherever that lowers household tax.
+              become a RRIF and LIRAs a LIF at 71 with the mandatory minimums; eligible pension
+              income is split with a spouse after 65 wherever that lowers household tax.
             </p>
           </div>
 
           {married && (
             <div className="panel space-y-3 p-5">
-              <h2 className="font-display text-lg font-semibold">Split between you and your spouse</h2>
+              <h2 className="font-display text-lg font-semibold">
+                Split between you and your spouse
+              </h2>
               <div className="max-h-[420px] overflow-auto">
                 <Table>
                   <TableHeader>
@@ -1212,7 +1212,9 @@ function RetirementPage() {
                           <TableCell className="num text-right">
                             {formatCad(x.rrifDraw + x.lifDraw)}
                           </TableCell>
-                          <TableCell className="num text-right">{formatCad(x.nonregDraw)}</TableCell>
+                          <TableCell className="num text-right">
+                            {formatCad(x.nonregDraw)}
+                          </TableCell>
                           <TableCell className="num text-right">{formatCad(x.tfsaDraw)}</TableCell>
                           <TableCell className="num text-right">
                             {formatCad(x.cpp + x.oas)}
@@ -1237,7 +1239,6 @@ function RetirementPage() {
         onOpenChange={setProPromptOpen}
         reason={promptReason || PRO_REASON}
       />
-
     </div>
   );
 }
@@ -1296,7 +1297,6 @@ function Field({
           <div className="pointer-events-none opacity-60">{children}</div>
         </button>
       ) : (
-
         children
       )}
     </div>

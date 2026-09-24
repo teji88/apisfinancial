@@ -17,11 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useEntitlement, formatDate } from "@/lib/entitlement";
-import {
-  createInviteCodes,
-  listInviteCodes,
-  revokeInviteCode,
-} from "@/lib/entitlement.functions";
+import { createInviteCodes, listInviteCodes, revokeInviteCode } from "@/lib/entitlement.functions";
 
 export const Route = createFileRoute("/_authenticated/invites")({
   staticData: { sitemap: false },

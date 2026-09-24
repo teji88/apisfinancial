@@ -58,9 +58,7 @@ export const getQuotes = createServerFn({ method: "POST" })
     for (const symbol of wanted) {
       const row = cached?.find((c) => c.symbol === symbol);
       const fresh =
-        !data.force &&
-        row?.price != null &&
-        now - new Date(row.updated_at).getTime() < CACHE_MS;
+        !data.force && row?.price != null && now - new Date(row.updated_at).getTime() < CACHE_MS;
       if (row?.price != null) {
         quotes.set(symbol, {
           symbol,
@@ -79,9 +77,7 @@ export const getQuotes = createServerFn({ method: "POST" })
     }
 
     if (stale.length > 0) {
-      const { quotes: fetched, asOf } = await refreshPrices(
-        stale.filter((s) => s !== FX_SYMBOL),
-      );
+      const { quotes: fetched, asOf } = await refreshPrices(stale.filter((s) => s !== FX_SYMBOL));
       for (const q of fetched) {
         if (q.price == null) continue;
         quotes.set(q.symbol.toUpperCase(), {

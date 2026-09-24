@@ -50,7 +50,6 @@ export function splitRatio(t: Transaction): number {
   return r > 0 ? r : 1;
 }
 
-
 export type Account = {
   id: string;
   account_type: string;
@@ -92,7 +91,6 @@ export function cashTrackingIds(accounts: Account[]): Set<string> {
 function tracksCash(t: Transaction, cashAccounts?: Set<string>): boolean {
   return !cashAccounts || cashAccounts.has(t.account_id);
 }
-
 
 export type Holding = {
   id: string;
@@ -306,10 +304,7 @@ export type CashFlow = { date: Date; amount: number };
  * cash balance count the cost of every purchase as money put in, and sale
  * proceeds and dividends as money taken out.
  */
-export function externalFlows(
-  transactions: Transaction[],
-  cashAccounts?: Set<string>,
-): CashFlow[] {
+export function externalFlows(transactions: Transaction[], cashAccounts?: Set<string>): CashFlow[] {
   const flows: CashFlow[] = [];
   for (const t of transactions) {
     const date = new Date(t.transaction_date);

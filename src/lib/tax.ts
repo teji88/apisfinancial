@@ -23,17 +23,7 @@ export const FED_AGE_CLAWBACK_END = 86_912;
 export const FED_AGE_AMOUNT = (FED_AGE_CLAWBACK_END - FED_AGE_CLAWBACK_START) * 0.15;
 export const FED_PENSION_AMOUNT = 2_000;
 
-export type ProvinceCode =
-  | "AB"
-  | "BC"
-  | "ON"
-  | "QC"
-  | "MB"
-  | "SK"
-  | "NS"
-  | "NB"
-  | "NL"
-  | "PE";
+export type ProvinceCode = "AB" | "BC" | "ON" | "QC" | "MB" | "SK" | "NS" | "NB" | "NL" | "PE";
 
 type ProvinceDef = {
   name: string;
@@ -252,8 +242,7 @@ export function computeTax(input: TaxInput): TaxResult {
   if (prov.surtax) {
     const s = prov.surtax;
     provTax +=
-      Math.max(0, provTax - s.threshold1) * s.rate1 +
-      Math.max(0, provTax - s.threshold2) * s.rate2;
+      Math.max(0, provTax - s.threshold1) * s.rate1 + Math.max(0, provTax - s.threshold2) * s.rate2;
   }
 
   const total = fed + provTax;

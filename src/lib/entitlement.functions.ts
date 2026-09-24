@@ -21,8 +21,6 @@ export type Entitlement = {
   trialEndsAt: string | null;
 };
 
-
-
 export const FREE_ACCOUNT_LIMIT = 1;
 export const FREE_HOLDING_LIMIT = 10;
 
@@ -46,29 +44,29 @@ export const getEntitlement = createServerFn({ method: "POST" })
       { data: profile },
       { data: rewards },
     ] = await Promise.all([
-        supabase
-          .from("subscriptions")
-          .select("status, price_id, current_period_end, cancel_at_period_end")
-          .eq("user_id", userId)
-          .eq("environment", data.environment)
-          .order("created_at", { ascending: false })
-          .limit(5),
-        supabase
-          .from("invite_redemptions")
-          .select("access_until, redeemed_at")
-          .eq("user_id", userId)
-          .order("redeemed_at", { ascending: false })
-          .limit(5),
-        supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" }),
-        supabaseAdmin.rpc("free_limit_state", { _user_id: userId }),
-        supabase.from("profiles").select("trial_ends_at").eq("id", userId).maybeSingle(),
-        supabase
-          .from("referral_rewards")
-          .select("plan, access_until")
-          .eq("referrer_id", userId)
-          .order("access_until", { ascending: false })
-          .limit(1),
-      ]);
+      supabase
+        .from("subscriptions")
+        .select("status, price_id, current_period_end, cancel_at_period_end")
+        .eq("user_id", userId)
+        .eq("environment", data.environment)
+        .order("created_at", { ascending: false })
+        .limit(5),
+      supabase
+        .from("invite_redemptions")
+        .select("access_until, redeemed_at")
+        .eq("user_id", userId)
+        .order("redeemed_at", { ascending: false })
+        .limit(5),
+      supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" }),
+      supabaseAdmin.rpc("free_limit_state", { _user_id: userId }),
+      supabase.from("profiles").select("trial_ends_at").eq("id", userId).maybeSingle(),
+      supabase
+        .from("referral_rewards")
+        .select("plan, access_until")
+        .eq("referrer_id", userId)
+        .order("access_until", { ascending: false })
+        .limit(1),
+    ]);
 
     const trialEndsAt =
       profile?.trial_ends_at && new Date(profile.trial_ends_at).getTime() > now
@@ -83,7 +81,6 @@ export const getEntitlement = createServerFn({ method: "POST" })
       readOnlyReason: null as Entitlement["readOnlyReason"],
       trialEndsAt,
     };
-
 
     // The app owner always has full access.
     if (base.isAdmin) {
@@ -167,7 +164,6 @@ export const getEntitlement = createServerFn({ method: "POST" })
       };
     }
 
-
     // A plan or invite that has ended: everything becomes read-only.
     const lapsedEnd =
       (subs ?? []).map((s) => s.current_period_end).find(Boolean) ??
@@ -206,7 +202,6 @@ export const getEntitlement = createServerFn({ method: "POST" })
       accountLimit: FREE_ACCOUNT_LIMIT,
       holdingLimit: FREE_HOLDING_LIMIT,
     };
-
   });
 
 export const redeemInviteCode = createServerFn({ method: "POST" })
@@ -216,39 +211,44 @@ export const redeemInviteCode = createServerFn({ method: "POST" })
     if (!/^[A-Z0-9-]{4,32}$/.test(code)) throw new Error("That code does not look right.");
     return { code };
   })
-  .handler(async ({ data, context }): Promise<{ ok: true; accessUntil: string | null } | { error: string }> => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{ ok: true; accessUntil: string | null } | { error: string }> => {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: row } = await supabaseAdmin
-      .from("invite_codes")
-      .select("id, max_uses, uses, expires_at, access_until, revoked")
-      .eq("code", data.code)
-      .maybeSingle();
+      const { data: row } = await supabaseAdmin
+        .from("invite_codes")
+        .select("id, max_uses, uses, expires_at, access_until, revoked")
+        .eq("code", data.code)
+        .maybeSingle();
 
-    if (!row) return { error: "We could not find that code." };
-    if (row.revoked) return { error: "That code is no longer active." };
-    if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
-      return { error: "That code has expired." };
-    }
-    if (row.uses >= row.max_uses) return { error: "That code has already been used." };
+      if (!row) return { error: "We could not find that code." };
+      if (row.revoked) return { error: "That code is no longer active." };
+      if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+        return { error: "That code has expired." };
+      }
+      if (row.uses >= row.max_uses) return { error: "That code has already been used." };
 
-    const { error: insertError } = await supabaseAdmin.from("invite_redemptions").insert({
-      code_id: row.id,
-      user_id: context.userId,
-      access_until: row.access_until,
-    });
-    if (insertError) {
-      if (insertError.code === "23505") return { error: "You have already used that code." };
-      return { error: "Could not apply that code." };
-    }
+      const { error: insertError } = await supabaseAdmin.from("invite_redemptions").insert({
+        code_id: row.id,
+        user_id: context.userId,
+        access_until: row.access_until,
+      });
+      if (insertError) {
+        if (insertError.code === "23505") return { error: "You have already used that code." };
+        return { error: "Could not apply that code." };
+      }
 
-    await supabaseAdmin
-      .from("invite_codes")
-      .update({ uses: row.uses + 1 })
-      .eq("id", row.id);
+      await supabaseAdmin
+        .from("invite_codes")
+        .update({ uses: row.uses + 1 })
+        .eq("id", row.id);
 
-    return { ok: true, accessUntil: row.access_until };
-  });
+      return { ok: true, accessUntil: row.access_until };
+    },
+  );
 
 async function assertAdmin(context: { userId: string }) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

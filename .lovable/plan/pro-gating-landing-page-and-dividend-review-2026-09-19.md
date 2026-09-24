@@ -9,6 +9,7 @@ On the Import page, the drag-and-drop area and "Choose a file" button stay visib
 A public marketing page becomes the site's front door for signed-out visitors. Anyone already signed in is sent straight to their dashboard, exactly as today.
 
 Sections:
+
 - Header with the MapleWealth name, a "Sign in" link and a "Get started" button.
 - Hero: what the app does (Canadian portfolio tracking, dividends, retirement planning in today's dollars).
 - Features: holdings and accounts across all ten Canadian account types, ledger with adjusted cost base and returns, dividends with ex-dividend tracking and the ten-year compounder, benchmarking against the S&P 500 / TSX / global all-equity, retirement planning with tax-efficient withdrawals, and AI statement import.
@@ -23,6 +24,7 @@ The dashboard moves from the home address to its own address; every menu link, r
 Free users can change: their age, desired after-tax income (defaulting to $60,000), province, and the full earnings/residency history used for CPP and OAS.
 
 Locked for free users, shown with a small "Pro" tag and a tooltip, clicking opens the upgrade window:
+
 - Target retirement age (fixed at 65)
 - CPP start age and OAS start age (fixed at 65)
 - Inflation (2.5%) and growth (10%)

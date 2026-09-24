@@ -147,7 +147,9 @@ async function fetchNasdaq(
     const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(
       symbol.toUpperCase(),
     )}/historical?assetclass=${assetclass}&fromdate=${start}&todate=${end}&limit=99999`;
-    const res = await fetchRetry(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+    const res = await fetchRetry(url, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+    });
     if (!res) continue;
     try {
       const json = (await res.json()) as {
@@ -206,7 +208,6 @@ async function readCoverage(symbol: string): Promise<Coverage | null> {
   return (data as Coverage | null) ?? null;
 }
 
-
 async function storePoints(symbol: string, currency: string, points: HistoryPoint[]) {
   if (points.length === 0) return;
   const db = await admin();
@@ -233,9 +234,17 @@ async function writeCoverage(
   const db = await admin();
   const existing = await readCoverage(symbol);
   const firstDate =
-    existing?.first_date && first ? (existing.first_date < first ? existing.first_date : first) : (first ?? existing?.first_date ?? null);
+    existing?.first_date && first
+      ? existing.first_date < first
+        ? existing.first_date
+        : first
+      : (first ?? existing?.first_date ?? null);
   const lastDate =
-    existing?.last_date && last ? (existing.last_date > last ? existing.last_date : last) : (last ?? existing?.last_date ?? null);
+    existing?.last_date && last
+      ? existing.last_date > last
+        ? existing.last_date
+        : last
+      : (last ?? existing?.last_date ?? null);
   const { error } = await db.from("price_history_coverage").upsert(
     {
       symbol,
@@ -300,7 +309,12 @@ async function readStoredMany(
   return out;
 }
 
-type Need = { needsBack: boolean; needsForward: boolean; recentlyChecked: boolean; giveUp: boolean };
+type Need = {
+  needsBack: boolean;
+  needsForward: boolean;
+  recentlyChecked: boolean;
+  giveUp: boolean;
+};
 
 function assess(coverage: Coverage | null, start: string): Need {
   const now = today();
@@ -308,7 +322,12 @@ function assess(coverage: Coverage | null, start: string): Need {
   const needsForward = !coverage?.last_date || coverage.last_date < shiftDays(now, -FRESH_DAYS);
   const recentlyChecked =
     coverage != null && Date.now() - new Date(coverage.checked_at).getTime() < 6 * 60 * 60 * 1000;
-  return { needsBack, needsForward, recentlyChecked, giveUp: coverage?.unavailable === true && recentlyChecked };
+  return {
+    needsBack,
+    needsForward,
+    recentlyChecked,
+    giveUp: coverage?.unavailable === true && recentlyChecked,
+  };
 }
 
 /** Pull the missing part of a series from upstream and add it to the library. */
@@ -411,8 +430,6 @@ export async function fetchSymbolHistory(
   const [value] = await fetchSymbolHistories([symbol], start, end);
   return value ?? null;
 }
-
-
 
 function minDate(a: string, b: string): string {
   return a < b ? a : b;
@@ -560,7 +577,10 @@ export async function backfillLibrary(extraSymbols: string[] = []): Promise<{
   failed: string[];
 }> {
   const db = await admin();
-  const { data } = await db.from("price_history_coverage").select("symbol").eq("unavailable", false);
+  const { data } = await db
+    .from("price_history_coverage")
+    .select("symbol")
+    .eq("unavailable", false);
   const known = (data ?? []).map((r) => String(r.symbol).toUpperCase());
   const symbols = Array.from(
     new Set([...known, ...extraSymbols.map((s) => s.trim().toUpperCase()).filter(Boolean)]),

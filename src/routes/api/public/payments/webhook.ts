@@ -14,7 +14,9 @@ function getSupabase() {
 }
 
 function priceIdOf(item: any): string | null {
-  return item?.price?.lookup_key ?? item?.price?.metadata?.lovable_external_id ?? item?.price?.id ?? null;
+  return (
+    item?.price?.lookup_key ?? item?.price?.metadata?.lovable_external_id ?? item?.price?.id ?? null
+  );
 }
 
 async function upsertSubscription(subscription: any, env: StripeEnv) {
@@ -51,7 +53,6 @@ async function upsertSubscription(subscription: any, env: StripeEnv) {
   await grantReferralReward(userId, priceIdOf(item), subscription.status);
 }
 
-
 async function markCanceled(subscription: any, env: StripeEnv) {
   await getSupabase()
     .from("subscriptions")
@@ -84,7 +85,9 @@ async function handleWebhook(req: Request, env: StripeEnv) {
       const session: any = event.data.object;
       if (session.payment_status !== "unpaid") {
         await refreshFromStripe(
-          typeof session.subscription === "string" ? session.subscription : session.subscription?.id,
+          typeof session.subscription === "string"
+            ? session.subscription
+            : session.subscription?.id,
           env,
         );
       }
@@ -96,7 +99,9 @@ async function handleWebhook(req: Request, env: StripeEnv) {
       // Renewals and failed renewals: re-read the subscription so dates and status stay right.
       const invoice: any = event.data.object;
       const subId =
-        (typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id) ??
+        (typeof invoice.subscription === "string"
+          ? invoice.subscription
+          : invoice.subscription?.id) ??
         invoice.parent?.subscription_details?.subscription ??
         invoice.lines?.data?.[0]?.parent?.subscription_item_details?.subscription ??
         null;
@@ -107,7 +112,6 @@ async function handleWebhook(req: Request, env: StripeEnv) {
       console.log("Unhandled event:", event.type);
   }
 }
-
 
 export const Route = createFileRoute("/api/public/payments/webhook")({
   staticData: { sitemap: false },
