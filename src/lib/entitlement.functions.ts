@@ -164,44 +164,28 @@ export const getEntitlement = createServerFn({ method: "POST" })
       };
     }
 
-    // A plan or invite that has ended: everything becomes read-only.
+    // Everything in Apis Financial is free. The only thing a subscription adds
+    // is AI reading of PDFs and screenshots, so a lapsed plan simply becomes
+    // the free plan again — nothing is locked and nothing is read-only.
     const lapsedEnd =
       (subs ?? []).map((s) => s.current_period_end).find(Boolean) ??
       (redemptions ?? []).map((r) => r.access_until).find(Boolean) ??
       null;
 
-    if (lapsedEnd) {
-      const end = new Date(lapsedEnd);
-      const grace = new Date(end);
-      grace.setMonth(grace.getMonth() + 1);
-      return {
-        ...base,
-        tier: "free",
-        readOnly: true,
-        readOnlyReason: "lapsed",
-        graceUntil: grace.toISOString(),
-        accessEndsAt: end.toISOString(),
-        plan: null,
-        accountLimit: FREE_ACCOUNT_LIMIT,
-        holdingLimit: FREE_HOLDING_LIMIT,
-      };
-    }
-
-    // On the free plan but carrying more than the free plan allows
-    // (for example straight after cancelling Pro): view-only until they trim down.
-    const overLimit = limitState === "over";
+    void limitState;
 
     return {
       ...base,
       tier: "free",
-      readOnly: overLimit,
-      readOnlyReason: overLimit ? "overlimit" : null,
+      readOnly: false,
+      readOnlyReason: null,
       graceUntil: null,
-      accessEndsAt: null,
+      accessEndsAt: lapsedEnd ? new Date(lapsedEnd).toISOString() : null,
       plan: null,
-      accountLimit: FREE_ACCOUNT_LIMIT,
-      holdingLimit: FREE_HOLDING_LIMIT,
+      accountLimit: null,
+      holdingLimit: null,
     };
+
   });
 
 export const redeemInviteCode = createServerFn({ method: "POST" })
