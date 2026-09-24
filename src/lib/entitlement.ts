@@ -14,11 +14,12 @@ const FREE_FALLBACK: Entitlement = {
   accessEndsAt: null,
   cancelAtPeriodEnd: false,
   plan: null,
-  accountLimit: 1,
-  holdingLimit: 10,
+  accountLimit: null,
+  holdingLimit: null,
   isAdmin: false,
   trialEndsAt: null,
 };
+
 
 export function useEntitlement() {
   const fetchEntitlement = useServerFn(getEntitlement);
@@ -30,21 +31,18 @@ export function useEntitlement() {
   const entitlement = query.data ?? FREE_FALLBACK;
   return {
     entitlement,
-    /** Pro-level features: unlimited accounts/holdings, statement reading, solo planner controls. */
-    hasPro: entitlement.tier !== "free",
-    /** Pro+ features: household/spouse planning, savings split, manual balance overrides. */
-    hasProPlus:
-      entitlement.tier === "pro_plus" ||
-      entitlement.tier === "invite" ||
-      entitlement.tier === "trial" ||
-      (entitlement.tier === "referral" && entitlement.plan === "pro_plus") ||
-      entitlement.isAdmin,
+    /** The only paid feature: AI reading of PDFs and screenshots. */
+    hasStatementAi: entitlement.tier !== "free",
+    /** Everything else in Apis Financial is free for everyone. */
+    hasPro: true,
+    hasProPlus: true,
     /** True while the free 30-day trial of everything is running. */
     onTrial: entitlement.tier === "trial",
     loading: query.isLoading,
     refetch: query.refetch,
   };
 }
+
 
 export function formatDate(iso: string | null): string {
   if (!iso) return "—";
