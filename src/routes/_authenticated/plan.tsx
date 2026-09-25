@@ -11,11 +11,10 @@ import { PlanUpgrade } from "@/components/PlanUpgrade";
 import { ReferralCard } from "@/components/ReferralCard";
 
 import { useEntitlement, formatDate } from "@/lib/entitlement";
-import { getStripeEnvironment, SUBSCRIPTION_PRICE } from "@/lib/stripe";
+import { getStripeEnvironment } from "@/lib/stripe";
 import {
   createPortalSession,
   syncSubscription,
-  changeSubscriptionPlan,
   setSubscriptionCancel,
 } from "@/utils/payments.functions";
 
@@ -51,7 +50,6 @@ function PlanPage() {
 
   const portal = useServerFn(createPortalSession);
   const sync = useServerFn(syncSubscription);
-  const changePlan = useServerFn(changeSubscriptionPlan);
   const setCancel = useServerFn(setSubscriptionCancel);
 
   const [busy, setBusy] = useState<string | null>(null);
