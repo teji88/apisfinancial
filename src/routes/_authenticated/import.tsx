@@ -526,32 +526,18 @@ function ImportPage() {
                         <div className="flex gap-2">
                           <Select
                             value={m.ownerType}
-                            onValueChange={(v) => {
-                              if (false) {
-                                setUpgradeReason(
-                                  "Tracking a partner's or a child's accounts is part of Pro+ ($2 a month or $20 a year).",
-                                );
-                                setUpgradeOpen(true);
-                                return;
-                              }
-                              setM({ ownerType: v });
-                            }}
+                            onValueChange={(v) => setM({ ownerType: v })}
                           >
                             <SelectTrigger className="h-9">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="self">{OWNER_LABELS["self"]}</SelectItem>
-                              <SelectItem value="partner">
-                                {OWNER_LABELS["partner"]}
-                                {hasProPlus ? "" : " (Pro+)"}
-                              </SelectItem>
-                              <SelectItem value="child">
-                                {OWNER_LABELS["child"]}
-                                {hasProPlus ? "" : " (Pro+)"}
-                              </SelectItem>
+                              <SelectItem value="partner">{OWNER_LABELS["partner"]}</SelectItem>
+                              <SelectItem value="child">{OWNER_LABELS["child"]}</SelectItem>
                             </SelectContent>
                           </Select>
+
                           {m.ownerType !== "self" ? (
                             <Input
                               className="h-9"
