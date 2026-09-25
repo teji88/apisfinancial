@@ -125,8 +125,6 @@ function ImportPage() {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const holdings = holdingsQuery.data ?? [];
   const isPro = entitlement.tier !== "free";
-  // Family tagging and every other feature are free; only AI reading is paid.
-  const hasProPlus = true;
   const [upgradeReason, setUpgradeReason] = useState<string | null>(null);
 
   const accountList = accounts.data ?? [];
