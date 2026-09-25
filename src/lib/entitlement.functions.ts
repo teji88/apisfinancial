@@ -31,16 +31,12 @@ export const getEntitlement = createServerFn({ method: "POST" })
   .inputValidator((data: { environment: "sandbox" | "live" }) => data)
   .handler(async ({ data, context }): Promise<Entitlement> => {
     const { supabase, userId } = context;
-    // Plan-state checks run through the server-side client so the internal
-    // database routines never need to be callable by signed-in users.
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const now = Date.now();
 
     const [
       { data: subs },
       { data: redemptions },
-      { data: isAdmin },
-      { data: limitState },
+      adminRoleResult,
       { data: profile },
       { data: rewards },
     ] = await Promise.all([
@@ -57,8 +53,12 @@ export const getEntitlement = createServerFn({ method: "POST" })
         .eq("user_id", userId)
         .order("redeemed_at", { ascending: false })
         .limit(5),
-      supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" }),
-      supabaseAdmin.rpc("free_limit_state", { _user_id: userId }),
+      supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "admin")
+        .maybeSingle(),
       supabase.from("profiles").select("trial_ends_at").eq("id", userId).maybeSingle(),
       supabase
         .from("referral_rewards")
@@ -67,6 +67,8 @@ export const getEntitlement = createServerFn({ method: "POST" })
         .order("access_until", { ascending: false })
         .limit(1),
     ]);
+
+    const isAdmin = Boolean(adminRoleResult?.data);
 
     const trialEndsAt =
       profile?.trial_ends_at && new Date(profile.trial_ends_at).getTime() > now
@@ -172,8 +174,6 @@ export const getEntitlement = createServerFn({ method: "POST" })
       (redemptions ?? []).map((r) => r.access_until).find(Boolean) ??
       null;
 
-    void limitState;
-
     return {
       ...base,
       tier: "free",
@@ -234,13 +234,27 @@ export const redeemInviteCode = createServerFn({ method: "POST" })
     },
   );
 
-async function assertAdmin(context: { userId: string }) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: isAdmin } = await supabaseAdmin.rpc("has_role", {
-    _user_id: context.userId,
-    _role: "admin",
-  });
-  if (!isAdmin) throw new Error("Forbidden");
+async function assertAdmin(context: { userId: string; supabase?: any }) {
+  if (context.supabase) {
+    const { data } = await context.supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (data) return;
+  }
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: isAdmin } = await supabaseAdmin.rpc("has_role", {
+      _user_id: context.userId,
+      _role: "admin",
+    });
+    if (isAdmin) return;
+  } catch {
+    // Service role key not configured on this host
+  }
+  throw new Error("Forbidden");
 }
 
 function randomCode(): string {
