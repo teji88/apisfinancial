@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Gift, Sparkle, Users } from "lucide-react";
+import { Check, Gift, Sparkle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,34 +14,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StripeEmbeddedCheckout } from "@/components/StripeEmbeddedCheckout";
-import { PLAN_PRICES, type ProBilling } from "@/lib/stripe";
+import { SUBSCRIPTION_PRICE } from "@/lib/stripe";
 import { redeemInviteCode } from "@/lib/entitlement.functions";
 
 const FREE_POINTS = [
-  "1 account, up to 10 holdings",
-  "Ledger with adjusted cost base",
-  "Dividends and benchmarking",
-  "Retirement plan with standard assumptions",
-];
-
-const PRO_POINTS = [
   "Unlimited accounts and holdings",
-  "Upload statements for AI reading",
-  "All accounts combined vs benchmarks",
-  "Your own retirement age, CPP and OAS start",
-  "Your own inflation, growth and life expectancy",
+  "Ledger with adjusted cost base",
+  "Dividends, benchmarking and performance",
+  "The full household retirement planner",
+  "CSV imports and typing transactions in",
 ];
 
-const PRO_PLUS_POINTS = [
-  "Everything in Pro",
-  "Couple and household planning",
-  "Spouse CPP, OAS and balances",
-  "Pension splitting and clawback control",
-  "Savings split and what-if balances",
+const PAID_POINTS = [
+  "Everything in the free plan",
+  "Upload a PDF statement and have it read for you",
+  "Upload a screenshot or photo of a statement",
+  "Rows are drafted for you to check before saving",
 ];
 
 export function PlanUpgrade({ onDone }: { onDone?: () => void }) {
-  const [billing, setBilling] = useState<ProBilling>("yearly");
   const [checkout, setCheckout] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
@@ -83,28 +74,11 @@ export function PlanUpgrade({ onDone }: { onDone?: () => void }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-center">
-        <div className="inline-flex rounded-md bg-muted p-1 text-sm">
-          {(["monthly", "yearly"] as ProBilling[]).map((b) => (
-            <button
-              key={b}
-              type="button"
-              onClick={() => setBilling(b)}
-              className={`rounded px-3 py-1 capitalize ${
-                billing === b ? "bg-card font-medium shadow-sm" : "text-muted-foreground"
-              }`}
-            >
-              {b}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-lg border p-4">
           <p className="text-sm font-medium text-muted-foreground">Free</p>
           <p className="mt-1 text-2xl font-semibold">$0</p>
-          <p className="text-sm text-muted-foreground">forever</p>
+          <p className="text-sm text-muted-foreground">forever, no card needed</p>
           <ul className="mt-3 space-y-1.5 text-sm">
             {FREE_POINTS.map((p) => (
               <li key={p} className="flex items-start gap-2">
@@ -117,51 +91,22 @@ export function PlanUpgrade({ onDone }: { onDone?: () => void }) {
 
         <div className="rounded-lg border-2 border-primary p-4">
           <p className="flex items-center gap-1.5 text-sm font-medium text-primary">
-            <Sparkle className="h-4 w-4" /> Pro
+            <Sparkle className="h-4 w-4" /> Statement reading
           </p>
           <div className="mt-1 flex items-baseline gap-2">
-            <p className="text-2xl font-semibold">{billing === "monthly" ? "$1" : "$10"}</p>
-            <p className="text-sm text-muted-foreground">
-              {billing === "monthly" ? "per month" : "per year"}
-            </p>
+            <p className="text-2xl font-semibold">{SUBSCRIPTION_PRICE.amount}</p>
+            <p className="text-sm text-muted-foreground">{SUBSCRIPTION_PRICE.period}</p>
           </div>
           <ul className="mt-3 space-y-1.5 text-sm">
-            {PRO_POINTS.map((p) => (
+            {PAID_POINTS.map((p) => (
               <li key={p} className="flex items-start gap-2">
                 <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 {p}
               </li>
             ))}
           </ul>
-          <Button className="mt-4 w-full" onClick={() => setCheckout(PLAN_PRICES.pro[billing].id)}>
-            Start Pro — {PLAN_PRICES.pro[billing].label}
-          </Button>
-        </div>
-
-        <div className="rounded-lg border-2 border-accent p-4">
-          <p className="flex items-center gap-1.5 text-sm font-medium text-primary">
-            <Users className="h-4 w-4" /> Pro+
-          </p>
-          <div className="mt-1 flex items-baseline gap-2">
-            <p className="text-2xl font-semibold">{billing === "monthly" ? "$2" : "$20"}</p>
-            <p className="text-sm text-muted-foreground">
-              {billing === "monthly" ? "per month" : "per year"}
-            </p>
-          </div>
-          <ul className="mt-3 space-y-1.5 text-sm">
-            {PRO_PLUS_POINTS.map((p) => (
-              <li key={p} className="flex items-start gap-2">
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                {p}
-              </li>
-            ))}
-          </ul>
-          <Button
-            variant="secondary"
-            className="mt-4 w-full"
-            onClick={() => setCheckout(PLAN_PRICES.pro_plus[billing].id)}
-          >
-            Start Pro+ — {PLAN_PRICES.pro_plus[billing].label}
+          <Button className="mt-4 w-full" onClick={() => setCheckout(SUBSCRIPTION_PRICE.id)}>
+            Subscribe — {SUBSCRIPTION_PRICE.label}
           </Button>
         </div>
       </div>
@@ -210,9 +155,10 @@ export function UpgradeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Choose your plan</DialogTitle>
+          <DialogTitle>Apis Financial plans</DialogTitle>
           <DialogDescription>
-            {reason ?? "The free plan covers one account and ten holdings."}
+            {reason ??
+              "Everything is free. The only paid extra is having PDFs and photos read for you."}
           </DialogDescription>
         </DialogHeader>
         <PlanUpgrade onDone={() => onOpenChange(false)} />
