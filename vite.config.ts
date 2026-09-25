@@ -27,8 +27,14 @@ if (!process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] && process.env["SUPABASE_PUBLI
 }
 // Last-resort public fallbacks so a build never ships without them (both are
 // publishable, safe for the browser).
-process.env["VITE_SUPABASE_URL"] ||= "https://izmrxsvzxctzswrameng.supabase.co";
-process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||= "sb_publishable_rOV7PAjsBS8M3QTFHE0ceg_8XqiQMLQ";
+const SUPABASE_PUBLIC_URL =
+  process.env["VITE_SUPABASE_URL"] ||
+  process.env["SUPABASE_URL"] ||
+  "https://izmrxsvzxctzswrameng.supabase.co";
+const SUPABASE_PUBLIC_KEY =
+  process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
+  process.env["SUPABASE_PUBLISHABLE_KEY"] ||
+  "sb_publishable_rOV7PAjsBS8M3QTFHE0ceg_8XqiQMLQ";
 
 export default defineConfig({
   tanstackStart: {
