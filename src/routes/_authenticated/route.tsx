@@ -111,7 +111,7 @@ function ReadOnlyBanner() {
       Your plan ended on {formatDate(entitlement.accessEndsAt)} — Apis Financial is view-only.
       Nothing has been deleted.{" "}
       <Link to="/plan" className="font-medium underline">
-        Restart Pro
+        Resubscribe
       </Link>
     </div>
   );
@@ -275,13 +275,11 @@ function ProfileMenu() {
 
   const profile = profileQuery.data;
   const planLabel =
-    entitlement.tier === "pro_plus"
-      ? "Pro+"
-      : entitlement.tier === "pro"
-        ? "Pro"
-        : entitlement.tier === "invite"
-          ? "Pro+ (invite)"
-          : "Free";
+    entitlement.tier === "pro_plus" || entitlement.tier === "pro"
+      ? "Statements"
+      : entitlement.tier === "invite"
+        ? "Invite"
+        : "Free";
 
   function openSettings() {
     setName(profile?.display_name ?? "");

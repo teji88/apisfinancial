@@ -125,7 +125,6 @@ function ImportPage() {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const holdings = holdingsQuery.data ?? [];
   const isPro = entitlement.tier !== "free";
-  const { hasProPlus } = useEntitlement();
   const [upgradeReason, setUpgradeReason] = useState<string | null>(null);
 
   const accountList = accounts.data ?? [];
@@ -162,13 +161,6 @@ function ImportPage() {
 
   /** Creates any missing accounts and points every row at the right one. */
   async function applyMapping() {
-    if (Object.values(mapping).some((m) => m.ownerType !== "self") && !hasProPlus) {
-      setUpgradeReason(
-        "Tracking a partner's or a child's accounts is part of Pro+ ($2 a month or $20 a year).",
-      );
-      setUpgradeOpen(true);
-      return;
-    }
     setBusy(true);
     try {
       const resolved: Record<string, string> = {};
@@ -241,7 +233,7 @@ function ImportPage() {
     // no AI, no size ceiling, no credits, and every row comes through.
     if (!isCsv && !isPro) {
       setUpgradeReason(
-        "Reading PDFs and photos with AI is part of Pro. CSV files and hand entry stay free.",
+        "Reading PDFs and screenshots with AI is the one paid feature — $10 a year. CSV files and hand entry are always free.",
       );
       setUpgradeOpen(true);
       return;
@@ -319,15 +311,6 @@ function ImportPage() {
 
   async function commit() {
     if (rows.length === 0) return;
-    if (entitlement.readOnly || entitlement.holdingLimit !== null) {
-      // Free or view-only: adding a batch can easily go past the free limits.
-      const existing = new Set(holdings.map((h) => h.symbol.toUpperCase()));
-      rows.forEach((r) => r.symbol && existing.add(r.symbol.toUpperCase()));
-      if (entitlement.readOnly || existing.size > (entitlement.holdingLimit ?? Infinity)) {
-        setUpgradeOpen(true);
-        return;
-      }
-    }
     const missing = rows.filter((r) => !r.accountId);
     if (missing.length > 0) {
       toast.error("Pick an account for every row first.");
@@ -438,7 +421,7 @@ function ImportPage() {
             <p className="text-xs text-muted-foreground">
               {isPro
                 ? "CSV, PDF, PNG or JPEG · up to 20 MB · spreadsheets of any length"
-                : "CSV files are free and unlimited — PDFs and photos need Pro"}
+                : "CSV files are free and unlimited — PDFs and photos need the $10 / year plan"}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
               <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
@@ -541,32 +524,18 @@ function ImportPage() {
                         <div className="flex gap-2">
                           <Select
                             value={m.ownerType}
-                            onValueChange={(v) => {
-                              if (v !== "self" && !hasProPlus) {
-                                setUpgradeReason(
-                                  "Tracking a partner's or a child's accounts is part of Pro+ ($2 a month or $20 a year).",
-                                );
-                                setUpgradeOpen(true);
-                                return;
-                              }
-                              setM({ ownerType: v });
-                            }}
+                            onValueChange={(v) => setM({ ownerType: v })}
                           >
                             <SelectTrigger className="h-9">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="self">{OWNER_LABELS["self"]}</SelectItem>
-                              <SelectItem value="partner">
-                                {OWNER_LABELS["partner"]}
-                                {hasProPlus ? "" : " (Pro+)"}
-                              </SelectItem>
-                              <SelectItem value="child">
-                                {OWNER_LABELS["child"]}
-                                {hasProPlus ? "" : " (Pro+)"}
-                              </SelectItem>
+                              <SelectItem value="partner">{OWNER_LABELS["partner"]}</SelectItem>
+                              <SelectItem value="child">{OWNER_LABELS["child"]}</SelectItem>
                             </SelectContent>
                           </Select>
+
                           {m.ownerType !== "self" ? (
                             <Input
                               className="h-9"

@@ -43,9 +43,9 @@
 
 ## Phase 7 — Plans and payments (done)
 
-- Free: 1 account, 10 holdings; Pro: unlimited, $1/month or $10/year
-- Limits enforced in the database as well as the interface
-- Lapsed plan → view-only, nothing deleted
+- Every feature is free with no account or holding limits
+- One paid extra: AI reading of PDF statements and screenshots, $10/year
+- Lapsed plan → back to free, nothing locked and nothing deleted
 - Invite codes for free access (owner-only screen at /invites)
 - Your plan page at /plan with checkout, invite-code redemption and billing management
 

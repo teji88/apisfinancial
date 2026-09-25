@@ -82,20 +82,19 @@ const COMPARISON: Array<{
   label: string;
   free: string | boolean;
   pro: string | boolean;
-  plus: string | boolean;
 }> = [
-  { label: "Accounts", free: "1", pro: "Unlimited", plus: "Unlimited" },
-  { label: "Holdings", free: "10", pro: "Unlimited", plus: "Unlimited" },
-  { label: "Ledger, adjusted cost base and returns", free: true, pro: true, plus: true },
-  { label: "Dividends and the ten-year compounder", free: true, pro: true, plus: true },
-  { label: "Benchmarking", free: true, pro: true, plus: true },
-  { label: "Retirement plan and withdrawal schedule", free: true, pro: true, plus: true },
-  { label: "All accounts combined vs benchmarks", free: false, pro: true, plus: true },
-  { label: "Upload a statement for AI reading", free: false, pro: true, plus: true },
-  { label: "Change retirement age, CPP and OAS start dates", free: false, pro: true, plus: true },
-  { label: "Change inflation, growth and life expectancy", free: false, pro: true, plus: true },
-  { label: "Couple and household planning", free: false, pro: false, plus: true },
-  { label: "Savings split and what-if balances", free: false, pro: false, plus: true },
+  { label: "Accounts", free: "Unlimited", pro: "Unlimited" },
+  { label: "Holdings", free: "Unlimited", pro: "Unlimited" },
+  { label: "Ledger, adjusted cost base and returns", free: true, pro: true },
+  { label: "Dividends and the ten-year compounder", free: true, pro: true },
+  { label: "Benchmarking, all accounts combined", free: true, pro: true },
+  { label: "Retirement plan and withdrawal schedule", free: true, pro: true },
+  { label: "Your own retirement age, CPP and OAS start dates", free: true, pro: true },
+  { label: "Your own inflation, growth and life expectancy", free: true, pro: true },
+  { label: "Couple, household, RESP and RDSP planning", free: true, pro: true },
+  { label: "CSV imports and typing transactions in", free: true, pro: true },
+  { label: "Upload a PDF statement for AI reading", free: false, pro: true },
+  { label: "Upload a screenshot or photo for AI reading", free: false, pro: true },
 ];
 
 function Landing() {
@@ -148,8 +147,8 @@ function Landing() {
               </Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              Every feature free for 30 days — no card needed. After that, the free plan keeps one
-              account and ten holdings.
+              Free to use, with no account or holding limits. Only having PDFs and screenshots read
+              for you costs anything — $10 a year.
             </p>
           </div>
         </section>
@@ -182,10 +181,8 @@ function Landing() {
                 30 days of everything, free
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                Every new account starts with a full 30-day trial: unlimited accounts and holdings,
-                statement uploads, combined benchmarking and the complete household retirement
-                planner. No card, no commitment — if you do nothing when it ends, you simply move to
-                the free plan and keep your data.
+                Every new account starts with a full 30-day trial that includes statement uploads.
+                No card, no commitment — when it ends you keep every other feature, free, forever.
               </p>
               <Button asChild className="honey-fill mt-5">
                 <Link to="/auth">Start the free trial</Link>
@@ -201,8 +198,8 @@ function Landing() {
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
                 Share your personal invite link from inside the app. When a friend who joins through
-                it picks a yearly plan — $10 Pro or $20 Pro+ — you get a full year of that same plan
-                at no charge. Refer three friends, get three years. There is no limit.
+                it subscribes for $10 a year, you get a full year at no charge. Refer three friends,
+                get three years. There is no limit.
               </p>
               <Button asChild variant="outline" className="mt-5 border-accent/50">
                 <Link to="/auth">Create your invite link</Link>
@@ -214,22 +211,23 @@ function Landing() {
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
           <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
           <p className="mx-auto mt-3 max-w-xl text-center text-sm text-muted-foreground">
-            Start free and stay free for a single account. Pro removes every limit, and Pro+ adds
-            household planning — all for about the price of a coffee a year.
+            Everything in Apis Financial is free, with no limits. The one paid extra is having
+            statements read for you — about the price of a coffee, once a year.
           </p>
 
-          <div className="mx-auto mt-10 grid max-w-5xl gap-5 md:grid-cols-3">
+          <div className="mx-auto mt-10 grid max-w-3xl gap-5 md:grid-cols-2">
             <div className="honey-card p-6">
               <h3 className="text-lg font-semibold">Free</h3>
               <p className="num mt-2 text-3xl font-semibold">$0</p>
-              <p className="mt-1 text-xs text-muted-foreground">Forever</p>
+              <p className="mt-1 text-xs text-muted-foreground">Forever · no card needed</p>
               <ul className="mt-5 space-y-2 text-sm">
                 {[
-                  "One account",
-                  "Up to ten holdings",
-                  "Ledger, dividends, performance",
-                  "Retirement plan with standard assumptions",
-                  "Type transactions in by hand",
+                  "Unlimited accounts and holdings",
+                  "Ledger, adjusted cost base and returns",
+                  "Dividends and the ten-year compounder",
+                  "Benchmarking across all accounts",
+                  "The full household retirement planner",
+                  "CSV imports and typing transactions in",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
@@ -244,26 +242,24 @@ function Landing() {
 
             <div className="honey-card relative overflow-hidden border-accent/60 p-6 ring-1 ring-accent/30">
               <div className="relative flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Pro</h3>
+                <h3 className="text-lg font-semibold">Statement reading</h3>
                 <span className="rounded-full bg-accent/25 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-accent/40">
-                  Most useful
+                  Optional
                 </span>
               </div>
 
               <p className="num relative mt-2 text-3xl font-semibold">
-                $1<span className="text-base font-normal text-muted-foreground">/month</span>
+                $10<span className="text-base font-normal text-muted-foreground">/year</span>
               </p>
               <p className="relative mt-1 text-xs text-muted-foreground">
-                or $10 a year · cancel any time
+                Cancel any time · that is the only price
               </p>
               <ul className="relative mt-5 space-y-2 text-sm">
                 {[
-                  "Everything in Free",
-                  "Unlimited accounts and holdings",
-                  "Upload statements for AI reading",
-                  "All accounts combined vs benchmarks",
-                  "Your own retirement age, CPP and OAS start",
-                  "Your own inflation, growth and life expectancy",
+                  "Everything in the free plan",
+                  "Upload a PDF statement and have it read",
+                  "Upload a screenshot or photo of a statement",
+                  "Rows are drafted for you to check before saving",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
@@ -272,32 +268,7 @@ function Landing() {
                 ))}
               </ul>
               <Button asChild className="honey-fill relative mt-6 w-full">
-                <Link to="/auth">Get Pro</Link>
-              </Button>
-            </div>
-
-            <div className="honey-card p-6">
-              <h3 className="text-lg font-semibold">Pro+</h3>
-              <p className="num mt-2 text-3xl font-semibold">
-                $2<span className="text-base font-normal text-muted-foreground">/month</span>
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">or $20 a year · cancel any time</p>
-              <ul className="mt-5 space-y-2 text-sm">
-                {[
-                  "Everything in Pro",
-                  "Couple and household planning",
-                  "Spouse CPP, OAS and balances",
-                  "Pension splitting and clawback control",
-                  "Savings split and what-if balances",
-                ].map((p) => (
-                  <li key={p} className="flex gap-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                    {p}
-                  </li>
-                ))}
-              </ul>
-              <Button asChild className="mt-6 w-full border-accent/50" variant="outline">
-                <Link to="/auth">Get Pro+</Link>
+                <Link to="/auth">Get statement reading</Link>
               </Button>
             </div>
           </div>
@@ -308,8 +279,7 @@ function Landing() {
                 <tr className="border-b border-border/60 text-left">
                   <th className="px-5 py-3 font-medium">What you get</th>
                   <th className="px-5 py-3 text-center font-medium">Free</th>
-                  <th className="px-5 py-3 text-center font-medium">Pro</th>
-                  <th className="px-5 py-3 text-center font-medium">Pro+</th>
+                  <th className="px-5 py-3 text-center font-medium">$10 / year</th>
                 </tr>
               </thead>
               <tbody>
@@ -321,9 +291,6 @@ function Landing() {
                     </td>
                     <td className="px-5 py-3 text-center">
                       <Cellv value={row.pro} />
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <Cellv value={row.plus} />
                     </td>
                   </tr>
                 ))}
