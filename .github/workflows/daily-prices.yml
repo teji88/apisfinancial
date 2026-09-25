@@ -1,0 +1,17 @@
+name: Refresh daily market prices
+
+on:
+  schedule:
+    - cron: "0 23 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  refresh-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request daily price refresh
+        run: |
+          curl --fail --silent --show-error --request POST \
+            --header "Authorization: Bearer ${{ secrets.PRICE_REFRESH_CRON_KEY }}" \
+            --header "Content-Type: application/json" \
+            "https://apisfinancial.app/api/public/refresh-prices"
