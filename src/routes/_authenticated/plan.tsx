@@ -11,7 +11,7 @@ import { PlanUpgrade } from "@/components/PlanUpgrade";
 import { ReferralCard } from "@/components/ReferralCard";
 
 import { useEntitlement, formatDate } from "@/lib/entitlement";
-import { getStripeEnvironment, PLAN_PRICES, planOfPrice, type PaidPlan } from "@/lib/stripe";
+import { getStripeEnvironment, SUBSCRIPTION_PRICE } from "@/lib/stripe";
 import {
   createPortalSession,
   syncSubscription,
@@ -62,10 +62,6 @@ function PlanPage() {
   const isInvite = entitlement.tier === "invite";
   const isTrial = entitlement.tier === "trial";
   const isReferral = entitlement.tier === "referral";
-  const currentPlan: PaidPlan = planOfPrice(entitlement.plan) ?? "pro";
-  const billing = (entitlement.plan ?? "").endsWith("monthly") ? "monthly" : "yearly";
-  const otherPlan: PaidPlan = currentPlan === "pro" ? "pro_plus" : "pro";
-  const planName = (plan: PaidPlan) => (plan === "pro_plus" ? "Pro+" : "Pro");
 
   async function refreshFromProvider(quiet = false) {
     const result = await sync({ data: { environment: getStripeEnvironment() } });
@@ -140,7 +136,8 @@ function PlanPage() {
       <div>
         <h1 className="text-2xl font-semibold">Your plan</h1>
         <p className="text-sm text-muted-foreground">
-          Free covers one account and ten holdings. Pro removes both limits.
+          Everything in Apis Financial is free. The only paid extra is having PDF statements and
+          screenshots read for you — $10 a year.
         </p>
       </div>
 
@@ -157,21 +154,13 @@ function PlanPage() {
             {isOwner
               ? "Owner — full access"
               : isPaid
-                ? `${planName(currentPlan)} — ${
-                    currentPlan === "pro"
-                      ? billing === "monthly"
-                        ? "$1 a month"
-                        : "$10 a year"
-                      : billing === "monthly"
-                        ? "$2 a month"
-                        : "$20 a year"
-                  }`
+                ? "Statement reading — $10 a year"
                 : isInvite
-                  ? "Pro+ — invite code"
+                  ? "Invite code — everything unlocked"
                   : isTrial
                     ? "Free trial — everything unlocked"
                     : isReferral
-                      ? `${entitlement.plan === "pro_plus" ? "Pro+" : "Pro"} — free year from a referral`
+                      ? "Free year from a referral"
                       : "Free"}
           </p>
           {entitlement.readOnly && <Badge variant="destructive">View only</Badge>}
@@ -191,74 +180,35 @@ function PlanPage() {
         {entitlement.readOnly ? (
           <p className="mt-3 text-sm text-muted-foreground">
             {entitlement.readOnlyReason === "overlimit"
-              ? "You are carrying more than the free plan allows (1 account, 10 holdings). Everything stays visible, and you can delete the extras to start editing again — or restart Pro to keep it all."
-              : `Your access ended on ${formatDate(entitlement.accessEndsAt)}. Your data stays safe and readable — nothing is deleted. Restart Pro at any time to make changes again.`}
+              ? "Everything is free now, so there is nothing to unlock."
+              : `Your access ended on ${formatDate(entitlement.accessEndsAt)}. Your data stays safe — nothing is deleted.`}
           </p>
         ) : entitlement.accessEndsAt ? (
           <p className="mt-3 text-sm text-muted-foreground">
             {isInvite
               ? `Free access runs until ${formatDate(entitlement.accessEndsAt)}.`
               : isTrial
-                ? `Every feature is unlocked until ${formatDate(entitlement.accessEndsAt)}. Pick a plan any time to keep them.`
+                ? `Statement reading is included until ${formatDate(entitlement.accessEndsAt)}.`
                 : isReferral
                   ? `Your referral reward keeps everything unlocked until ${formatDate(entitlement.accessEndsAt)}.`
                   : entitlement.cancelAtPeriodEnd
-                    ? `Pro stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
+                    ? `Statement reading stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
                     : `Renews on ${formatDate(entitlement.accessEndsAt)}.`}
           </p>
         ) : isInvite ? (
           <p className="mt-3 text-sm text-muted-foreground">Free access with no end date.</p>
         ) : isOwner ? (
           <p className="mt-3 text-sm text-muted-foreground">
-            You own Apis Financial, so no limits apply to your own account.
+            You own Apis Financial, so everything is available on your own account.
           </p>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">
-            You are on the free plan: 1 account and up to 10 holdings.
+            You are on the free plan — every feature except AI statement reading is included.
           </p>
         )}
 
         {isPaid && (
           <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy !== null}
-              onClick={() =>
-                void run("switch", () =>
-                  changePlan({
-                    data: {
-                      priceId:
-                        PLAN_PRICES[currentPlan][billing === "monthly" ? "yearly" : "monthly"].id,
-                      environment: getStripeEnvironment(),
-                    },
-                  }),
-                )
-              }
-            >
-              Switch to {billing === "monthly" ? "yearly" : "monthly"} (
-              {PLAN_PRICES[currentPlan][billing === "monthly" ? "yearly" : "monthly"].label})
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy !== null}
-              onClick={() =>
-                void run("plan", () =>
-                  changePlan({
-                    data: {
-                      priceId: PLAN_PRICES[otherPlan][billing].id,
-                      environment: getStripeEnvironment(),
-                    },
-                  }),
-                )
-              }
-            >
-              {currentPlan === "pro" ? "Upgrade to" : "Change to"} {planName(otherPlan)} (
-              {PLAN_PRICES[otherPlan][billing].label})
-            </Button>
-
             {entitlement.cancelAtPeriodEnd ? (
               <Button
                 variant="outline"
@@ -270,7 +220,7 @@ function PlanPage() {
                   )
                 }
               >
-                Keep Pro running
+                Keep it running
               </Button>
             ) : (
               <Button
