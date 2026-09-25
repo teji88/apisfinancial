@@ -28,12 +28,12 @@ export const Route = createFileRoute("/_authenticated/plan")({
       {
         name: "description",
         content:
-          "Stay on the free plan with one account and ten holdings, or go Pro for unlimited accounts and holdings.",
+          "Everything in Apis Financial is free. Add AI reading of PDF statements and screenshots for $10 a year.",
       },
       { property: "og:title", content: "Your plan — Apis Financial" },
       {
         property: "og:description",
-        content: "Free covers one account and ten holdings. Pro is $1 a month or $10 a year.",
+        content: "Everything is free. AI statement reading is $10 a year.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
