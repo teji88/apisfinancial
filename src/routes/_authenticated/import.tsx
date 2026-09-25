@@ -421,7 +421,7 @@ function ImportPage() {
             <p className="text-xs text-muted-foreground">
               {isPro
                 ? "CSV, PDF, PNG or JPEG · up to 20 MB · spreadsheets of any length"
-                : "CSV files are free and unlimited — PDFs and photos need Pro"}
+                : "CSV files are free and unlimited — PDFs and photos need the $10 / year plan"}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
               <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
