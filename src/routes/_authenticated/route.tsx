@@ -275,13 +275,11 @@ function ProfileMenu() {
 
   const profile = profileQuery.data;
   const planLabel =
-    entitlement.tier === "pro_plus"
+    entitlement.tier === "pro_plus" || entitlement.tier === "pro"
       ? "Statements"
-      : entitlement.tier === "pro"
-        ? "Pro"
-        : entitlement.tier === "invite"
-          ? "Invite"
-          : "Free";
+      : entitlement.tier === "invite"
+        ? "Invite"
+        : "Free";
 
   function openSettings() {
     setName(profile?.display_name ?? "");
