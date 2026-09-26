@@ -44,6 +44,35 @@ describe("TaxEngine pension income", () => {
     expect(ledgers.pensionIncomeCreditBase).toBe(0);
   });
 
+  it("applies the federal and Alberta pension income tax credits", () => {
+    const pension = calculateTaxFromIncome({
+      rrspRrif: 100_000,
+      pension: 2_000,
+      eligiblePensionIncome: 2_000,
+      age: 70,
+    }, "AB", 70);
+    const ordinary = calculateTaxFromIncome({
+      rrspRrif: 100_000,
+      interest: 2_000,
+      age: 70,
+    }, "AB", 70);
+
+    expect(pension.federalPensionIncomeCredit).toBe(280);
+    expect(pension.provincialPensionIncomeCredit).toBeCloseTo(140.24, 2);
+    expect(ordinary.totalTax - pension.totalTax).toBeCloseTo(420.24, 2);
+  });
+
+  it("does not treat CPP or OAS as eligible pension income for the credit", () => {
+    const result = calculateTaxFromIncome({
+      rrspRrif: 100_000,
+      cpp: 2_000,
+      oas: 2_000,
+      age: 70,
+    }, "AB", 70);
+    expect(result.federalPensionIncomeCredit).toBe(0);
+    expect(result.provincialPensionIncomeCredit).toBe(0);
+  });
+
   it("exposes pension split in the tax calculation without changing total household income", () => {
     const unsplit = calculateTaxFromIncome({
       pension: 60_000,
