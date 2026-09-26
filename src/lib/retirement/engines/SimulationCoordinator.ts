@@ -73,17 +73,18 @@ export function runBasicSimulation(
     const cashNeed = Math.max(0, cashNeedBeforeTax + provisionalTax);
     let remainingNeed = cashNeed;
     let withdrawals = 0;
+    let taxableWithdrawals = 0;
 
     for (const bucket of withdrawalOrder(scenario.strategy.withdrawalPolicy)) {
       const take = Math.min(accounts[bucket as keyof typeof accounts], remainingNeed);
       accounts[bucket as keyof typeof accounts] -= take;
       remainingNeed -= take;
       withdrawals += take;
+      if (bucket === "registered" || bucket === "nonRegistered") taxableWithdrawals += take;
       if (remainingNeed <= 0) break;
     }
 
-    const taxableWithdrawal = withdrawals - Math.min(withdrawals, accounts.tfsa >= 0 ? 0 : 0);
-    const taxableIncome = Math.max(0, previousTaxableIncome + taxableWithdrawal * 12);
+    const taxableIncome = Math.max(0, previousTaxableIncome + taxableWithdrawals * 12);
     const tax = calculateBasicTax(taxableIncome, scenario.household.province, Math.max(...Object.values(ages), 65));
     const monthlyTax = retired ? tax.totalTax / 12 : 0;
     const shortfall = Math.max(0, cashNeed - withdrawals);
