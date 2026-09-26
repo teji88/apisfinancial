@@ -22,6 +22,34 @@ describe("retirement validation", () => {
     expect(issues).toContainEqual(expect.objectContaining({ id: "negative-spending", severity: "ERROR" }));
   });
 
+  it("rejects duplicate accounts and invalid account values", () => {
+    const account = { id: "dup", owner: "MAIN_USER" as const, type: "TFSA" as const, valuation: { mode: "MANUAL" as const, value: 1000 } };
+    const issues = validateRetirementScenario({ ...scenario, accounts: [account, { ...account }] });
+    expect(issues.map(x => x.id)).toContain("duplicate-account-dup");
+    const negative = validateRetirementScenario({ ...scenario, accounts: [{ ...account, valuation: { ...account.valuation, value: -1 } }] });
+    expect(negative.map(x => x.id)).toContain("negative-account-dup");
+  });
+
+  it("warns when non-registered ACB exceeds value", () => {
+    const issues = validateRetirementScenario({
+      ...scenario,
+      accounts: [{ id: "nr", owner: "MAIN_USER", type: "NON_REGISTERED", valuation: { mode: "MANUAL", value: 1000 }, nonRegisteredAcb: 1200 }],
+    });
+    expect(issues).toContainEqual(expect.objectContaining({ id: "acb-exceeds-value-nr", severity: "WARNING" }));
+  });
+
+  it("rejects invalid death and survivor inputs", () => {
+    const invalid = {
+      ...scenario,
+      household: {
+        ...scenario.household,
+        people: [{ ...scenario.household.people[0], deathAge: 0, survivorCppPercent: 101 }],
+      },
+    };
+    const issues = validateRetirementScenario(invalid);
+    expect(issues.map(x => x.id)).toEqual(expect.arrayContaining(["death-age-MAIN_USER", "survivor-cpp-MAIN_USER"]));
+  });
+
   it("rejects invalid benefit ages", () => {
     const invalid = { ...scenario, household: { ...scenario.household, people: [{ ...scenario.household.people[0], cppStartAge: 59 as const, oasStartAge: 71 as const }] } };
     const issues = validateRetirementScenario(invalid);
