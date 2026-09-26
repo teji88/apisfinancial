@@ -30,6 +30,12 @@ export interface AccountScenario {
   contribution?: { annualAmount: Money; untilAge?: number };
   protected?: boolean;
   nonRegisteredAcb?: Money;
+  /** Optional starting ACB for non-registered holdings; defaults to valuation when omitted. */
+  nonRegisteredEligibleDividendYield?: number;
+  nonRegisteredNonEligibleDividendYield?: number;
+  nonRegisteredInterestYield?: number;
+  nonRegisteredForeignIncomeYield?: number;
+  nonRegisteredForeignTaxRate?: number;
   deathTransfer?: "SPOUSE" | "ESTATE" | "BENEFICIARY";
 }
 
