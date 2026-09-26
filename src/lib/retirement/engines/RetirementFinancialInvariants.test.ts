@@ -181,7 +181,8 @@ describe("retirement financial invariants", () => {
       accounts: [],
     });
     const result = runRetirementSimulation(scenario, 0, 2025);
-    const deathIndex = result.monthly.findIndex(m => m.householdStage === "SURVIVOR");
+    expect(result.monthly[0]!.householdStage).toBe("BOTH_ALIVE");
+    const deathIndex = result.monthly.findIndex((m, index) => index > 0 && m.householdStage === "SURVIVOR");
     expect(deathIndex).toBeGreaterThan(0);
     expect(result.monthly[deathIndex! - 1]!.benefits).toBeGreaterThan(0);
     expect(result.monthly[deathIndex! + 1]!.benefits).toBeGreaterThan(0);
