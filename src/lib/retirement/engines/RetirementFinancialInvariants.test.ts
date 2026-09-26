@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RetirementScenario } from "../domain/types";
 import { runRetirementSimulation } from "./SimulationCoordinator";
-import { applyAccountDeathTreatment, mandatoryRegisteredWithdrawal } from "./AccountEngine";
+import { applyAccountDeathTreatment, classifyAccount, mandatoryRegisteredWithdrawal } from "./AccountEngine";
 import { runStressTests } from "../scenario/ScenarioEngine";
 
 const makeScenario = (overrides: Partial<RetirementScenario> = {}): RetirementScenario => ({
@@ -68,6 +68,11 @@ describe("retirement financial invariants", () => {
     expect(second.monthly).toEqual(first.monthly);
   });
 
+  it("classifies TFSA as tax-free and registered accounts as taxable on withdrawal", () => {
+    expect(classifyAccount({ id: "tfsa", owner: "MAIN_USER", type: "TFSA", valuation: { mode: "MANUAL", value: 1 } }).taxableWithdrawal).toBe(false);
+    expect(classifyAccount({ id: "rrsp", owner: "MAIN_USER", type: "RRSP", valuation: { mode: "MANUAL", value: 1 } }).taxableWithdrawal).toBe(true);
+  });
+
   it("never produces a negative portfolio or account bucket", () => {
     const result = runRetirementSimulation(makeScenario({
       goals: { ...makeScenario().goals, annualSpending: 250000, planningAge: 75 },
@@ -79,6 +84,15 @@ describe("retirement financial invariants", () => {
       expect(month.nonRegistered).toBeGreaterThanOrEqual(0);
       expect(month.cash).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it("applies contributions before retirement", () => {
+    const scenario = makeScenario({
+      goals: { ...makeScenario().goals, annualSpending: 0, planningAge: 65 },
+      accounts: [{ id: "cash", owner: "MAIN_USER", type: "CASH", valuation: { mode: "MANUAL", value: 0 }, contribution: { annualAmount: 12000 } }],
+    });
+    const result = runRetirementSimulation(scenario, 0, 2026);
+    expect(result.monthly.at(-1)!.portfolio).toBeGreaterThan(0);
   });
 
   it("reconciles portfolio to its account buckets every month", () => {
@@ -124,6 +138,13 @@ describe("retirement financial invariants", () => {
       expect(treatment.transferredToSurvivor).toBe(100000);
       expect(treatment.taxableAtDeath).toBe(0);
     }
+  });
+
+  it("models non-registered deemed disposition from value minus ACB", () => {
+    const treatment = applyAccountDeathTreatment({ id: "nr", owner: "MAIN_USER", type: "NON_REGISTERED", balance: 150000, contributionAnnual: 0 }, false, 90000, "ESTATE");
+    expect(treatment.capitalGainAtDeath).toBe(60000);
+    expect(treatment.taxableCapitalGainAtDeath).toBe(30000);
+    expect(treatment.estateValue).toBe(150000);
   });
 
   it("transfers a deceased spouse's registered assets once without creating extra value", () => {
