@@ -173,7 +173,7 @@ describe("retirement financial invariants", () => {
         province: "AB",
         stage: "BOTH_ALIVE",
         people: [
-          { role: "MAIN_USER", birthYear: 1955, birthMonth: 1, retirementAge: 60, cppAt65: 12000, cppStartAge: 60, oasStartAge: 65, oasResidenceYears: 40, deathAge: 70 },
+          { role: "MAIN_USER", birthYear: 1955, birthMonth: 1, retirementAge: 60, cppAt65: 12000, cppStartAge: 60, oasStartAge: 65, oasResidenceYears: 40, deathAge: 71 },
           { role: "PARTNER", birthYear: 1960, birthMonth: 1, retirementAge: 60, cppAt65: 12000, cppStartAge: 60, oasStartAge: 65, oasResidenceYears: 40 },
         ],
       },
