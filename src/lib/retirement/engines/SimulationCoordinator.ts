@@ -1,7 +1,7 @@
 import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole, PersonScenario } from "../domain/types";
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
-import { calculateBasicTax } from "./TaxEngine";
+import { calculateBasicTax, calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
 import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 import { validateRetirementScenario } from "../validation/RetirementValidation";
 
@@ -180,6 +180,10 @@ export function runRetirementSimulation(
     let benefits = 0;
     let taxableBenefits = 0;
     let otherIncome = 0;
+    const monthlyTaxInputs: Record<PersonRole, TaxIncomeComponents> = {};
+    for (const person of alivePeople) {
+      monthlyTaxInputs[person.role] = { age: ages[person.role] ?? 0 };
+    }
     let survivorBenefits = 0;
     let deathTax = 0;
     let estateGross = 0;
@@ -204,10 +208,18 @@ export function runRetirementSimulation(
           inflationRate: scenario.assumptions.inflationRate,
           calendarYear: date.getUTCFullYear(),
         });
-        benefits += (benefit.cpp + benefit.oas + benefit.gis) / 12;
-        taxableBenefits += (benefit.cpp + benefit.oas) / 12;
+        const monthlyCpp = benefit.cpp / 12;
+        const monthlyOas = benefit.oas / 12;
+        const monthlyGis = benefit.gis / 12;
+        benefits += monthlyCpp + monthlyOas + monthlyGis;
+        taxableBenefits += monthlyCpp + monthlyOas;
+        monthlyTaxInputs[person.role].cpp = (monthlyTaxInputs[person.role].cpp ?? 0) + monthlyCpp;
+        monthlyTaxInputs[person.role].oas = (monthlyTaxInputs[person.role].oas ?? 0) + monthlyOas;
       }
-      otherIncome += (person.otherIncome ?? 0) / 12;
+      const monthlyOtherIncome = (person.otherIncome ?? 0) / 12;
+      otherIncome += monthlyOtherIncome;
+      monthlyTaxInputs[person.role].pension = (monthlyTaxInputs[person.role].pension ?? 0) + monthlyOtherIncome;
+      monthlyTaxInputs[person.role].eligiblePensionIncome = (monthlyTaxInputs[person.role].eligiblePensionIncome ?? 0) + monthlyOtherIncome;
     }
 
     if (stage === "SURVIVOR") {
@@ -237,6 +249,11 @@ export function runRetirementSimulation(
 
     const mandatoryTaken = withdrawFromBucket(accounts, "registered", mandatoryWithdrawals);
     const taxableMandatory = mandatoryTaken;
+    const mandatoryByOwner: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
+    for (const account of accounts.filter((a) => ["RRIF", "LIF"].includes(a.type))) {
+      // Beginning-of-year minimum withdrawals are already reflected in the aggregate withdrawal;
+      // owner attribution is completed below from the actual withdrawal allocation.
+    }
     let targetSpending = retired ? spending : 0;
     if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));
     if (stage === "ESTATE") targetSpending = 0;
@@ -256,6 +273,8 @@ export function runRetirementSimulation(
     let taxableWithdrawals = taxableMandatory;
 
     remainingNeed = Math.max(0, remainingNeed - mandatoryTaken);
+
+    const registeredWithdrawalsByOwner: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
 
     for (const bucket of withdrawalOrder(scenario.strategy.withdrawalPolicy)) {
       if (remainingNeed <= 0) break;
@@ -281,22 +300,48 @@ export function runRetirementSimulation(
         }
       }
 
+      const beforeBalances = new Map(accounts.map((account) => [account.id, account.balance]));
       const taken = withdrawFromBucket(accounts, bucket, candidate);
       remainingNeed -= taken;
       withdrawals += taken;
-      if (bucket === "registered") taxableWithdrawals += taken;
+      if (bucket === "registered") {
+        taxableWithdrawals += taken;
+        for (const account of accounts) {
+          const before = beforeBalances.get(account.id) ?? account.balance;
+          const actual = Math.max(0, before - account.balance);
+          if (actual > 0) registeredWithdrawalsByOwner[account.owner] += actual;
+        }
+      }
+    }
+
+    for (const person of alivePeople) {
+      const role = person.role;
+      const registered = registeredWithdrawalsByOwner[role] + (role === "MAIN_USER" ? mandatoryByOwner.MAIN_USER : mandatoryByOwner.PARTNER);
+      monthlyTaxInputs[role].rrspRrif = (monthlyTaxInputs[role].rrspRrif ?? 0) + registered;
+      if ((monthlyTaxInputs[role].age ?? 0) >= 65 && registered > 0) {
+        monthlyTaxInputs[role].eligiblePensionIncome = (monthlyTaxInputs[role].eligiblePensionIncome ?? 0) + registered;
+      }
     }
 
     const monthlyTaxableIncome = taxableBenefits + otherIncome + taxableWithdrawals;
     yearTaxableIncome += monthlyTaxableIncome;
 
-    currentTax = annualizedTax(
-      yearTaxableIncome - monthlyTaxableIncome,
-      monthlyTaxableIncome,
-      date.getUTCMonth() + 1,
-      scenario.household.province,
-      maxAge,
-    );
+    const roles = alivePeople.map((person) => person.role);
+    const annualizeTaxInputs = (input: TaxIncomeComponents): TaxIncomeComponents => Object.fromEntries(
+      Object.entries(input).map(([key, value]) => [key, typeof value === "number" && !["age", "pensionSplitPercent"].includes(key) ? value * 12 : value]),
+    ) as TaxIncomeComponents;
+    const annualInputs = roles.map((role) => annualizeTaxInputs(monthlyTaxInputs[role]));
+    const payerInput = annualInputs.find((_, index) => roles[index] === "MAIN_USER") ?? { age: 65 };
+    const spouseInput = annualInputs.find((_, index) => roles[index] === "PARTNER");
+    const householdTax = calculateHouseholdTax({
+      payer: payerInput,
+      spouse: spouseInput,
+      province: scenario.household.province,
+      payerAge: ages.MAIN_USER ?? 65,
+      spouseAge: ages.PARTNER ?? 65,
+      pensionSplitPercent: scenario.strategy.withdrawalPolicy === "TAX_TARGETED" ? 50 : 0,
+    });
+    currentTax = householdTax.householdTax / 12;
 
     const yearEnd = date.getUTCMonth() === 11;
     if (yearEnd) {
