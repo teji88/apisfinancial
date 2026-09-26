@@ -21,6 +21,64 @@ export interface GrossWithdrawalSolveResult {
   iterations: number;
 }
 
+export interface RegisteredWithdrawalOwnerInput {
+  owner: PersonRole;
+  balance: number;
+  age: number;
+  taxInputs: Record<PersonRole, TaxIncomeComponents>;
+}
+
+export interface RegisteredWithdrawalAllocationInput {
+  netNeed: number;
+  owners: RegisteredWithdrawalOwnerInput[];
+  province: ProvinceCode;
+  payerAge: number;
+  spouseAge?: number;
+  pensionSplitPercent?: number;
+}
+
+export interface RegisteredWithdrawalAllocationResult {
+  owner: PersonRole;
+  solved: GrossWithdrawalSolveResult;
+}
+
+/**
+ * Selects the registered-account owner whose withdrawal satisfies the current
+ * after-tax cash need with the least gross withdrawal. If neither owner can
+ * fully satisfy the need, selects the owner producing the most after-tax cash.
+ */
+export function chooseRegisteredWithdrawalOwner(
+  input: RegisteredWithdrawalAllocationInput,
+): RegisteredWithdrawalAllocationResult | undefined {
+  const candidates = input.owners
+    .filter((owner) => owner.balance > 0)
+    .map((owner) => {
+      const spouseRole: PersonRole = owner.owner === "MAIN_USER" ? "PARTNER" : "MAIN_USER";
+      const solved = solveGrossWithdrawalForNetNeed({
+        netNeed: input.netNeed,
+        payer: input.taxInputs.MAIN_USER,
+        spouse: input.taxInputs.PARTNER,
+        owner: owner.owner,
+        province: input.province,
+        payerAge: input.payerAge,
+        spouseAge: input.spouseAge,
+        pensionSplitPercent: input.pensionSplitPercent ?? 0,
+        maxGross: owner.balance,
+      });
+      return { owner: owner.owner, solved, spouseRole };
+    });
+
+  if (candidates.length === 0) return undefined;
+
+  return candidates.sort((a, b) => {
+    const aFull = a.solved.netCash >= input.netNeed - 0.005;
+    const bFull = b.solved.netCash >= input.netNeed - 0.005;
+    if (aFull !== bFull) return aFull ? -1 : 1;
+    if (aFull && bFull) return a.solved.grossWithdrawal - b.solved.grossWithdrawal;
+    return b.solved.netCash - a.solved.netCash;
+  })[0];
+}
+
 /**
  * Solves the gross withdrawal required to satisfy a desired after-tax cash need.
  *
