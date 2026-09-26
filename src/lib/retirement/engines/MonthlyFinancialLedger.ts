@@ -64,22 +64,22 @@ export function reconcileMonthlyFinancialLedger(
 
   const beginningNetWorth = input.beginningPortfolio - input.beginningDebt;
   const endingNetWorth = input.endingPortfolio - input.endingDebt;
-  // Net worth is reconciled as an accounting identity. External household
-  // cash is not stored as an investment account in V1, so it must be included
-  // explicitly rather than inferred as investment performance.
+  // Household cash is not a modeled balance-sheet asset in V1. Therefore the
+  // net-worth ledger reconciles only the modeled investment assets and debt;
+  // externalCashChange is reported separately as a diagnostic so it cannot be
+  // mistaken for investment performance or silently omitted.
   const assetChange = input.endingPortfolio - input.beginningPortfolio;
   const debtChange = input.endingDebt - input.beginningDebt;
-  const netWorthReconciliation =
-    endingNetWorth -
-    beginningNetWorth -
-    (assetChange + externalCashChange - debtChange);
-
   const externalCashChange =
     input.grossIncome +
     input.withdrawals -
     input.taxes -
     input.spending -
     input.debtPayments;
+  const netWorthReconciliation =
+    endingNetWorth -
+    beginningNetWorth -
+    (assetChange - debtChange);
 
   const warnings: string[] = [];
   if (Math.abs(assetReconciliation) > EPSILON) {
