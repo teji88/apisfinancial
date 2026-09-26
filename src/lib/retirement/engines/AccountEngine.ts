@@ -44,16 +44,27 @@ export function createAccountState(account: AccountScenario): AccountState {
 }
 
 export function applyMonthlyReturn(balance: Money, annualReturn: number, feeRate = 0): Money {
-  const netAnnualReturn = (1 + Math.max(-0.99, annualReturn / 100)) * (1 - Math.max(0, feeRate / 100)) - 1;
+  const gross = 1 + Math.max(-0.99, annualReturn / 100);
+  const netAnnualReturn = gross * (1 - Math.max(0, feeRate / 100)) - 1;
   return Math.max(0, balance * Math.pow(1 + netAnnualReturn, 1 / 12));
+}
+
+const RRIF_FACTORS: Record<number, number> = {
+  71: 0.0528, 72: 0.0540, 73: 0.0553, 74: 0.0567, 75: 0.0582,
+  76: 0.0598, 77: 0.0617, 78: 0.0636, 79: 0.0658, 80: 0.0682,
+  81: 0.0708, 82: 0.0738, 83: 0.0771, 84: 0.0808, 85: 0.0851,
+  86: 0.0899, 87: 0.0955, 88: 0.1021, 89: 0.1099, 90: 0.1192,
+  91: 0.1306, 92: 0.1449, 93: 0.1634, 94: 0.1879,
+};
+
+export function rrifMinimumFactor(age: number): number {
+  if (age < 71) return 0;
+  return RRIF_FACTORS[Math.min(94, Math.floor(age))] ?? 0.20;
 }
 
 export function mandatoryRegisteredWithdrawal(type: AccountScenario["type"], age: number, balance: Money): Money {
   if (balance <= 0 || (type !== "RRIF" && type !== "LIF")) return 0;
-  // RRIF minimum withdrawals begin in the calendar year after conversion; this
-  // approximation uses age 72 as the first minimum age for a standard RRIF.
-  if (age < 72) return 0;
-  const factor = age <= 94 ? 1 / (90 - age) : 0.20;
+  const factor = rrifMinimumFactor(age);
   return Math.min(balance, balance * factor / 12);
 }
 
