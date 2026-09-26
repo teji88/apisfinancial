@@ -1,122 +1,208 @@
-import type { RetirementScenario, SimulationResult, MonthlySnapshot, AccountScenario } from "../domain/types";
+import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole } from "../domain/types";
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
 import { estimateGovernmentBenefits } from "./BenefitEngine";
 import { calculateBasicTax } from "./TaxEngine";
+import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, type AccountState } from "./AccountEngine";
 
 function ageAtMonth(birthYear: number, birthMonth: number, date: Date) {
   return date.getUTCFullYear() - birthYear - (date.getUTCMonth() + 1 < birthMonth ? 1 : 0);
 }
 
-function annualize(balance: number, monthlyRate: number) {
-  return balance * (1 + monthlyRate);
-}
-
-function accountBucket(type: AccountScenario["type"]) {
-  if (type === "TFSA") return "tfsa";
-  if (["RRSP", "RRIF", "LIRA", "LIF"].includes(type)) return "registered";
-  if (type === "CASH") return "cash";
-  return "nonRegistered";
-}
-
-function withdrawalOrder(policy: RetirementScenario["strategy"]["withdrawalPolicy"]): string[] {
+function withdrawalOrder(policy: RetirementScenario["strategy"]["withdrawalPolicy"]): Array<"cash" | "nonRegistered" | "registered" | "tfsa"> {
   if (policy === "TFSA_FIRST") return ["tfsa", "cash", "nonRegistered", "registered"];
   if (policy === "NON_REGISTERED_FIRST") return ["nonRegistered", "cash", "registered", "tfsa"];
+  if (policy === "REGISTERED_FIRST") return ["registered", "cash", "nonRegistered", "tfsa"];
   return ["cash", "nonRegistered", "registered", "tfsa"];
 }
 
-export function runBasicSimulation(
+function stableHash(value: unknown): string {
+  const input = JSON.stringify(value);
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function bucketOf(state: AccountState) {
+  if (state.type === "TFSA") return "tfsa";
+  if (["RRSP", "RRIF", "LIRA", "LIF"].includes(state.type)) return "registered";
+  if (state.type === "CASH") return "cash";
+  return "nonRegistered";
+}
+
+function sumBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>) {
+  return accounts.filter((a) => bucketOf(a) === bucket).reduce((sum, a) => sum + a.balance, 0);
+}
+
+function withdrawFromBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>, amount: number) {
+  let remaining = Math.max(0, amount);
+  let taken = 0;
+  for (const account of accounts.filter((a) => bucketOf(a) === bucket)) {
+    if (remaining <= 0) break;
+    const part = withdraw(account, remaining);
+    taken += part;
+    remaining -= part;
+  }
+  return taken;
+}
+
+export function runRetirementSimulation(
   scenario: RetirementScenario,
   startingPortfolio: number,
   startYear = new Date().getUTCFullYear(),
   portfolioByType: Record<string, number> = {},
 ): SimulationResult {
   const start = new Date(Date.UTC(startYear, 0, 1));
-  const months = 12 * Math.max(1, scenario.goals.planningAge - scenario.goals.retirementAge);
-  const monthly: MonthlySnapshot[] = [];
-  const accounts: Record<string, number> = {
-    registered: portfolioByType.RRSP ?? 0,
-    tfsa: portfolioByType.TFSA ?? 0,
-    nonRegistered: (portfolioByType.NON_REGISTERED ?? 0) + (portfolioByType.INVESTMENT ?? 0),
-    cash: portfolioByType.CASH ?? 0,
-  };
-  if (Object.values(accounts).every((v) => v === 0)) accounts.nonRegistered = startingPortfolio;
+  const people = scenario.household.people;
+  const maxBirthYear = Math.max(...people.map((p) => p.birthYear));
+  const months = 12 * Math.max(1, scenario.goals.planningAge - Math.min(...people.map((p) => p.birthYear)));
+  const accounts = scenario.accounts.length
+    ? scenario.accounts.map(createAccountState)
+    : Object.entries(portfolioByType).map(([type, value]) => createAccountState({
+        id: `portfolio-${type}`,
+        owner: "MAIN_USER",
+        type: (type === "RRSP" || type === "TFSA" || type === "NON_REGISTERED" || type === "CASH" ? type : "NON_REGISTERED") as never,
+        valuation: { mode: "SNAPSHOT", linkedValue: value },
+      }));
+  if (!scenario.accounts.length && accounts.every((a) => a.balance === 0)) {
+    accounts.push(createAccountState({ id: "portfolio-total", owner: "MAIN_USER", type: "NON_REGISTERED", valuation: { mode: "SNAPSHOT", linkedValue: startingPortfolio } }));
+  }
 
-  let lifetimeSpending = 0, lifetimeTax = 0, totalBenefits = 0;
-  let spending = scenario.goals.annualSpending / 12;
+  const monthly: MonthlySnapshot[] = [];
   const monthlyReturn = Math.pow(1 + scenario.assumptions.investmentReturn / 100, 1 / 12) - 1;
   const monthlyInflation = Math.pow(1 + scenario.assumptions.inflationRate / 100, 1 / 12) - 1;
-  let previousTaxableIncome = 0;
+  let spending = scenario.goals.annualSpending / 12;
+  let lifetimeSpending = 0;
+  let lifetimeTax = 0;
+  let totalBenefits = 0;
+  let maxShortfall = 0;
+  let previousYearTaxableIncome = 0;
+  let previousYearBenefitIncome = 0;
+  let annualTaxableIncome = 0;
+  let annualTax = 0;
+  let annualBenefits = 0;
 
   for (let i = 0; i < months; i++) {
     const date = new Date(start.getTime());
     date.setUTCMonth(start.getUTCMonth() + i);
-    const ages: Record<string, number> = {};
-    for (const person of scenario.household.people) ages[person.role] = ageAtMonth(person.birthYear, person.birthMonth, date);
+    const ages = Object.fromEntries(people.map((person) => [person.role, ageAtMonth(person.birthYear, person.birthMonth, date)])) as Partial<Record<PersonRole, number>>;
+    const maxAge = Math.max(...Object.values(ages).map(Number), 0);
+    const retired = people.some((person) => (ages[person.role] ?? 0) >= person.retirementAge);
+    const allRetired = people.every((person) => (ages[person.role] ?? 0) >= person.retirementAge);
 
-    const retired = Object.values(ages).some((age) => age >= scenario.goals.retirementAge);
-    for (const key of Object.keys(accounts) as Array<keyof typeof accounts>) {
-      accounts[key] = annualize(accounts[key], monthlyReturn) - scenario.strategy.cashReserve / Math.max(1, months);
-    }
-
-    let benefits = 0;
-    for (const person of scenario.household.people) {
-      const age = ages[person.role] ?? 0;
-      if (age >= scenario.goals.retirementAge) {
-        const b = estimateGovernmentBenefits(person, age, previousTaxableIncome);
-        benefits += (b.cpp + b.oas + b.gis) / 12;
+    for (const account of accounts) {
+      account.balance = applyMonthlyReturn(account.balance, scenario.assumptions.investmentReturn, scenario.assumptions.investmentFeeRate);
+      const ownerAge = ages[account.owner] ?? maxAge;
+      if (!retired && account.contributionAnnual > 0 && (!account.contributionUntilAge || ownerAge < account.contributionUntilAge)) {
+        account.balance += account.contributionAnnual / 12;
       }
     }
 
-    const target = retired ? spending : 0;
-    const cashNeedBeforeTax = Math.max(0, target - benefits);
-    const provisionalTax = calculateBasicTax(previousTaxableIncome + cashNeedBeforeTax * 12, scenario.household.province, Math.max(...Object.values(ages), 65)).totalTax / 12;
-    const cashNeed = Math.max(0, cashNeedBeforeTax + provisionalTax);
-    let remainingNeed = cashNeed;
-    let withdrawals = 0;
-    let taxableWithdrawals = 0;
-
-    for (const bucket of withdrawalOrder(scenario.strategy.withdrawalPolicy)) {
-      const take = Math.min(accounts[bucket as keyof typeof accounts], remainingNeed);
-      accounts[bucket as keyof typeof accounts] -= take;
-      remainingNeed -= take;
-      withdrawals += take;
-      if (bucket === "registered" || bucket === "nonRegistered") taxableWithdrawals += take;
-      if (remainingNeed <= 0) break;
+    let benefits = 0;
+    let otherIncome = 0;
+    for (const person of people) {
+      const age = ages[person.role] ?? 0;
+      if (age >= 60) {
+        const benefit = estimateGovernmentBenefits(person, age, previousYearBenefitIncome);
+        benefits += (benefit.cpp + benefit.oas + benefit.gis) / 12;
+      }
+      otherIncome += (person.otherIncome ?? 0) / 12;
     }
 
-    const taxableIncome = Math.max(0, previousTaxableIncome + taxableWithdrawals * 12);
-    const tax = calculateBasicTax(taxableIncome, scenario.household.province, Math.max(...Object.values(ages), 65));
+    let mandatoryWithdrawals = 0;
+    for (const account of accounts) {
+      mandatoryWithdrawals += mandatoryRegisteredWithdrawal(account.type, ages[account.owner] ?? maxAge, account.balance);
+    }
+    const mandatoryTaken = withdrawFromBucket(accounts, "registered", mandatoryWithdrawals);
+
+    const targetSpending = retired ? spending : 0;
+    const baseCashNeed = Math.max(0, targetSpending - benefits - otherIncome);
+    const annualIncomeBeforeWithdrawal = (benefits + otherIncome) * 12 + annualTaxableIncome;
+    const provisional = calculateBasicTax(Math.max(0, annualIncomeBeforeWithdrawal + baseCashNeed * 12), scenario.household.province, maxAge).totalTax / 12;
+    let remainingNeed = Math.max(0, baseCashNeed + provisional);
+    let withdrawals = mandatoryTaken;
+    let taxableWithdrawals = mandatoryTaken;
+
+    // Mandatory registered withdrawals can satisfy spending needs, but excess
+    // cash is retained in the household rather than immediately withdrawn again.
+    remainingNeed = Math.max(0, remainingNeed - mandatoryTaken);
+
+    for (const bucket of withdrawalOrder(scenario.strategy.withdrawalPolicy)) {
+      if (remainingNeed <= 0) break;
+      const taken = withdrawFromBucket(accounts, bucket, remainingNeed);
+      remainingNeed -= taken;
+      withdrawals += taken;
+      if (bucket === "registered") taxableWithdrawals += taken;
+    }
+
+    const nonRegisteredTaken = 0;
+    const monthlyTaxableIncome = taxableWithdrawals;
+    annualTaxableIncome += monthlyTaxableIncome;
+    annualBenefits += benefits;
+
+    const yearEnd = date.getUTCMonth() === 11;
+    if (yearEnd) {
+      const annualTax = calculateBasicTax(Math.max(0, annualTaxableIncome), scenario.household.province, maxAge);
+      annualTax = annualTax.totalTax;
+      previousYearTaxableIncome = annualTaxableIncome;
+      previousYearBenefitIncome = annualBenefits * 1;
+      annualTaxableIncome = 0;
+      annualBenefits = 0;
+    }
+
+    const tax = calculateBasicTax(Math.max(0, monthlyTaxableIncome * 12), scenario.household.province, maxAge);
     const monthlyTax = retired ? tax.totalTax / 12 : 0;
-    const shortfall = Math.max(0, cashNeed - withdrawals);
-    const portfolio = Object.values(accounts).reduce((a, b) => a + Math.max(0, b), 0);
-    lifetimeSpending += target;
+    const shortfall = Math.max(0, remainingNeed);
+    const portfolio = accounts.reduce((sum, account) => sum + Math.max(0, account.balance), 0);
+    const netWorth = portfolio;
+
+    lifetimeSpending += targetSpending;
     lifetimeTax += monthlyTax;
     totalBenefits += benefits;
+    maxShortfall = Math.max(maxShortfall, shortfall);
 
     monthly.push({
       date: date.toISOString(),
       ages,
       householdStage: "BOTH_ALIVE",
       portfolio,
-      registered: accounts.registered,
-      tfsa: accounts.tfsa,
-      nonRegistered: accounts.nonRegistered,
-      cash: accounts.cash,
+      registered: sumBucket(accounts, "registered"),
+      tfsa: sumBucket(accounts, "tfsa"),
+      nonRegistered: sumBucket(accounts, "nonRegistered"),
+      cash: sumBucket(accounts, "cash"),
       debt: 0,
-      netWorth: portfolio,
-      grossIncome: benefits + withdrawals,
+      netWorth,
+      grossIncome: benefits + otherIncome + withdrawals,
       benefits,
       withdrawals,
       taxes: monthlyTax,
-      spending: target,
+      spending: targetSpending,
       shortfall,
     });
-    previousTaxableIncome = taxableIncome / 12;
-    spending *= 1 + monthlyInflation;
+
+    if (allRetired) spending *= 1 + monthlyInflation;
   }
 
-  const shortfall = monthly.reduce((m, x) => Math.max(m, x.shortfall), 0);
   const endingPortfolio = monthly.at(-1)?.portfolio ?? startingPortfolio;
+  const minimumPortfolio = monthly.length ? Math.min(...monthly.map((x) => x.portfolio)) : startingPortfolio;
+  const scenarioHash = stableHash({
+    scenario,
+    startingPortfolio,
+    portfolioByType,
+    startYear,
+    engine: RETIREMENT_ENGINE_VERSION,
+    rules: RETIREMENT_RULES_VERSION,
+  });
+
+  const warnings = [
+    "Simulation is deterministic and monthly; investment returns are smoothed rather than sequence-of-returns simulated.",
+    "Canadian tax and benefit rules are versioned, but provincial tax coverage and detailed benefit eligibility remain incomplete.",
+    "Non-registered withdrawals currently do not model security lots, adjusted cost base, dividends or capital-gain inclusion.",
+    "Survivor/death events, debt amortization and pension splitting are not yet fully modelled.",
+  ];
+
   return {
     simulationId: crypto.randomUUID(),
     scenarioId: scenario.id,
@@ -125,30 +211,30 @@ export function runBasicSimulation(
     endDate: monthly.at(-1)?.date ?? start.toISOString(),
     monthly,
     metrics: {
-      feasible: shortfall === 0,
-      depletionDate: monthly.find(x => x.portfolio <= 0)?.date,
+      feasible: maxShortfall === 0,
+      depletionDate: monthly.find((x) => x.portfolio <= 0)?.date,
       lifetimeSpending,
-      lifetimeAfterTaxCash: lifetimeSpending,
+      lifetimeAfterTaxCash: Math.max(0, lifetimeSpending - lifetimeTax),
       lifetimeTax,
       totalBenefits,
       endingPortfolio,
       endingNetWorth: endingPortfolio,
-      minimumPortfolio: Math.min(...monthly.map(x => x.portfolio)),
-      maximumSpendingShortfall: shortfall,
+      minimumPortfolio,
+      maximumSpendingShortfall: maxShortfall,
     },
-    warnings: [
-      "Simulation V1 uses monthly deterministic returns and simplified Canadian tax/benefit rules.",
-      "GIS, survivor benefits, RRIF/LIF minimums, pension splitting, capital-gain ACB and debt are not yet modelled.",
-      "OAS recovery is included as an incremental tax estimate; detailed prior-year recovery timing remains to be added.",
-    ],
+    warnings,
     assumptions: [
       { path: "investmentReturn", value: scenario.assumptions.investmentReturn, source: "USER" },
       { path: "inflationRate", value: scenario.assumptions.inflationRate, source: "USER" },
+      { path: "investmentFeeRate", value: scenario.assumptions.investmentFeeRate, source: "USER" },
       { path: "province", value: scenario.household.province, source: "USER" },
       { path: "rules", value: RETIREMENT_RULES_VERSION, source: "GOVERNMENT_RULE" },
     ],
     engineVersion: RETIREMENT_ENGINE_VERSION,
     rulesVersion: RETIREMENT_RULES_VERSION,
-    scenarioHash: scenario.id,
+    scenarioHash,
   };
 }
+
+// Backward-compatible alias while the UI migrates away from the foundation name.
+export const runBasicSimulation = runRetirementSimulation;
