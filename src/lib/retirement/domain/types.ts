@@ -6,6 +6,24 @@ export type PortfolioLinkMode = "SNAPSHOT" | "LIVE_CURRENT" | "MANUAL";
 export type ProvinceCode = "AB" | "BC" | "MB" | "NB" | "NL" | "NS" | "NT" | "NU" | "ON" | "PE" | "QC" | "SK" | "YT";
 export type Confidence = "USER_PROVIDED" | "USER_ESTIMATED" | "SYSTEM_DEFAULT" | "RULE_DERIVED";
 
+export type DebtType = "MORTGAGE" | "HELOC" | "LINE_OF_CREDIT" | "PERSONAL_LOAN" | "OTHER";
+export type DebtPaymentFrequency = "MONTHLY" | "BIWEEKLY" | "WEEKLY";
+
+export interface DebtScenario {
+  id: string;
+  name?: string;
+  type: DebtType;
+  owner?: PersonRole;
+  startingBalance: Money;
+  annualInterestRate: number;
+  paymentAmount?: Money;
+  paymentFrequency?: DebtPaymentFrequency;
+  amortizationMonths?: number;
+  startDate?: string;
+  endDate?: string;
+  extraPayment?: Money;
+}
+
 export interface PersonScenario {
   role: PersonRole;
   birthYear: number;
@@ -16,9 +34,7 @@ export interface PersonScenario {
   oasStartAge: number | "OPTIMIZE";
   oasResidenceYears: number;
   otherIncome?: Money;
-  /** Optional planning assumption; no identifying information. */
   deathAge?: number;
-  /** Survivor CPP assumption as a percentage of the deceased person's CPP benefit. */
   survivorCppPercent?: number;
 }
 
@@ -30,7 +46,6 @@ export interface AccountScenario {
   contribution?: { annualAmount: Money; untilAge?: number };
   protected?: boolean;
   nonRegisteredAcb?: Money;
-  /** Optional starting ACB for non-registered holdings; defaults to valuation when omitted. */
   nonRegisteredEligibleDividendYield?: number;
   nonRegisteredNonEligibleDividendYield?: number;
   nonRegisteredInterestYield?: number;
@@ -73,6 +88,7 @@ export interface RetirementScenario {
   household: { province: ProvinceCode; people: PersonScenario[]; stage: HouseholdStage };
   goals: RetirementGoals;
   accounts: AccountScenario[];
+  debts?: DebtScenario[];
   assumptions: ScenarioAssumptions;
   strategy: StrategyPreferences;
   metadata: { createdAt: string; engineVersion: string; rulesVersion: string; scenarioHash?: string };
@@ -94,6 +110,9 @@ export interface MonthlySnapshot {
   withdrawals: Money;
   taxes: Money;
   spending: Money;
+  debtPayments?: Money;
+  debtInterest?: Money;
+  debtPrincipal?: Money;
   shortfall: Money;
 }
 
@@ -108,6 +127,9 @@ export interface SimulationMetrics {
   endingNetWorth: Money;
   minimumPortfolio: Money;
   maximumSpendingShortfall: Money;
+  totalDebtInterest?: Money;
+  totalDebtPayments?: Money;
+  endingDebt?: Money;
   survivorShortfall?: Money;
   estateValue?: Money;
 }
