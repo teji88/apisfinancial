@@ -12,6 +12,8 @@ describe("CashFlowEngine", () => {
       taxes: 200,
       spending: 2500,
       debtPayments: 1000,
+      debtPrincipal: 800,
+      debtInterest: 200,
       endingPortfolio: 98500,
     });
 
