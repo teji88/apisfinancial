@@ -32,6 +32,10 @@ export const CANADA_2026_PARAMETERS = {
     nonEligibleDividendGrossUp: 0.15,
     eligibleDividendFederalCreditRate: 6 / 11,
     nonEligibleDividendFederalCreditRate: 9 / 13,
+    eligibleDividendGrossUp: 0.38,
+    nonEligibleDividendGrossUp: 0.15,
+    eligibleDividendFederalCreditRate: 6 / 11,
+    nonEligibleDividendFederalCreditRate: 9 / 13,
   },
   oasRecovery: { startIncome: 95323, upperIncomeUnder75: 155109, upperIncome75Plus: 161088 },
 } as const;
