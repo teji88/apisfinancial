@@ -56,7 +56,7 @@ export function createAccountState(account: AccountScenario): AccountState {
     minimumReferenceBalance: Math.max(0, account.valuation.value ?? account.valuation.linkedValue ?? 0),
     minimumReferenceYear: undefined,
     nonRegisteredAcb: account.type === "NON_REGISTERED"
-      ? Math.max(0, Math.min(account.balance, account.nonRegisteredAcb ?? account.valuation.value ?? account.valuation.linkedValue ?? 0))
+      ? Math.max(0, Math.min(account.valuation.value ?? account.valuation.linkedValue ?? 0, account.nonRegisteredAcb ?? account.valuation.value ?? account.valuation.linkedValue ?? 0))
       : 0,
     eligibleDividendYield: account.type === "NON_REGISTERED" ? Math.max(0, account.nonRegisteredEligibleDividendYield ?? 0) : 0,
     nonEligibleDividendYield: account.type === "NON_REGISTERED" ? Math.max(0, account.nonRegisteredNonEligibleDividendYield ?? 0) : 0,
