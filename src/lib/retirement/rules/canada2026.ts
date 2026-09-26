@@ -12,7 +12,15 @@ export const CANADA_2026_RULES: RuleVersion[] = [
 export const CANADA_2026_PARAMETERS = {
   cpp: { startMinAge: 60, startMaxAge: 70, before65MonthlyAdjustment: -0.006, after65MonthlyAdjustment: 0.007, maxAt65Monthly: 1507.65 },
   oas: { startMinAge: 65, startMaxAge: 70, deferralMonthlyAdjustment: 0.006, maxDeferralAdjustment: 0.36, age75Increase: 0.10, maxMonthly65To74: 751.97, maxMonthly75Plus: 827.17 },
-  gis: { singleMaxMonthly: 1123.17, singleIncomeCutoff: 22800, spouseOasMaxMonthly: 676.09, spouseOasIncomeCutoff: 30096 },
+  gis: {
+    singleMaxMonthly: 1123.17,
+    singleIncomeCutoff: 22800,
+    spouseOasMaxMonthly: 676.09,
+    spouseOasIncomeCutoff: 30096,
+    spouseNotOasIncomeCutoff: 54624,
+    allowanceIncomeCutoff: 42144,
+    allowanceSurvivorIncomeCutoff: 30696,
+  },
   tfsa: { annualLimit: 7000, withdrawalRoomRestoration: "NEXT_CALENDAR_YEAR" as const },
   tax: {
     federalBrackets: [[0, 58523, 0.14], [58523, 117045, 0.205], [117045, 181440, 0.26], [181440, 258482, 0.29], [258482, Infinity, 0.33]],
