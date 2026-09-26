@@ -118,3 +118,20 @@ export function estimateGovernmentBenefits(
     gis: gisAnnual,
   };
 }
+
+export function estimateCppSurvivorAnnual(
+  deceasedCppAnnual: Money,
+  survivorAge: number,
+  survivorExistingCppAnnual = 0,
+  survivorPercent = 60,
+): Money {
+  if (deceasedCppAnnual <= 0) return 0;
+  const baseRate = survivorAge >= 65 ? 0.60 : 0.375;
+  const requested = deceasedCppAnnual * Math.max(0, survivorPercent) / 100;
+  const base = Math.min(requested, deceasedCppAnnual * baseRate);
+  if (survivorExistingCppAnnual <= 0) return base;
+  // CPP combined benefits are subject to a maximum rather than simple addition.
+  // Use the published maximum retirement/survivor combination as a conservative cap.
+  const combinedCap = CANADA_2026_PARAMETERS.cpp.maxAt65Monthly * 12 * 1.02;
+  return Math.max(0, Math.min(base, combinedCap - survivorExistingCppAnnual));
+}
