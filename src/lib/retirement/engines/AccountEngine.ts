@@ -78,7 +78,7 @@ export interface DeathTreatment {
   transferredToSurvivor: Money;
   taxableAtDeath: Money;
   estateValue: Money;
-  notes: string[];
+  notes: string[];\n  capitalGainAtDeath: Money;\n  taxableCapitalGainAtDeath: Money;
 }
 
 export function applyAccountDeathTreatment(
@@ -86,16 +86,16 @@ export function applyAccountDeathTreatment(
   hasEligibleSpouse: boolean,
 ): DeathTreatment {
   const value = Math.max(0, state.balance);
-  if (value === 0) return { transferredToSurvivor: 0, taxableAtDeath: 0, estateValue: 0, notes: [] };
+  if (value === 0) return { transferredToSurvivor: 0, taxableAtDeath: 0, estateValue: 0, notes: [], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
 
-  if ((state.type === "RRSP" || state.type === "RRIF") && hasEligibleSpouse) {
-    return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: 0, notes: ["Modeled as spouse rollover; detailed eligibility and paperwork are outside the simulation."] };
+  if ((state.type === "RRSP" || state.type === "RRIF") && deathTransfer === "SPOUSE") {
+    return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: 0, notes: ["Modeled as spouse rollover; detailed eligibility and paperwork are outside the simulation."], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
   }
-  if (state.type === "TFSA" && hasEligibleSpouse) {
-    return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: 0, notes: ["Modeled as spouse successor-holder treatment where available."] };
+  if (state.type === "TFSA" && deathTransfer === "SPOUSE") {
+    return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: 0, notes: ["Modeled as spouse successor-holder treatment where available."], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
   }
   if (state.type === "RRSP" || state.type === "RRIF") {
-    return { transferredToSurvivor: 0, taxableAtDeath: value, estateValue: value, notes: ["Registered account included as taxable death value; final-return details are simplified."] };
+    return { transferredToSurvivor: 0, taxableAtDeath: value, estateValue: value, notes: ["Registered account included as taxable death value; final-return details are simplified."], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
   }
-  return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: value, notes: ["Non-registered/TFSA death treatment is simplified; ACB and post-death income are not modelled here."] };
+  const acb = Math.max(0, Math.min(value, nonRegisteredAcb || value));\n  const capitalGainAtDeath = Math.max(0, value - acb);\n  const taxableCapitalGainAtDeath = capitalGainAtDeath * 0.5;\n  return { transferredToSurvivor: deathTransfer === "SPOUSE" ? value : 0, taxableAtDeath: 0, estateValue: value, notes: ["Non-registered deemed disposition uses supplied ACB; spouse transfer is treated as tax-deferred for planning purposes."], capitalGainAtDeath, taxableCapitalGainAtDeath };
 }
