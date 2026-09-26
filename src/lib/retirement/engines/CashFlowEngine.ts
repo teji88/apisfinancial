@@ -9,6 +9,8 @@ export interface MonthlyCashFlowInput {
   taxes: Money;
   spending: Money;
   debtPayments: Money;
+  debtPrincipal?: Money;
+  debtInterest?: Money;
   endingPortfolio: Money;
 }
 
@@ -27,6 +29,7 @@ export interface MonthlyCashFlowResult {
   externalCashAvailable: Money;
   externalCashRequired: Money;
   netCashFlowBeforeUnmodeledCash: Money;
+  cashFlowReconciliation: Money;
   warnings: string[];
 }
 
@@ -43,6 +46,15 @@ export function reconcileMonthlyCashFlow(input: MonthlyCashFlowInput): MonthlyCa
   const externalCashAvailable = input.grossIncome + input.withdrawals;
   const externalCashRequired = input.spending + input.debtPayments + input.taxes;
   const netCashFlowBeforeUnmodeledCash = externalCashAvailable - externalCashRequired;
+  // Debt principal is a balance-sheet transfer, while interest is an expense.
+  // Keep this diagnostic explicit so future cash-flow logic cannot accidentally
+  // treat the entire debt payment as an economic expense.
+  const cashFlowReconciliation =
+    input.grossIncome +
+    input.withdrawals -
+    input.taxes -
+    input.spending -
+    input.debtPayments;
 
   const warnings: string[] = [];
   if (Math.abs(assetReconciliation) > EPSILON) {
@@ -56,6 +68,7 @@ export function reconcileMonthlyCashFlow(input: MonthlyCashFlowInput): MonthlyCa
     externalCashAvailable,
     externalCashRequired,
     netCashFlowBeforeUnmodeledCash,
+    cashFlowReconciliation,
     warnings,
   };
 }
