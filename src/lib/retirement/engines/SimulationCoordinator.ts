@@ -3,7 +3,7 @@ import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
 import { calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
 import { solveGrossWithdrawalForNetNeed, chooseRegisteredWithdrawalOwner } from "./WithdrawalEngine";
-import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
+import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, withdrawNonRegistered, estimateNonRegisteredMonthlyIncome, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 import { validateRetirementScenario } from "../validation/RetirementValidation";
 
 function ageAtMonth(birthYear: number, birthMonth: number, date: Date) {
@@ -156,6 +156,25 @@ export function runRetirementSimulation(
       );
 
       const ownerAge = ages[account.owner] ?? maxAge;
+      if (account.type === "NON_REGISTERED") {
+        const investmentIncome = estimateNonRegisteredMonthlyIncome(account);
+        nonRegisteredInvestmentIncome +=
+          investmentIncome.eligibleCanadianDividends +
+          investmentIncome.nonEligibleCanadianDividends +
+          investmentIncome.interest +
+          investmentIncome.foreignIncome;
+        monthlyTaxInputs[account.owner] ??= { age: ownerAge };
+        monthlyTaxInputs[account.owner].eligibleCanadianDividends =
+          (monthlyTaxInputs[account.owner].eligibleCanadianDividends ?? 0) + investmentIncome.eligibleCanadianDividends;
+        monthlyTaxInputs[account.owner].nonEligibleCanadianDividends =
+          (monthlyTaxInputs[account.owner].nonEligibleCanadianDividends ?? 0) + investmentIncome.nonEligibleCanadianDividends;
+        monthlyTaxInputs[account.owner].interest =
+          (monthlyTaxInputs[account.owner].interest ?? 0) + investmentIncome.interest;
+        monthlyTaxInputs[account.owner].foreignIncome =
+          (monthlyTaxInputs[account.owner].foreignIncome ?? 0) + investmentIncome.foreignIncome;
+        monthlyTaxInputs[account.owner].foreignTaxPaid =
+          (monthlyTaxInputs[account.owner].foreignTaxPaid ?? 0) + investmentIncome.foreignTaxPaid;
+      }
       if (
         !retired &&
         account.contributionAnnual > 0 &&
@@ -168,6 +187,8 @@ export function runRetirementSimulation(
     let benefits = 0;
     let taxableBenefits = 0;
     let otherIncome = 0;
+    let nonRegisteredInvestmentIncome = 0;
+    let nonRegisteredCapitalGains = 0;
     const monthlyTaxInputs: Record<PersonRole, TaxIncomeComponents> = {};
     for (const person of alivePeople) {
       monthlyTaxInputs[person.role] = { age: ages[person.role] ?? 0 };
@@ -244,7 +265,7 @@ export function runRetirementSimulation(
     if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));
     if (stage === "ESTATE") targetSpending = 0;
 
-    const baseCashNeed = Math.max(0, targetSpending - benefits - otherIncome);
+    const baseCashNeed = Math.max(0, targetSpending - benefits - otherIncome - nonRegisteredInvestmentIncome);
     let remainingNeed = Math.max(0, baseCashNeed - mandatoryTaken);
     let withdrawals = mandatoryTaken;
     let taxableWithdrawals = taxableMandatory;
@@ -298,7 +319,25 @@ export function runRetirementSimulation(
       }
 
       const beforeBalances = new Map(accounts.map((account) => [account.id, account.balance]));
-      const taken = withdrawFromBucket(accounts, bucket, candidate, selectedRegisteredOwner);
+      let taken = 0;
+      if (bucket === "nonRegistered") {
+        // Realize gains proportionally to the account's ACB instead of treating
+        // every dollar withdrawn as tax-free principal.
+        let remaining = candidate;
+        for (const account of accounts.filter((a) => bucketOf(a) === bucket)) {
+          if (remaining <= 0) break;
+          const result = withdrawNonRegistered(account, remaining);
+          taken += result.taken;
+          nonRegisteredCapitalGains += result.realizedCapitalGain;
+          remaining -= result.taken;
+          if (result.realizedCapitalGain > 0) {
+            monthlyTaxInputs[account.owner].capitalGains =
+              (monthlyTaxInputs[account.owner].capitalGains ?? 0) + result.realizedCapitalGain;
+          }
+        }
+      } else {
+        taken = withdrawFromBucket(accounts, bucket, candidate, selectedRegisteredOwner);
+      }
       if (taken <= 0) continue;
       withdrawals += taken;
 
@@ -327,8 +366,8 @@ export function runRetirementSimulation(
         });
         remainingNeed -= Math.min(remainingNeed, Math.max(0, solved.netCash));
       } else {
-        // TFSA/cash/non-registered principal are treated as dollar-for-dollar
-        // in V1. Non-registered tax on gains is explicitly warned about below.
+        // Investment income is already counted as cash available for spending.
+        // A non-registered withdrawal may also realize a taxable capital gain.
         remainingNeed -= taken;
       }
     }
@@ -342,7 +381,7 @@ export function runRetirementSimulation(
       }
     }
 
-    const monthlyTaxableIncome = taxableBenefits + otherIncome + taxableWithdrawals;
+    const monthlyTaxableIncome = taxableBenefits + otherIncome + taxableWithdrawals + nonRegisteredCapitalGains * 0.5;
     yearTaxableIncome += monthlyTaxableIncome;
 
     const roles = alivePeople.map((person) => person.role);
