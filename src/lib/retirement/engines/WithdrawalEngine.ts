@@ -56,8 +56,8 @@ export function chooseRegisteredWithdrawalOwner(
       const spouseRole: PersonRole = owner.owner === "MAIN_USER" ? "PARTNER" : "MAIN_USER";
       const solved = solveGrossWithdrawalForNetNeed({
         netNeed: input.netNeed,
-        payer: input.taxInputs.MAIN_USER,
-        spouse: input.taxInputs.PARTNER,
+        payer: input.taxInputs.MAIN_USER ?? {},
+        spouse: input.taxInputs.PARTNER ?? {},
         owner: owner.owner,
         province: input.province,
         payerAge: input.payerAge,
