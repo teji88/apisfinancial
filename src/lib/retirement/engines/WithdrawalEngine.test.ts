@@ -28,6 +28,7 @@ describe("tax-aware gross withdrawal solver", () => {
       ...base,
       netNeed: 10_000,
       maxGross: 20_000,
+      payer: { age: 70, rrspRrif: 40_000, eligiblePensionIncome: 40_000 },
     });
     expect(result.grossWithdrawal).toBeGreaterThan(10_000);
     expect(result.netCash).toBeGreaterThanOrEqual(10_000);
