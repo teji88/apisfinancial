@@ -1,7 +1,8 @@
 import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole, PersonScenario } from "../domain/types";
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
-import { calculateBasicTax, calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
+import { calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
+import { solveGrossWithdrawalForNetNeed } from "./WithdrawalEngine";
 import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 import { validateRetirementScenario } from "../validation/RetirementValidation";
 
@@ -57,20 +58,6 @@ function withdrawFromBucket(accounts: AccountState[], bucket: ReturnType<typeof 
     remaining -= part;
   }
   return taken;
-}
-
-function annualizedTax(
-  taxableYearToDate: number,
-  currentMonthTaxableIncome: number,
-  monthsElapsed: number,
-  province: RetirementScenario["household"]["province"],
-  age: number,
-) {
-  const annualizedIncome = monthsElapsed > 0
-    ? ((taxableYearToDate + currentMonthTaxableIncome) / monthsElapsed) * 12
-    : currentMonthTaxableIncome * 12;
-
-  return calculateBasicTax(annualizedIncome, province, age).totalTax / 12;
 }
 
 export function runRetirementSimulation(
@@ -257,52 +244,64 @@ export function runRetirementSimulation(
     if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));
     if (stage === "ESTATE") targetSpending = 0;
 
-    const baseTaxableThisMonth = taxableBenefits + otherIncome + taxableMandatory;
-    const baseTax = annualizedTax(
-      yearTaxableIncome,
-      baseTaxableThisMonth,
-      date.getUTCMonth() + 1,
-      scenario.household.province,
-      maxAge,
-    );
-
     const baseCashNeed = Math.max(0, targetSpending - benefits - otherIncome);
-    let remainingNeed = Math.max(0, baseCashNeed + baseTax);
+    let remainingNeed = Math.max(0, baseCashNeed - mandatoryTaken);
     let withdrawals = mandatoryTaken;
     let taxableWithdrawals = taxableMandatory;
 
-    remainingNeed = Math.max(0, remainingNeed - mandatoryTaken);
-
     const registeredWithdrawalsByOwner: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
+
+    // Include all income already earned in the current tax year plus this
+    // month's benefits/other income/mandatory withdrawals when solving the
+    // gross registered withdrawal. This avoids treating tax as a flat add-on.
+    const taxBaseByOwner: Record<PersonRole, TaxIncomeComponents> = {
+      MAIN_USER: { ...yearTaxInputs.MAIN_USER },
+      PARTNER: { ...yearTaxInputs.PARTNER },
+    };
+    for (const person of alivePeople) {
+      const role = person.role;
+      for (const [key, value] of Object.entries(monthlyTaxInputs[role])) {
+        if (key === "age" || typeof value !== "number") continue;
+        taxBaseByOwner[role][key as keyof TaxIncomeComponents] =
+          (taxBaseByOwner[role][key as keyof TaxIncomeComponents] as number ?? 0) + value;
+      }
+    }
 
     for (const bucket of withdrawalOrder(scenario.strategy.withdrawalPolicy)) {
       if (remainingNeed <= 0) break;
 
-      let candidate = Math.min(sumBucket(accounts, bucket), remainingNeed);
-      if (candidate <= 0) continue;
+      const available = sumBucket(accounts, bucket);
+      if (available <= 0) continue;
 
+      let candidate = Math.min(available, remainingNeed);
       if (bucket === "registered") {
-        for (let iteration = 0; iteration < 8; iteration++) {
-          const testTaxable = yearTaxableIncome + taxableBenefits + otherIncome + taxableWithdrawals + candidate;
-          const taxAfter = calculateBasicTax(
-            (testTaxable / Math.max(1, date.getUTCMonth() + 1)) * 12,
-            scenario.household.province,
-            maxAge,
-          ).totalTax / 12;
-          const incrementalTax = Math.max(0, taxAfter - currentTax);
-          const requiredGross = Math.min(
-            sumBucket(accounts, bucket),
-            Math.max(candidate, baseCashNeed + baseTax + incrementalTax),
-          );
-          if (Math.abs(requiredGross - candidate) < 0.01) break;
-          candidate = requiredGross;
-        }
+        // Registered withdrawals are taxable, so solve gross-to-net rather
+        // than adding an approximate tax amount after the fact.
+        const payer = taxBaseByOwner.MAIN_USER;
+        const spouse = alivePeople.some((person) => person.role === "PARTNER")
+          ? taxBaseByOwner.PARTNER
+          : undefined;
+        const owner = accounts.find((account) => bucketOf(account) === "registered")?.owner ?? "MAIN_USER";
+        const ownerAge = ages[owner] ?? maxAge;
+        const solved = solveGrossWithdrawalForNetNeed({
+          netNeed: remainingNeed,
+          payer,
+          spouse,
+          owner,
+          province: scenario.household.province,
+          payerAge: ages.MAIN_USER ?? maxAge,
+          spouseAge: ages.PARTNER,
+          pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
+          maxGross: available,
+        });
+        candidate = Math.min(available, solved.grossWithdrawal);
       }
 
       const beforeBalances = new Map(accounts.map((account) => [account.id, account.balance]));
       const taken = withdrawFromBucket(accounts, bucket, candidate);
-      remainingNeed -= taken;
+      if (taken <= 0) continue;
       withdrawals += taken;
+
       if (bucket === "registered") {
         taxableWithdrawals += taken;
         for (const account of accounts) {
@@ -310,6 +309,27 @@ export function runRetirementSimulation(
           const actual = Math.max(0, before - account.balance);
           if (actual > 0) registeredWithdrawalsByOwner[account.owner] += actual;
         }
+
+        // Convert the gross registered withdrawal into after-tax cash using
+        // the same household tax model used for the annual tax ledger.
+        const owner = accounts.find((account) => bucketOf(account) === "registered" && (beforeBalances.get(account.id) ?? 0) > account.balance)?.owner ?? "MAIN_USER";
+        const ownerAge = ages[owner] ?? maxAge;
+        const solved = solveGrossWithdrawalForNetNeed({
+          netNeed: Math.min(remainingNeed, taken),
+          payer: taxBaseByOwner.MAIN_USER,
+          spouse: alivePeople.some((person) => person.role === "PARTNER") ? taxBaseByOwner.PARTNER : undefined,
+          owner,
+          province: scenario.household.province,
+          payerAge: ages.MAIN_USER ?? maxAge,
+          spouseAge: ages.PARTNER,
+          pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
+          maxGross: taken,
+        });
+        remainingNeed -= Math.min(remainingNeed, Math.max(0, solved.netCash));
+      } else {
+        // TFSA/cash/non-registered principal are treated as dollar-for-dollar
+        // in V1. Non-registered tax on gains is explicitly warned about below.
+        remainingNeed -= taken;
       }
     }
 
