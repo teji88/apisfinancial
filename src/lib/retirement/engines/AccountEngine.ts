@@ -73,3 +73,29 @@ export function withdraw(state: AccountState, amount: Money): Money {
   state.balance -= taken;
   return taken;
 }
+
+export interface DeathTreatment {
+  transferredToSurvivor: Money;
+  taxableAtDeath: Money;
+  estateValue: Money;
+  notes: string[];
+}
+
+export function applyAccountDeathTreatment(
+  state: AccountState,
+  hasEligibleSpouse: boolean,
+): DeathTreatment {
+  const value = Math.max(0, state.balance);
+  if (value === 0) return { transferredToSurvivor: 0, taxableAtDeath: 0, estateValue: 0, notes: [] };
+
+  if ((state.type === "RRSP" || state.type === "RRIF") && hasEligibleSpouse) {
+    return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: 0, notes: ["Modeled as spouse rollover; detailed eligibility and paperwork are outside the simulation."] };
+  }
+  if (state.type === "TFSA" && hasEligibleSpouse) {
+    return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: 0, notes: ["Modeled as spouse successor-holder treatment where available."] };
+  }
+  if (state.type === "RRSP" || state.type === "RRIF") {
+    return { transferredToSurvivor: 0, taxableAtDeath: value, estateValue: value, notes: ["Registered account included as taxable death value; final-return details are simplified."] };
+  }
+  return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: value, notes: ["Non-registered/TFSA death treatment is simplified; ACB and post-death income are not modelled here."] };
+}
