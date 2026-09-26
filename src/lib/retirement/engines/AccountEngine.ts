@@ -78,12 +78,16 @@ export interface DeathTreatment {
   transferredToSurvivor: Money;
   taxableAtDeath: Money;
   estateValue: Money;
-  notes: string[];\n  capitalGainAtDeath: Money;\n  taxableCapitalGainAtDeath: Money;
+  notes: string[];
+  capitalGainAtDeath: Money;
+  taxableCapitalGainAtDeath: Money;
 }
 
 export function applyAccountDeathTreatment(
   state: AccountState,
   hasEligibleSpouse: boolean,
+  nonRegisteredAcb = 0,
+  deathTransfer: "SPOUSE" | "ESTATE" | "BENEFICIARY" = hasEligibleSpouse ? "SPOUSE" : "ESTATE",
 ): DeathTreatment {
   const value = Math.max(0, state.balance);
   if (value === 0) return { transferredToSurvivor: 0, taxableAtDeath: 0, estateValue: 0, notes: [], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
@@ -97,5 +101,12 @@ export function applyAccountDeathTreatment(
   if (state.type === "RRSP" || state.type === "RRIF") {
     return { transferredToSurvivor: 0, taxableAtDeath: value, estateValue: value, notes: ["Registered account included as taxable death value; final-return details are simplified."], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
   }
-  const acb = Math.max(0, Math.min(value, nonRegisteredAcb || value));\n  const capitalGainAtDeath = Math.max(0, value - acb);\n  const taxableCapitalGainAtDeath = capitalGainAtDeath * 0.5;\n  return { transferredToSurvivor: deathTransfer === "SPOUSE" ? value : 0, taxableAtDeath: 0, estateValue: value, notes: ["Non-registered deemed disposition uses supplied ACB; spouse transfer is treated as tax-deferred for planning purposes."], capitalGainAtDeath, taxableCapitalGainAtDeath };
+
+  const acb = Math.max(0, Math.min(value, nonRegisteredAcb || value));
+  const capitalGainAtDeath = Math.max(0, value - acb);
+  const taxableCapitalGainAtDeath = capitalGainAtDeath * 0.5;
+  if (deathTransfer === "SPOUSE") {
+    return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: 0, notes: ["Non-registered spouse transfer is modeled as tax-deferred for planning purposes."], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
+  }
+  return { transferredToSurvivor: 0, taxableAtDeath: 0, estateValue: value, notes: ["Non-registered deemed disposition uses supplied ACB; detailed rollover eligibility is simplified."], capitalGainAtDeath, taxableCapitalGainAtDeath };
 }
