@@ -149,7 +149,7 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
     netIncome,
     taxableIncome,
     pensionSplit,
-    pensionIncomeCreditBase: Math.min(2_000, income.eligiblePensionIncome - pensionSplit),
+    pensionIncomeCreditBase: Math.max(0, Math.min(2_000, income.eligiblePensionIncome - pensionSplit)),
   };
 }
 
