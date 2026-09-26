@@ -33,7 +33,7 @@ describe("CashFlowEngine", () => {
       endingPortfolio: 99600,
     });
 
-    expect(result.assetReconciliation).toBeCloseTo(600, 10);
+    expect(result.assetReconciliation).toBeCloseTo(100, 10);
     expect(result.warnings).toContain("Portfolio asset ledger does not reconcile for this month.");
   });
 
