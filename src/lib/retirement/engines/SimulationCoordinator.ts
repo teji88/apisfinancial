@@ -110,6 +110,7 @@ export function runRetirementSimulation(
   let priorYearTaxableIncome = 0;
   let yearTax = 0;
   let currentTax = 0;
+  let previousStage: "BOTH_ALIVE" | "SURVIVOR" | "ESTATE" = "BOTH_ALIVE";
 
   for (let i = 0; i < months; i++) {
     const date = new Date(start.getTime());
@@ -272,14 +273,44 @@ export function runRetirementSimulation(
       yearTaxableIncome = 0;
     }
 
-    if (stage === "ESTATE") {
+    if (stage === "SURVIVOR" && previousStage === "BOTH_ALIVE") {
+      const survivor = alivePeople[0];
       for (const account of accounts) {
-        const scenarioAccount = scenario.accounts.find((candidate) => candidate.id === account.id);\n        const hasSpouse = alivePeople.length === 1;\n        const transfer = scenarioAccount?.deathTransfer ?? (hasSpouse ? "SPOUSE" : "ESTATE");\n        const treatment = applyAccountDeathTreatment(account, hasSpouse, scenarioAccount?.nonRegisteredAcb ?? 0, transfer);
-        const deathTaxableIncome = treatment.taxableAtDeath + treatment.taxableCapitalGainAtDeath;\n        deathTax += calculateBasicTax(deathTaxableIncome, scenario.household.province, maxAge).totalTax;
+        if (!survivor || account.owner === survivor.role) continue;
+        const scenarioAccount = scenario.accounts.find((candidate) => candidate.id === account.id);
+        const treatment = applyAccountDeathTreatment(
+          account,
+          true,
+          scenarioAccount?.nonRegisteredAcb ?? 0,
+          scenarioAccount?.deathTransfer ?? "SPOUSE",
+        );
+        if (treatment.transferredToSurvivor > 0) {
+          const target = accounts.find((candidate) => candidate.owner === survivor.role && candidate.type === account.type)
+            ?? accounts.find((candidate) => candidate.owner === survivor.role && candidate.type === "CASH");
+          if (target) target.balance += treatment.transferredToSurvivor;
+          else {
+            account.owner = survivor.role;
+            account.balance = treatment.transferredToSurvivor;
+          }
+        }
+        account.balance = 0;
+      }
+    }
+
+    if (stage === "ESTATE" && previousStage !== "ESTATE") {
+      for (const account of accounts) {
+        const scenarioAccount = scenario.accounts.find((candidate) => candidate.id === account.id);
+        const hasSpouse = alivePeople.length === 1;
+        const transfer = scenarioAccount?.deathTransfer ?? (hasSpouse ? "SPOUSE" : "ESTATE");
+        const treatment = applyAccountDeathTreatment(account, hasSpouse, scenarioAccount?.nonRegisteredAcb ?? 0, transfer);
+        const deathTaxableIncome = treatment.taxableAtDeath + treatment.taxableCapitalGainAtDeath;
+        deathTax += calculateBasicTax(deathTaxableIncome, scenario.household.province, maxAge).totalTax;
         estateGross += treatment.estateValue + treatment.transferredToSurvivor;
         account.balance = treatment.estateValue;
       }
     }
+
+    previousStage = stage;
 
     const shortfall = Math.max(0, remainingNeed);
     const portfolio = accounts.reduce((sum, account) => sum + Math.max(0, account.balance), 0);
