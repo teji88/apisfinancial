@@ -156,25 +156,6 @@ export function runRetirementSimulation(
       );
 
       const ownerAge = ages[account.owner] ?? maxAge;
-      if (account.type === "NON_REGISTERED") {
-        const investmentIncome = estimateNonRegisteredMonthlyIncome(account);
-        nonRegisteredInvestmentIncome +=
-          investmentIncome.eligibleCanadianDividends +
-          investmentIncome.nonEligibleCanadianDividends +
-          investmentIncome.interest +
-          investmentIncome.foreignIncome;
-        monthlyTaxInputs[account.owner] ??= { age: ownerAge };
-        monthlyTaxInputs[account.owner].eligibleCanadianDividends =
-          (monthlyTaxInputs[account.owner].eligibleCanadianDividends ?? 0) + investmentIncome.eligibleCanadianDividends;
-        monthlyTaxInputs[account.owner].nonEligibleCanadianDividends =
-          (monthlyTaxInputs[account.owner].nonEligibleCanadianDividends ?? 0) + investmentIncome.nonEligibleCanadianDividends;
-        monthlyTaxInputs[account.owner].interest =
-          (monthlyTaxInputs[account.owner].interest ?? 0) + investmentIncome.interest;
-        monthlyTaxInputs[account.owner].foreignIncome =
-          (monthlyTaxInputs[account.owner].foreignIncome ?? 0) + investmentIncome.foreignIncome;
-        monthlyTaxInputs[account.owner].foreignTaxPaid =
-          (monthlyTaxInputs[account.owner].foreignTaxPaid ?? 0) + investmentIncome.foreignTaxPaid;
-      }
       if (
         !retired &&
         account.contributionAnnual > 0 &&
@@ -193,6 +174,28 @@ export function runRetirementSimulation(
     for (const person of alivePeople) {
       monthlyTaxInputs[person.role] = { age: ages[person.role] ?? 0 };
       yearTaxInputs[person.role].age = ages[person.role] ?? 0;
+    }
+
+    // Generate taxable investment income from current non-registered values.
+    // Income is treated as distributed cash available for spending in V1.
+    for (const account of accounts) {
+      if (account.type !== "NON_REGISTERED") continue;
+      const investmentIncome = estimateNonRegisteredMonthlyIncome(account);
+      nonRegisteredInvestmentIncome +=
+        investmentIncome.eligibleCanadianDividends +
+        investmentIncome.nonEligibleCanadianDividends +
+        investmentIncome.interest +
+        investmentIncome.foreignIncome;
+      monthlyTaxInputs[account.owner].eligibleCanadianDividends =
+        (monthlyTaxInputs[account.owner].eligibleCanadianDividends ?? 0) + investmentIncome.eligibleCanadianDividends;
+      monthlyTaxInputs[account.owner].nonEligibleCanadianDividends =
+        (monthlyTaxInputs[account.owner].nonEligibleCanadianDividends ?? 0) + investmentIncome.nonEligibleCanadianDividends;
+      monthlyTaxInputs[account.owner].interest =
+        (monthlyTaxInputs[account.owner].interest ?? 0) + investmentIncome.interest;
+      monthlyTaxInputs[account.owner].foreignIncome =
+        (monthlyTaxInputs[account.owner].foreignIncome ?? 0) + investmentIncome.foreignIncome;
+      monthlyTaxInputs[account.owner].foreignTaxPaid =
+        (monthlyTaxInputs[account.owner].foreignTaxPaid ?? 0) + investmentIncome.foreignTaxPaid;
     }
     let survivorBenefits = 0;
     let deathTax = 0;
