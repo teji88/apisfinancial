@@ -7,6 +7,7 @@ import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, 
 import { validateRetirementScenario } from "../validation/RetirementValidation";
 import { createDebtState, accrueDebtMonth, type DebtState } from "./DebtEngine";
 import { reconcileMonthlyCashFlow } from "./CashFlowEngine";
+import { reconcileMonthlyFinancialLedger } from "./MonthlyFinancialLedger";
 
 function ageAtMonth(birthYear: number, birthMonth: number, date: Date) {
   return date.getUTCFullYear() - birthYear - (date.getUTCMonth() + 1 < birthMonth ? 1 : 0);
@@ -138,6 +139,7 @@ export function runRetirementSimulation(
 
   for (let i = 0; i < months; i++) {
     const beginningPortfolio = accounts.reduce((sum, account) => sum + Math.max(0, account.balance), 0);
+    const beginningDebt = debtStates.reduce((sum, debt) => sum + Math.max(0, debt.state.balance), 0);
     let contributionsThisMonth = 0;
     let investmentGrowthThisMonth = 0;
     const date = new Date(start.getTime());
@@ -508,6 +510,21 @@ export function runRetirementSimulation(
       debtPayments,
       endingPortfolio: portfolio,
     });
+    const financialLedger = reconcileMonthlyFinancialLedger({
+      beginningPortfolio,
+      investmentGrowth: investmentGrowthThisMonth,
+      contributions: contributionsThisMonth,
+      grossIncome: benefits + otherIncome + nonRegisteredInvestmentIncome,
+      withdrawals,
+      taxes: currentTax + deathTax,
+      spending: targetSpending,
+      debtPayments,
+      debtPrincipal,
+      debtInterest,
+      endingPortfolio: portfolio,
+      beginningDebt,
+      endingDebt: debtBalance,
+    });
 
     monthly.push({
       date: date.toISOString(),
@@ -540,6 +557,9 @@ export function runRetirementSimulation(
         debtPayments,
         endingPortfolio: portfolio,
         assetReconciliation: cashFlow.assetReconciliation,
+        externalCashChange: financialLedger.externalCashChange,
+        debtReconciliation: financialLedger.debtReconciliation,
+        netWorthReconciliation: financialLedger.netWorthReconciliation,
       },
     });
 
