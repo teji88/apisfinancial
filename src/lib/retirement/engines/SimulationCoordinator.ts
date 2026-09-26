@@ -5,6 +5,7 @@ import { calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
 import { solveGrossWithdrawalForNetNeed, chooseRegisteredWithdrawalOwner } from "./WithdrawalEngine";
 import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, withdrawNonRegistered, estimateNonRegisteredMonthlyIncome, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 import { validateRetirementScenario } from "../validation/RetirementValidation";
+import { createDebtState, accrueDebtMonth, type DebtState } from "./DebtEngine";
 
 function ageAtMonth(birthYear: number, birthMonth: number, date: Date) {
   return date.getUTCFullYear() - birthYear - (date.getUTCMonth() + 1 < birthMonth ? 1 : 0);
@@ -99,6 +100,7 @@ export function runRetirementSimulation(
   const people = scenario.household.people;
   const planningEndYear = Math.min(...people.map((p) => p.birthYear + scenario.goals.planningAge));
   const months = Math.max(1, 12 * (planningEndYear - startYear) + 12);
+  const debtStates: Array<{ state: DebtState; startDate?: string; endDate?: string }> = (scenario.debts ?? []).map((debt) => ({ state: createDebtState(debt), startDate: debt.startDate, endDate: debt.endDate }));
   const accounts = scenario.accounts.length
     ? scenario.accounts.map(createAccountState)
     : Object.entries(portfolioByType).map(([type, value]) => createAccountState({
@@ -124,6 +126,8 @@ export function runRetirementSimulation(
   let lifetimeTax = 0;
   let totalBenefits = 0;
   let maxShortfall = 0;
+  let totalDebtInterest = 0;
+  let totalDebtPayments = 0;
   let yearTaxableIncome = 0;
   let priorYearTaxableIncome = 0;
   let yearTax = 0;
@@ -166,6 +170,22 @@ export function runRetirementSimulation(
         if (account.type === "NON_REGISTERED") account.nonRegisteredAcb += contribution;
       }
     }
+
+    let debtInterest = 0;
+    let debtPayments = 0;
+    let debtPrincipal = 0;
+    if (stage !== "ESTATE") {
+      for (const debt of debtStates) {
+        if (debt.startDate && date.toISOString().slice(0, 10) < debt.startDate) continue;
+        if (debt.endDate && date.toISOString().slice(0, 10) > debt.endDate) continue;
+        const result = accrueDebtMonth(debt.state);
+        debtInterest += result.interest;
+        debtPayments += result.totalPayment;
+        debtPrincipal += result.scheduledPrincipal + result.extraPrincipal;
+      }
+    }
+    totalDebtInterest += debtInterest;
+    totalDebtPayments += debtPayments;
 
     let benefits = 0;
     let taxableBenefits = 0;
@@ -273,7 +293,7 @@ export function runRetirementSimulation(
     if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));
     if (stage === "ESTATE") targetSpending = 0;
 
-    const baseCashNeed = Math.max(0, targetSpending - benefits - otherIncome - nonRegisteredInvestmentIncome);
+    const baseCashNeed = Math.max(0, targetSpending + debtPayments - benefits - otherIncome - nonRegisteredInvestmentIncome);
     let remainingNeed = Math.max(0, baseCashNeed - mandatoryTaken);
     let withdrawals = mandatoryTaken;
     let taxableWithdrawals = taxableMandatory;
@@ -462,7 +482,8 @@ export function runRetirementSimulation(
 
     const shortfall = Math.max(0, remainingNeed);
     const portfolio = accounts.reduce((sum, account) => sum + Math.max(0, account.balance), 0);
-    const netWorth = portfolio;
+    const debtBalance = debtStates.reduce((sum, debt) => sum + Math.max(0, debt.state.balance), 0);
+    const netWorth = portfolio - debtBalance;
 
     lifetimeSpending += targetSpending;
     lifetimeTax += currentTax + deathTax;
@@ -478,13 +499,16 @@ export function runRetirementSimulation(
       tfsa: sumBucket(accounts, "tfsa"),
       nonRegistered: sumBucket(accounts, "nonRegistered"),
       cash: sumBucket(accounts, "cash"),
-      debt: 0,
+      debt: debtBalance,
       netWorth,
       grossIncome: benefits + otherIncome + withdrawals,
       benefits,
       withdrawals,
       taxes: currentTax + deathTax,
       spending: targetSpending,
+      debtPayments,
+      debtInterest,
+      debtPrincipal,
       shortfall,
     });
 
@@ -505,7 +529,8 @@ export function runRetirementSimulation(
   const warnings = [
     "Simulation is deterministic and monthly; investment returns are smoothed rather than sequence-of-returns simulated.",
     "2026 federal and provincial tax brackets are loaded from the versioned rules dataset. Detailed credits, Quebec taxation and advanced tax rules remain incomplete.",
-    "Non-registered withdrawals currently do not model security lots, adjusted cost base, dividends or capital-gain inclusion.",
+    "Non-registered withdrawals currently do not model security lots or superficial-loss rules; account-level ACB, investment income and realized capital gains are modeled.",
+    "Debt is modeled monthly with interest, scheduled principal and optional extra payments; tax deductibility of interest is not assumed in V1.",
     "Death ages now transition the household through BOTH_ALIVE → SURVIVOR → ESTATE; CPP survivor and account death treatment are modelled at a planning level, while final-return tax, beneficiary paperwork, ACB and detailed provincial estate rules remain simplified.",
     "GIS uses the prior-year household income ledger and published 2026 marital-status thresholds; detailed GIS table interpolation and earnings exemptions remain to be added.",
     "OAS recovery is modelled as an income-based estimate and is not yet tied to the actual OAS amount paid in each recovery period.",
