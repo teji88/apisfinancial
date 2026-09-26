@@ -54,7 +54,8 @@ export function createDebtState(debt: DebtScenario): DebtState {
   const frequency = debt.paymentFrequency ?? "MONTHLY";
   const payment = debt.paymentAmount !== undefined
     ? Math.max(0, debt.paymentAmount) * (frequency === "BIWEEKLY" ? 26 / 12 : frequency === "WEEKLY" ? 52 / 12 : 1)
-    : calculateAmortizingPayment(balance, debt.annualInterestRate, debt.amortizationMonths ?? 0 || 1);
+    : calculateAmortizingPayment(balance, debt.annualInterestRate, Math.max(1, debt.amortizationMonths ?? 1));
+
   return {
     id: debt.id,
     type: debt.type,
