@@ -62,10 +62,16 @@ export function rrifMinimumFactor(age: number): number {
   return RRIF_FACTORS[Math.min(94, Math.floor(age))] ?? 0.20;
 }
 
-export function mandatoryRegisteredWithdrawal(type: AccountScenario["type"], age: number, balance: Money): Money {
+export function mandatoryRegisteredWithdrawal(
+  type: AccountScenario["type"],
+  age: number,
+  balance: Money,
+  annualReferenceBalance = balance,
+): Money {
   if (balance <= 0 || (type !== "RRIF" && type !== "LIF")) return 0;
   const factor = rrifMinimumFactor(age);
-  return Math.min(balance, balance * factor / 12);
+  const reference = Math.max(0, annualReferenceBalance);
+  return Math.min(balance, reference * factor / 12);
 }
 
 export function withdraw(state: AccountState, amount: Money): Money {
@@ -92,7 +98,7 @@ export function applyAccountDeathTreatment(
   const value = Math.max(0, state.balance);
   if (value === 0) return { transferredToSurvivor: 0, taxableAtDeath: 0, estateValue: 0, notes: [], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
 
-  if ((state.type === "RRSP" || state.type === "RRIF") && deathTransfer === "SPOUSE") {
+  if ((state.type === "RRSP" || state.type === "RRIF" || state.type === "LIRA" || state.type === "LIF") && deathTransfer === "SPOUSE") {
     return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: 0, notes: ["Modeled as spouse rollover; detailed eligibility and paperwork are outside the simulation."], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
   }
   if (state.type === "TFSA" && deathTransfer === "SPOUSE") {
