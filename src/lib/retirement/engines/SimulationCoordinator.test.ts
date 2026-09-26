@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runRetirementSimulation } from "./SimulationCoordinator";
+import { calculateBasicTax } from "./TaxEngine";
 import type { RetirementScenario } from "../domain/types";
 
 const base = {
@@ -62,7 +63,7 @@ describe("retirement simulation validation boundary", () => {
         ...base.household,
         people: [{
           ...base.household.people[0],
-          otherIncome: 12000,
+          otherIncome: 60000,
           cppStartAge: 70 as const,
           oasStartAge: 70 as const,
         }],
@@ -74,9 +75,8 @@ describe("retirement simulation validation boundary", () => {
     const result = runRetirementSimulation(scenario, 0, 2025);
     expect(result.status).toBe("COMPLETE");
     expect(result.monthly).toHaveLength(12);
-    const expectedAnnualTax = 0;
-    expect(result.metrics.lifetimeTax).toBeGreaterThanOrEqual(expectedAnnualTax);
-    expect(result.metrics.lifetimeTax).toBeLessThan(5000);
+    const expectedAnnualTax = calculateBasicTax(60000, "AB", 65).totalTax;
+    expect(result.metrics.lifetimeTax).toBeCloseTo(expectedAnnualTax, 6);
   });
 
 });
