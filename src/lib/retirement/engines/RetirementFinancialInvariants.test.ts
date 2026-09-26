@@ -351,6 +351,27 @@ describe("retirement financial invariants", () => {
 
 
 
+
+  it("distributes non-registered investment income out of the portfolio exactly once", () => {
+    const scenario = makeScenario({
+      goals: { ...makeScenario().goals, annualSpending: 0, planningAge: 65 },
+      accounts: [{
+        id: "nr",
+        owner: "MAIN_USER",
+        type: "NON_REGISTERED",
+        valuation: { mode: "MANUAL", value: 120000 },
+        nonRegisteredInterestYield: 0.10,
+      }],
+      assumptions: { ...makeScenario().assumptions, investmentReturn: 0, investmentFeeRate: 0 },
+    });
+
+    const result = runRetirementSimulation(scenario, 120000, 2026);
+    const first = result.monthly[0]!;
+    expect(first.withdrawals).toBeCloseTo(1000, 8);
+    expect(first.portfolio).toBeCloseTo(119000, 8);
+    expect(first.cashFlow?.assetReconciliation).toBeCloseTo(0, 8);
+  });
+
 describe("monthly cash flow reconciliation", () => {
   it("keeps the asset ledger balanced through growth, contributions and withdrawals", () => {
     const scenario = makeScenario({
