@@ -9,6 +9,9 @@ export interface AccountState {
   balance: Money;
   contributionAnnual: Money;
   contributionUntilAge?: number;
+  /** Beginning-of-year balance used for RRIF/LIF minimum withdrawals. */
+  minimumReferenceBalance?: Money;
+  minimumReferenceYear?: number;
 }
 
 export function classifyAccount(account: AccountScenario): {
@@ -40,6 +43,8 @@ export function createAccountState(account: AccountScenario): AccountState {
     balance: Math.max(0, account.valuation.value ?? account.valuation.linkedValue ?? 0),
     contributionAnnual: Math.max(0, account.contribution?.annualAmount ?? 0),
     contributionUntilAge: account.contribution?.untilAge,
+    minimumReferenceBalance: Math.max(0, account.valuation.value ?? account.valuation.linkedValue ?? 0),
+    minimumReferenceYear: undefined,
   };
 }
 
