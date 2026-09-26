@@ -64,14 +64,15 @@ export function reconcileMonthlyFinancialLedger(
 
   const beginningNetWorth = input.beginningPortfolio - input.beginningDebt;
   const endingNetWorth = input.endingPortfolio - input.endingDebt;
-  const expectedNetWorthChange =
-    input.investmentGrowth +
-    input.contributions -
-    input.spending -
-    input.taxes -
-    input.debtInterest;
+  // Net worth is reconciled as an accounting identity. External household
+  // cash is not stored as an investment account in V1, so it must be included
+  // explicitly rather than inferred as investment performance.
+  const assetChange = input.endingPortfolio - input.beginningPortfolio;
+  const debtChange = input.endingDebt - input.beginningDebt;
   const netWorthReconciliation =
-    endingNetWorth - beginningNetWorth - expectedNetWorthChange;
+    endingNetWorth -
+    beginningNetWorth -
+    (assetChange + externalCashChange - debtChange);
 
   const externalCashChange =
     input.grossIncome +
