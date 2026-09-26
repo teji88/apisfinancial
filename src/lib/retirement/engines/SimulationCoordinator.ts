@@ -79,6 +79,35 @@ export function runRetirementSimulation(
   startYear = new Date().getUTCFullYear(),
   portfolioByType: Record<string, number> = {},
 ): SimulationResult {
+  const validationIssues = validateRetirementScenario(scenario);
+  const validationErrors = validationIssues.filter((issue) => issue.severity === "ERROR");
+  if (validationErrors.length > 0) {
+    const scenarioHash = stableHash({ scenario, startYear, rulesVersion: RETIREMENT_RULES_VERSION, engineVersion: RETIREMENT_ENGINE_VERSION });
+    return {
+      simulationId: `invalid-${scenario.id}`,
+      scenarioId: scenario.id,
+      status: "INVALID",
+      startDate: new Date(Date.UTC(startYear, 0, 1)).toISOString(),
+      endDate: new Date(Date.UTC(startYear, 0, 1)).toISOString(),
+      monthly: [],
+      metrics: {
+        feasible: false,
+        lifetimeSpending: 0,
+        lifetimeAfterTaxCash: 0,
+        lifetimeTax: 0,
+        totalBenefits: 0,
+        endingPortfolio: 0,
+        endingNetWorth: 0,
+        minimumPortfolio: 0,
+        maximumSpendingShortfall: 0,
+      },
+      warnings: validationErrors.map((issue) => `${issue.id}: ${issue.message}`),
+      assumptions: [],
+      engineVersion: RETIREMENT_ENGINE_VERSION,
+      rulesVersion: RETIREMENT_RULES_VERSION,
+      scenarioHash,
+    };
+  }
   const start = new Date(Date.UTC(startYear, 0, 1));
   const people = scenario.household.people;
   const planningEndYear = Math.min(...people.map((p) => p.birthYear + scenario.goals.planningAge));
