@@ -188,6 +188,9 @@ export function runRetirementSimulation(
         investmentIncome.nonEligibleCanadianDividends +
         investmentIncome.interest +
         investmentIncome.foreignIncome;
+      if (!monthlyTaxInputs[account.owner]) {
+        monthlyTaxInputs[account.owner] = { age: ages[account.owner] ?? maxAge };
+      }
       monthlyTaxInputs[account.owner].eligibleCanadianDividends =
         (monthlyTaxInputs[account.owner].eligibleCanadianDividends ?? 0) + investmentIncome.eligibleCanadianDividends;
       monthlyTaxInputs[account.owner].nonEligibleCanadianDividends =
