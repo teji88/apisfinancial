@@ -88,7 +88,7 @@ describe("retirement financial invariants", () => {
 
   it("applies contributions before retirement", () => {
     const scenario = makeScenario({
-      goals: { ...makeScenario().goals, annualSpending: 0, planningAge: 65 },
+      goals: { ...makeScenario().goals, annualSpending: 0, planningAge: 65 },\n      household: { ...makeScenario().household, people: [{ ...makeScenario().household.people[0], birthYear: 1966 }] },
       accounts: [{ id: "cash", owner: "MAIN_USER", type: "CASH", valuation: { mode: "MANUAL", value: 0 }, contribution: { annualAmount: 12000 } }],
     });
     const result = runRetirementSimulation(scenario, 0, 2026);
