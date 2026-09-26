@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { ArrowDownRight, ArrowUpRight, PiggyBank, TrendingUp } from "lucide-react";
 import { usePortfolio } from "@/lib/portfolio";
@@ -27,6 +27,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   staticData: { sitemap: false },
@@ -81,6 +89,16 @@ function Dashboard() {
   const openPositions = useMemo(
     () => positions.filter((p) => p.units > 0).sort((a, b) => b.marketValue - a.marketValue),
     [positions],
+  );
+
+  const [accountFilter, setAccountFilter] = useState("all");
+
+  const visiblePositions = useMemo(
+    () =>
+      accountFilter === "all"
+        ? openPositions
+        : openPositions.filter((p) => p.accountId === accountFilter),
+    [openPositions, accountFilter],
   );
 
   const summaries = useMemo(
@@ -322,15 +340,32 @@ function Dashboard() {
       </div>
 
       <div className="panel overflow-hidden">
-        <div className="flex items-center justify-between border-b px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Holdings
           </h2>
-          <span className="text-xs text-muted-foreground">
-            Prices as of {pricesAsOf ?? "—"} · refreshed once daily after market close · USD/CAD{" "}
-            {fxUsdCad.toFixed(4)}
-            {openPositions.length > 10 ? ` · scrolling to see all ${openPositions.length}` : ""}
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <Select value={accountFilter} onValueChange={setAccountFilter}>
+              <SelectTrigger className="h-8 w-56 text-xs" aria-label="Filter holdings by account">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All accounts</SelectItem>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.account_name} · {a.account_type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">
+              Prices as of {pricesAsOf ?? "—"} · refreshed once daily after market close · USD/CAD{" "}
+              {fxUsdCad.toFixed(4)}
+              {visiblePositions.length > 10
+                ? ` · scrolling to see all ${visiblePositions.length}`
+                : ""}
+            </span>
+          </div>
         </div>
         <div className="max-h-[37.5rem] overflow-auto">
           <Table>
@@ -346,7 +381,7 @@ function Dashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {openPositions.map((p) => {
+              {visiblePositions.map((p) => {
                   const account = accounts.find((a) => a.id === p.accountId);
                   return (
                     <TableRow key={p.holdingId}>
@@ -407,10 +442,10 @@ function Dashboard() {
                     </TableRow>
                   );
                 })}
-              {openPositions.length === 0 && (
+              {visiblePositions.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                    No open positions yet — record a buy in the ledger.
+                    No open positions in this account.
                   </TableCell>
                 </TableRow>
               )}
