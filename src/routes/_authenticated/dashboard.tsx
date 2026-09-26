@@ -78,6 +78,11 @@ function Dashboard() {
     [holdings, transactions, quotes, fxUsdCad],
   );
 
+  const openPositions = useMemo(
+    () => positions.filter((p) => p.units > 0).sort((a, b) => b.marketValue - a.marketValue),
+    [positions],
+  );
+
   const summaries = useMemo(
     () =>
       accounts.map((a) =>
@@ -324,11 +329,12 @@ function Dashboard() {
           <span className="text-xs text-muted-foreground">
             Prices as of {pricesAsOf ?? "—"} · refreshed once daily after market close · USD/CAD{" "}
             {fxUsdCad.toFixed(4)}
+            {openPositions.length > 10 ? ` · scrolling to see all ${openPositions.length}` : ""}
           </span>
         </div>
-        <div className="overflow-x-auto">
+        <div className="max-h-[37.5rem] overflow-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow>
                 <TableHead>Symbol</TableHead>
                 <TableHead className="text-right">Units</TableHead>
@@ -340,10 +346,7 @@ function Dashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {positions
-                .filter((p) => p.units > 0)
-                .sort((a, b) => b.marketValue - a.marketValue)
-                .map((p) => {
+              {openPositions.map((p) => {
                   const account = accounts.find((a) => a.id === p.accountId);
                   return (
                     <TableRow key={p.holdingId}>
@@ -404,7 +407,7 @@ function Dashboard() {
                     </TableRow>
                   );
                 })}
-              {positions.filter((p) => p.units > 0).length === 0 && (
+              {openPositions.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                     No open positions yet — record a buy in the ledger.
