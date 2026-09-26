@@ -21,6 +21,34 @@ describe("retirement simulation validation boundary", () => {
     expect(result.warnings.some(x => x.includes("negative-spending"))).toBe(true);
   });
 
+  it("uses the household tax engine and explicit pension-splitting input", () => {
+    const householdBase = {
+      ...base,
+      household: {
+        ...base.household,
+        people: [
+          { ...base.household.people[0], otherIncome: 40_000 },
+          { role: "PARTNER" as const, birthYear: 1960, birthMonth: 1, retirementAge: 65, cppStartAge: 65 as const, oasStartAge: 65 as const, oasResidenceYears: 40, otherIncome: 0 },
+        ],
+      },
+      accounts: [{
+        id: "rrif",
+        owner: "MAIN_USER" as const,
+        type: "RRIF" as const,
+        valuation: { mode: "MANUAL" as const, value: 200_000 },
+      }],
+      strategy: { ...base.strategy, withdrawalPolicy: "REGISTERED_FIRST" as const, pensionSplitPercent: 0 },
+    };
+    const unsplit = runRetirementSimulation(householdBase, 200_000, 2026);
+    const split = runRetirementSimulation({
+      ...householdBase,
+      strategy: { ...householdBase.strategy, pensionSplitPercent: 50 },
+    }, 200_000, 2026);
+    expect(unsplit.status).toBe("COMPLETE");
+    expect(split.status).toBe("COMPLETE");
+    expect(split.metrics.lifetimeTax).toBeLessThan(unsplit.metrics.lifetimeTax);
+  });
+
   it("simulates a valid scenario", () => {
     const result = runRetirementSimulation(base, 100000, 2026);
     expect(result.status).toBe("COMPLETE");
