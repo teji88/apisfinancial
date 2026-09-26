@@ -141,6 +141,7 @@ export function runRetirementSimulation(
   let priorYearTaxableIncome = 0;
   let yearTax = 0;
   let currentTax = 0;
+  const yearTaxInputs: Record<PersonRole, TaxIncomeComponents> = { MAIN_USER: {}, PARTNER: {} };
   let previousStage: "BOTH_ALIVE" | "SURVIVOR" | "ESTATE" = "BOTH_ALIVE";
 
   for (let i = 0; i < months; i++) {
@@ -183,6 +184,7 @@ export function runRetirementSimulation(
     const monthlyTaxInputs: Record<PersonRole, TaxIncomeComponents> = {};
     for (const person of alivePeople) {
       monthlyTaxInputs[person.role] = { age: ages[person.role] ?? 0 };
+      yearTaxInputs[person.role].age = ages[person.role] ?? 0;
     }
     let survivorBenefits = 0;
     let deathTax = 0;
@@ -219,7 +221,6 @@ export function runRetirementSimulation(
       const monthlyOtherIncome = (person.otherIncome ?? 0) / 12;
       otherIncome += monthlyOtherIncome;
       monthlyTaxInputs[person.role].pension = (monthlyTaxInputs[person.role].pension ?? 0) + monthlyOtherIncome;
-      monthlyTaxInputs[person.role].eligiblePensionIncome = (monthlyTaxInputs[person.role].eligiblePensionIncome ?? 0) + monthlyOtherIncome;
     }
 
     if (stage === "SURVIVOR") {
@@ -237,23 +238,21 @@ export function runRetirementSimulation(
       }
     }
 
-    let mandatoryWithdrawals = 0;
+    let mandatoryTaken = 0;
+    const mandatoryByOwner: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
     for (const account of accounts) {
-      mandatoryWithdrawals += mandatoryRegisteredWithdrawal(
+      const required = mandatoryRegisteredWithdrawal(
         account.type,
         ages[account.owner] ?? maxAge,
         account.balance,
         account.minimumReferenceBalance ?? account.balance,
       );
+      if (required <= 0) continue;
+      const taken = withdraw(account, required);
+      mandatoryTaken += taken;
+      mandatoryByOwner[account.owner] += taken;
     }
-
-    const mandatoryTaken = withdrawFromBucket(accounts, "registered", mandatoryWithdrawals);
     const taxableMandatory = mandatoryTaken;
-    const mandatoryByOwner: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
-    for (const account of accounts.filter((a) => ["RRIF", "LIF"].includes(a.type))) {
-      // Beginning-of-year minimum withdrawals are already reflected in the aggregate withdrawal;
-      // owner attribution is completed below from the actual withdrawal allocation.
-    }
     let targetSpending = retired ? spending : 0;
     if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));
     if (stage === "ESTATE") targetSpending = 0;
@@ -327,32 +326,32 @@ export function runRetirementSimulation(
     yearTaxableIncome += monthlyTaxableIncome;
 
     const roles = alivePeople.map((person) => person.role);
-    const annualizeTaxInputs = (input: TaxIncomeComponents): TaxIncomeComponents => Object.fromEntries(
-      Object.entries(input).map(([key, value]) => [key, typeof value === "number" && !["age", "pensionSplitPercent"].includes(key) ? value * 12 : value]),
-    ) as TaxIncomeComponents;
-    const annualInputs = roles.map((role) => annualizeTaxInputs(monthlyTaxInputs[role]));
-    const payerInput = annualInputs.find((_, index) => roles[index] === "MAIN_USER") ?? { age: 65 };
-    const spouseInput = annualInputs.find((_, index) => roles[index] === "PARTNER");
+    for (const role of roles) {
+      for (const [key, value] of Object.entries(monthlyTaxInputs[role])) {
+        if (key === "age" || key === "pensionSplitPercent" || typeof value !== "number") continue;
+        yearTaxInputs[role][key as keyof TaxIncomeComponents] = (yearTaxInputs[role][key as keyof TaxIncomeComponents] as number ?? 0) + value;
+      }
+    }
+    const payerInput = yearTaxInputs.MAIN_USER.age ? { ...yearTaxInputs.MAIN_USER } : { age: 65 };
+    const spouseInput = roles.includes("PARTNER") ? { ...yearTaxInputs.PARTNER } : undefined;
     const householdTax = calculateHouseholdTax({
       payer: payerInput,
       spouse: spouseInput,
       province: scenario.household.province,
       payerAge: ages.MAIN_USER ?? 65,
       spouseAge: ages.PARTNER ?? 65,
-      pensionSplitPercent: scenario.strategy.withdrawalPolicy === "TAX_TARGETED" ? 50 : 0,
+      pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
     });
     currentTax = householdTax.householdTax / 12;
 
     const yearEnd = date.getUTCMonth() === 11;
     if (yearEnd) {
-      yearTax = calculateBasicTax(
-        yearTaxableIncome,
-        scenario.household.province,
-        maxAge,
-      ).totalTax;
+      yearTax = householdTax.householdTax;
       currentTax = yearTax / 12;
-      priorYearTaxableIncome = yearTaxableIncome;
+      priorYearTaxableIncome = householdTax.householdNetIncome;
       yearTaxableIncome = 0;
+      yearTaxInputs.MAIN_USER = {};
+      yearTaxInputs.PARTNER = {};
     }
 
     if (stage === "SURVIVOR" && previousStage === "BOTH_ALIVE") {
