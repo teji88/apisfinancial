@@ -94,6 +94,19 @@ export interface RetirementScenario {
   metadata: { createdAt: string; engineVersion: string; rulesVersion: string; scenarioHash?: string };
 }
 
+export interface MonthlyCashFlowSnapshot {
+  beginningPortfolio: Money;
+  investmentGrowth: Money;
+  contributions: Money;
+  grossIncome: Money;
+  grossWithdrawals: Money;
+  taxes: Money;
+  spending: Money;
+  debtPayments: Money;
+  endingPortfolio: Money;
+  assetReconciliation: Money;
+}
+
 export interface MonthlySnapshot {
   date: string;
   ages: Partial<Record<PersonRole, number>>;
@@ -114,6 +127,7 @@ export interface MonthlySnapshot {
   debtInterest?: Money;
   debtPrincipal?: Money;
   shortfall: Money;
+  cashFlow?: MonthlyCashFlowSnapshot;
 }
 
 export interface SimulationMetrics {
