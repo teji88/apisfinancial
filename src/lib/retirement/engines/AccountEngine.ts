@@ -12,6 +12,14 @@ export interface AccountState {
   /** Beginning-of-year balance used for RRIF/LIF minimum withdrawals. */
   minimumReferenceBalance?: Money;
   minimumReferenceYear?: number;
+  /** Adjusted cost base for non-registered assets. */
+  nonRegisteredAcb: Money;
+  /** Annual income yields applied to the account market value. */
+  eligibleDividendYield: number;
+  nonEligibleDividendYield: number;
+  interestYield: number;
+  foreignIncomeYield: number;
+  foreignTaxRate: number;
 }
 
 export function classifyAccount(account: AccountScenario): {
@@ -45,6 +53,14 @@ export function createAccountState(account: AccountScenario): AccountState {
     contributionUntilAge: account.contribution?.untilAge,
     minimumReferenceBalance: Math.max(0, account.valuation.value ?? account.valuation.linkedValue ?? 0),
     minimumReferenceYear: undefined,
+    nonRegisteredAcb: account.type === "NON_REGISTERED"
+      ? Math.max(0, Math.min(account.balance, account.nonRegisteredAcb ?? account.valuation.value ?? account.valuation.linkedValue ?? 0))
+      : 0,
+    eligibleDividendYield: account.type === "NON_REGISTERED" ? Math.max(0, account.nonRegisteredEligibleDividendYield ?? 0) : 0,
+    nonEligibleDividendYield: account.type === "NON_REGISTERED" ? Math.max(0, account.nonRegisteredNonEligibleDividendYield ?? 0) : 0,
+    interestYield: account.type === "NON_REGISTERED" ? Math.max(0, account.nonRegisteredInterestYield ?? 0) : 0,
+    foreignIncomeYield: account.type === "NON_REGISTERED" ? Math.max(0, account.nonRegisteredForeignIncomeYield ?? 0) : 0,
+    foreignTaxRate: account.type === "NON_REGISTERED" ? Math.max(0, account.nonRegisteredForeignTaxRate ?? 0) : 0,
   };
 }
 
@@ -120,4 +136,43 @@ export function applyAccountDeathTreatment(
     return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: 0, notes: ["Non-registered spouse transfer is modeled as tax-deferred for planning purposes."], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
   }
   return { transferredToSurvivor: 0, taxableAtDeath: 0, estateValue: value, notes: ["Non-registered deemed disposition uses supplied ACB; detailed rollover eligibility is simplified."], capitalGainAtDeath, taxableCapitalGainAtDeath };
+}
+
+
+export interface NonRegisteredIncome {
+  eligibleCanadianDividends: Money;
+  nonEligibleCanadianDividends: Money;
+  interest: Money;
+  foreignIncome: Money;
+  foreignTaxPaid: Money;
+}
+
+/** Estimates one month's non-registered investment income from current value. */
+export function estimateNonRegisteredMonthlyIncome(state: AccountState): NonRegisteredIncome {
+  if (state.type !== "NON_REGISTERED" || state.balance <= 0) {
+    return { eligibleCanadianDividends: 0, nonEligibleCanadianDividends: 0, interest: 0, foreignIncome: 0, foreignTaxPaid: 0 };
+  }
+  const annualValue = Math.max(0, state.balance);
+  const monthly = (yieldRate: number) => annualValue * (yieldRate / 100) / 12;
+  const eligibleCanadianDividends = monthly(state.eligibleDividendYield);
+  const nonEligibleCanadianDividends = monthly(state.nonEligibleDividendYield);
+  const interest = monthly(state.interestYield);
+  const foreignIncome = monthly(state.foreignIncomeYield);
+  const foreignTaxPaid = foreignIncome * state.foreignTaxRate / 100;
+  return { eligibleCanadianDividends, nonEligibleCanadianDividends, interest, foreignIncome, foreignTaxPaid };
+}
+
+/**
+ * Applies a non-registered withdrawal while tracking ACB. The capital gain
+ * realized is the withdrawal's proportional share of unrealized gain.
+ */
+export function withdrawNonRegistered(state: AccountState, amount: Money): { taken: Money; realizedCapitalGain: Money; returnOfCapital: Money } {
+  const taken = withdraw(state, amount);
+  if (taken <= 0) return { taken: 0, realizedCapitalGain: 0, returnOfCapital: 0 };
+  const startingBalance = state.balance + taken;
+  const acbRatio = startingBalance > 0 ? Math.min(1, Math.max(0, state.nonRegisteredAcb / startingBalance)) : 0;
+  const returnOfCapital = Math.min(taken, taken * acbRatio);
+  const realizedCapitalGain = Math.max(0, taken - returnOfCapital);
+  state.nonRegisteredAcb = Math.max(0, state.nonRegisteredAcb - returnOfCapital);
+  return { taken, realizedCapitalGain, returnOfCapital };
 }
