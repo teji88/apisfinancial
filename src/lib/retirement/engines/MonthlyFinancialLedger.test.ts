@@ -74,8 +74,7 @@ describe("MonthlyFinancialLedger", () => {
       debtPrincipal: 350,
       debtInterest: 50,
       endingPortfolio: 99000,
-      beginningDebt: 0,
-      endingDebt: 0,
+      beginningDebt: 20000,
       endingDebt: 19700,
     });
     expect(ledger.externalCashChange).toBeCloseTo(100, 8);
