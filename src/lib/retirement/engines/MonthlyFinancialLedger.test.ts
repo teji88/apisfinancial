@@ -15,6 +15,8 @@ describe("MonthlyFinancialLedger", () => {
       debtPrincipal: 350,
       debtInterest: 50,
       endingPortfolio: 100000,
+      beginningDebt: 0,
+      endingDebt: 0,
     });
     expect(ledger.assetReconciliation).toBeCloseTo(0, 8);
   });
@@ -72,7 +74,8 @@ describe("MonthlyFinancialLedger", () => {
       debtPrincipal: 350,
       debtInterest: 50,
       endingPortfolio: 99000,
-      beginningDebt: 20000,
+      beginningDebt: 0,
+      endingDebt: 0,
       endingDebt: 19700,
     });
     expect(ledger.externalCashChange).toBeCloseTo(100, 8);
