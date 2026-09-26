@@ -143,7 +143,9 @@ export function runRetirementSimulation(
     let benefits = 0;
     let taxableBenefits = 0;
     let otherIncome = 0;
-    let survivorBenefits = 0;\n    let deathTax = 0;\n    let estateGross = 0;
+    let survivorBenefits = 0;
+    let deathTax = 0;
+    let estateGross = 0;
 
     for (const person of alivePeople) {
       const age = ages[person.role] ?? 0;
@@ -197,7 +199,9 @@ export function runRetirementSimulation(
 
     const mandatoryTaken = withdrawFromBucket(accounts, "registered", mandatoryWithdrawals);
     const taxableMandatory = mandatoryTaken;
-    let targetSpending = retired ? spending : 0;\n    if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));\n    if (stage === "ESTATE") targetSpending = 0;
+    let targetSpending = retired ? spending : 0;
+    if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));
+    if (stage === "ESTATE") targetSpending = 0;
 
     const baseTaxableThisMonth = taxableBenefits + otherIncome + taxableMandatory;
     const baseTax = annualizedTax(
@@ -268,7 +272,16 @@ export function runRetirementSimulation(
       yearTaxableIncome = 0;
     }
 
-    if (stage === "ESTATE") {\n      for (const account of accounts) {\n        const treatment = applyAccountDeathTreatment(account, false);\n        deathTax += calculateBasicTax(treatment.taxableAtDeath, scenario.household.province, maxAge).totalTax;\n        estateGross += treatment.estateValue + treatment.transferredToSurvivor;\n        account.balance = treatment.estateValue;\n      }\n    }\n\n    const shortfall = Math.max(0, remainingNeed);
+    if (stage === "ESTATE") {
+      for (const account of accounts) {
+        const scenarioAccount = scenario.accounts.find((candidate) => candidate.id === account.id);\n        const hasSpouse = alivePeople.length === 1;\n        const transfer = scenarioAccount?.deathTransfer ?? (hasSpouse ? "SPOUSE" : "ESTATE");\n        const treatment = applyAccountDeathTreatment(account, hasSpouse, scenarioAccount?.nonRegisteredAcb ?? 0, transfer);
+        const deathTaxableIncome = treatment.taxableAtDeath + treatment.taxableCapitalGainAtDeath;\n        deathTax += calculateBasicTax(deathTaxableIncome, scenario.household.province, maxAge).totalTax;
+        estateGross += treatment.estateValue + treatment.transferredToSurvivor;
+        account.balance = treatment.estateValue;
+      }
+    }
+
+    const shortfall = Math.max(0, remainingNeed);
     const portfolio = accounts.reduce((sum, account) => sum + Math.max(0, account.balance), 0);
     const netWorth = portfolio;
 
