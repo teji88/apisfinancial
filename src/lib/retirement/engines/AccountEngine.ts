@@ -7,6 +7,7 @@ export interface AccountState {
   owner: AccountScenario["owner"];
   type: AccountScenario["type"];
   balance: Money;
+  startingValue: Money;
   contributionAnnual: Money;
   contributionUntilAge?: number;
   /** Beginning-of-year balance used for RRIF/LIF minimum withdrawals. */
@@ -49,6 +50,7 @@ export function createAccountState(account: AccountScenario): AccountState {
     owner: account.owner,
     type: account.type,
     balance: Math.max(0, account.valuation.value ?? account.valuation.linkedValue ?? 0),
+    startingValue: Math.max(0, account.valuation.value ?? account.valuation.linkedValue ?? 0),
     contributionAnnual: Math.max(0, account.contribution?.annualAmount ?? 0),
     contributionUntilAge: account.contribution?.untilAge,
     minimumReferenceBalance: Math.max(0, account.valuation.value ?? account.valuation.linkedValue ?? 0),
