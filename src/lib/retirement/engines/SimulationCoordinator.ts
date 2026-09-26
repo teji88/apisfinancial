@@ -97,7 +97,7 @@ export function runRetirementSimulation(
   let totalBenefits = 0;
   let maxShortfall = 0;
   let yearTaxableIncome = 0;
-  let yearBenefits = 0;
+  let priorYearTaxableIncome = 0;
   let yearTax = 0;
   let currentTax = 0;
 
@@ -134,8 +134,24 @@ export function runRetirementSimulation(
 
     for (const person of people) {
       const age = ages[person.role] ?? 0;
+      const partner = people.find((candidate) => candidate.role !== person.role);
+      const partnerAge = partner ? ages[partner.role] ?? 0 : undefined;
+      const partnerReceivesOas = partner
+        ? typeof partner.oasStartAge === "number" && partnerAge !== undefined && partnerAge >= partner.oasStartAge
+        : false;
+
       if (age >= 60) {
-        const benefit = estimateGovernmentBenefits(person, age, yearTaxableIncome);
+        const benefit = estimateGovernmentBenefits(person, age, priorYearTaxableIncome, {
+          householdSize: people.length,
+          partnerAge,
+          partnerReceivesOas,
+          // Couple GIS thresholds are based on combined income. The current
+          // simulation keeps a household-level prior-year income ledger.
+          partnerIncomeForBenefits: 0,
+          previousYearIncome: priorYearTaxableIncome,
+          inflationRate: scenario.assumptions.inflationRate,
+          calendarYear: date.getUTCFullYear(),
+        });
         benefits += (benefit.cpp + benefit.oas + benefit.gis) / 12;
         taxableBenefits += (benefit.cpp + benefit.oas) / 12;
       }
@@ -155,13 +171,11 @@ export function runRetirementSimulation(
     const taxableMandatory = mandatoryTaken;
     const targetSpending = retired ? spending : 0;
 
-    // Benefits and other recurring income are included in the taxable-income
-    // estimate before calculating the additional withdrawal needed for spending.
     const baseTaxableThisMonth = taxableBenefits + otherIncome + taxableMandatory;
     const baseTax = annualizedTax(
       yearTaxableIncome,
       baseTaxableThisMonth,
-      (date.getUTCMonth() + 1),
+      date.getUTCMonth() + 1,
       scenario.household.province,
       maxAge,
     );
@@ -173,8 +187,6 @@ export function runRetirementSimulation(
 
     remainingNeed = Math.max(0, remainingNeed - mandatoryTaken);
 
-    // Gross-up taxable withdrawals iteratively. This prevents the planner from
-    // treating the tax on an RRSP/RRIF withdrawal as if it were zero.
     for (const bucket of withdrawalOrder(scenario.strategy.withdrawalPolicy)) {
       if (remainingNeed <= 0) break;
 
@@ -207,7 +219,6 @@ export function runRetirementSimulation(
 
     const monthlyTaxableIncome = taxableBenefits + otherIncome + taxableWithdrawals;
     yearTaxableIncome += monthlyTaxableIncome;
-    yearBenefits += benefits;
 
     currentTax = annualizedTax(
       yearTaxableIncome - monthlyTaxableIncome,
@@ -225,8 +236,8 @@ export function runRetirementSimulation(
         maxAge,
       ).totalTax;
       currentTax = yearTax / 12;
+      priorYearTaxableIncome = yearTaxableIncome;
       yearTaxableIncome = 0;
-      yearBenefits = 0;
     }
 
     const shortfall = Math.max(0, remainingNeed);
@@ -276,6 +287,7 @@ export function runRetirementSimulation(
     "2026 federal and provincial tax brackets are loaded from the versioned rules dataset. Detailed credits, Quebec taxation and advanced tax rules remain incomplete.",
     "Non-registered withdrawals currently do not model security lots, adjusted cost base, dividends or capital-gain inclusion.",
     "Survivor/death events, debt amortization and pension splitting are not yet fully modelled.",
+    "GIS uses the prior-year household income ledger and published 2026 marital-status thresholds; detailed GIS table interpolation and earnings exemptions remain to be added.",
     "OAS recovery is modelled as an income-based estimate and is not yet tied to the actual OAS amount paid in each recovery period.",
   ];
 
