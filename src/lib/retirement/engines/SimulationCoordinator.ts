@@ -1,4 +1,4 @@
-import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole } from "../domain/types";
+import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole, PersonScenario } from "../domain/types";
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
 import { estimateGovernmentBenefits } from "./BenefitEngine";
 import { calculateBasicTax } from "./TaxEngine";
@@ -6,6 +6,16 @@ import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, 
 
 function ageAtMonth(birthYear: number, birthMonth: number, date: Date) {
   return date.getUTCFullYear() - birthYear - (date.getUTCMonth() + 1 < birthMonth ? 1 : 0);
+}
+
+
+type PersonWithDeath = PersonScenario & { deathAge?: number; survivorCppPercent?: number };
+function householdStageForMonth(people: PersonScenario[], ages: Partial<Record<PersonRole, number>>): "BOTH_ALIVE" | "SURVIVOR" | "ESTATE" {
+  const alive = people.filter((person) => {
+    const deathAge = (person as PersonWithDeath).deathAge;
+    return typeof deathAge !== "number" || (ages[person.role] ?? 0) < deathAge;
+  });
+  return alive.length >= 2 ? "BOTH_ALIVE" : alive.length === 1 ? "SURVIVOR" : "ESTATE";
 }
 
 function withdrawalOrder(policy: RetirementScenario["strategy"]["withdrawalPolicy"]): Array<"cash" | "nonRegistered" | "registered" | "tfsa"> {
@@ -108,8 +118,10 @@ export function runRetirementSimulation(
       people.map((person) => [person.role, ageAtMonth(person.birthYear, person.birthMonth, date)]),
     ) as Partial<Record<PersonRole, number>>;
     const maxAge = Math.max(...Object.values(ages).map(Number), 0);
-    const retired = people.some((person) => (ages[person.role] ?? 0) >= person.retirementAge);
-    const allRetired = people.every((person) => (ages[person.role] ?? 0) >= person.retirementAge);
+    const stage = householdStageForMonth(people, ages);
+    const alivePeople = people.filter((person) => { const deathAge = (person as PersonWithDeath).deathAge; return typeof deathAge !== "number" || (ages[person.role] ?? 0) < deathAge; });
+    const retired = alivePeople.some((person) => (ages[person.role] ?? 0) >= person.retirementAge);
+    const allRetired = alivePeople.length > 0 && alivePeople.every((person) => (ages[person.role] ?? 0) >= person.retirementAge);
 
     for (const account of accounts) {
       account.balance = applyMonthlyReturn(
@@ -132,7 +144,7 @@ export function runRetirementSimulation(
     let taxableBenefits = 0;
     let otherIncome = 0;
 
-    for (const person of people) {
+    for (const person of alivePeople) {
       const age = ages[person.role] ?? 0;
       const partner = people.find((candidate) => candidate.role !== person.role);
       const partnerAge = partner ? ages[partner.role] ?? 0 : undefined;
@@ -252,7 +264,7 @@ export function runRetirementSimulation(
     monthly.push({
       date: date.toISOString(),
       ages,
-      householdStage: "BOTH_ALIVE",
+      householdStage: stage,
       portfolio,
       registered: sumBucket(accounts, "registered"),
       tfsa: sumBucket(accounts, "tfsa"),
@@ -286,7 +298,7 @@ export function runRetirementSimulation(
     "Simulation is deterministic and monthly; investment returns are smoothed rather than sequence-of-returns simulated.",
     "2026 federal and provincial tax brackets are loaded from the versioned rules dataset. Detailed credits, Quebec taxation and advanced tax rules remain incomplete.",
     "Non-registered withdrawals currently do not model security lots, adjusted cost base, dividends or capital-gain inclusion.",
-    "Survivor/death events, debt amortization and pension splitting are not yet fully modelled.",
+    "Death ages now transition the household through BOTH_ALIVE → SURVIVOR → ESTATE; survivor CPP/account death-tax treatment and pension splitting remain simplified.",
     "GIS uses the prior-year household income ledger and published 2026 marital-status thresholds; detailed GIS table interpolation and earnings exemptions remain to be added.",
     "OAS recovery is modelled as an income-based estimate and is not yet tied to the actual OAS amount paid in each recovery period.",
   ];
@@ -309,6 +321,8 @@ export function runRetirementSimulation(
       endingNetWorth: endingPortfolio,
       minimumPortfolio,
       maximumSpendingShortfall: maxShortfall,
+      survivorShortfall: monthly.filter((x) => x.householdStage === "SURVIVOR").reduce((m, x) => Math.max(m, x.shortfall), 0),
+      estateValue: monthly.at(-1)?.householdStage === "ESTATE" ? endingPortfolio : undefined,
     },
     warnings,
     assumptions: [
