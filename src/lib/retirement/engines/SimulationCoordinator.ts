@@ -134,6 +134,7 @@ export function runRetirementSimulation(
   let priorYearTaxableIncome = 0;
   let yearTax = 0;
   let currentTax = 0;
+  let cumulativeTaxLiability = 0;
   const yearTaxInputs: Record<PersonRole, TaxIncomeComponents> = { MAIN_USER: {}, PARTNER: {} };
   let previousStage: "BOTH_ALIVE" | "SURVIVOR" | "ESTATE" = "BOTH_ALIVE";
 
@@ -438,16 +439,22 @@ export function runRetirementSimulation(
       spouseAge: ages.PARTNER ?? 65,
       pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
     });
-    currentTax = householdTax.householdTax / 12;
+    // The household tax engine calculates liability on the income accumulated
+    // so far in the current tax year. Cash-flow reporting must therefore use
+    // the month-over-month change in that liability, not annual liability / 12.
+    // This prevents the same year's tax from being counted repeatedly.
+    const householdTaxLiability = householdTax.householdTax;
+    currentTax = Math.max(0, householdTaxLiability - cumulativeTaxLiability);
+    cumulativeTaxLiability = householdTaxLiability;
 
     const yearEnd = date.getUTCMonth() === 11;
     if (yearEnd) {
-      yearTax = householdTax.householdTax;
-      currentTax = yearTax / 12;
+      yearTax = householdTaxLiability;
       priorYearTaxableIncome = householdTax.householdNetIncome;
       yearTaxableIncome = 0;
       yearTaxInputs.MAIN_USER = {};
       yearTaxInputs.PARTNER = {};
+      cumulativeTaxLiability = 0;
     }
 
     if (stage === "SURVIVOR" && previousStage === "BOTH_ALIVE") {
