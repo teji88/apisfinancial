@@ -10,6 +10,8 @@ export interface TaxIncomeComponents {
   rrspRrif?: number;
   pension?: number;
   interest?: number;
+  eligibleCanadianDividends?: number;
+  nonEligibleCanadianDividends?: number;
   canadianDividends?: number;
   foreignIncome?: number;
   capitalGains?: number;
@@ -33,6 +35,8 @@ export interface TaxResult {
   oasRecovery: number;
   marginalRate: number;
   credits: number;
+  dividendTaxCredit: number;
+  foreignTaxCredit: number;
 }
 
 function taxFromBrackets(income: number, brackets: readonly TaxBracket[]) {
@@ -82,6 +86,8 @@ function normalizeIncome(components: TaxIncomeComponents): Required<TaxIncomeCom
     rrspRrif: Math.max(0, components.rrspRrif ?? 0),
     pension: Math.max(0, components.pension ?? 0),
     interest: Math.max(0, components.interest ?? 0),
+    eligibleCanadianDividends: Math.max(0, components.eligibleCanadianDividends ?? 0),
+    nonEligibleCanadianDividends: Math.max(0, components.nonEligibleCanadianDividends ?? 0),
     canadianDividends: Math.max(0, components.canadianDividends ?? 0),
     foreignIncome: Math.max(0, components.foreignIncome ?? 0),
     capitalGains,
@@ -114,15 +120,21 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
 
   const pensionSplitEligible = income.age >= 65 ? income.eligiblePensionIncome : 0;
   const pensionSplit = Math.min(pensionSplitEligible * 0.5, pensionSplitEligible * income.pensionSplitPercent / 100);
-  const totalIncome = ordinaryIncome + income.canadianDividends + income.capitalGains;
+  const eligibleDividends = income.eligibleCanadianDividends;
+  const nonEligibleDividends = income.nonEligibleCanadianDividends + income.canadianDividends;
+  const taxableCanadianDividends = eligibleDividends * 1.38 + nonEligibleDividends * 1.15;
+  const totalIncome = ordinaryIncome + taxableCanadianDividends + income.capitalGains;
   const capitalGainInclusion = income.capitalGains * 0.5;
-  const netIncomeBeforeDeductions = Math.max(0, ordinaryIncome + income.canadianDividends + capitalGainInclusion - pensionSplit);
+  const netIncomeBeforeDeductions = Math.max(0, ordinaryIncome + taxableCanadianDividends + capitalGainInclusion - pensionSplit);
   const netIncome = Math.max(0, netIncomeBeforeDeductions - income.deductions);
   const taxableIncome = netIncome;
 
   return {
     ...income,
     ordinaryIncome,
+    eligibleDividendGrossUp: eligibleDividends * 0.38,
+    nonEligibleDividendGrossUp: nonEligibleDividends * 0.15,
+    taxableCanadianDividends,
     capitalGainInclusion,
     totalIncome,
     netIncome,
@@ -153,11 +165,16 @@ export function calculateTaxFromIncome(
   const provincialBrackets = bracketsForProvince(province);
   const federalGross = taxFromBrackets(ledgers.taxableIncome, federalBrackets);
   const provincialGross = taxFromBrackets(ledgers.taxableIncome, provincialBrackets);
-  const credits = federalBasicCredit() + provincialBasicCredit(province);
-  const federalTax = Math.max(0, federalGross - federalBasicCredit());
+  const federalDividendCredit = ledgers.eligibleDividendGrossUp * (6 / 11) + ledgers.nonEligibleDividendGrossUp * (9 / 13);
+  const credits = federalBasicCredit() + provincialBasicCredit(province) + federalDividendCredit;
+  const federalTax = Math.max(0, federalGross - federalBasicCredit() - federalDividendCredit);
   const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province));
   const oasRecovery = oasRecoveryForIncome(ledgers.netIncome, age);
-  const totalTax = federalTax + provincialTax + oasRecovery;
+  const foreignIncome = Math.max(0, ledgers.foreignIncome);
+  const foreignTaxCredit = foreignIncome > 0
+    ? Math.min(ledgers.foreignTaxPaid, Math.max(0, (federalTax + provincialTax) * foreignIncome / Math.max(1, ledgers.taxableIncome)))
+    : 0;
+  const totalTax = Math.max(0, federalTax + provincialTax + oasRecovery - foreignTaxCredit);
   const federalMarginal = marginalBracketRate(ledgers.taxableIncome, federalBrackets);
   const provincialMarginal = marginalBracketRate(ledgers.taxableIncome, provincialBrackets);
   const recoveryMarginal = ledgers.netIncome >= CANADA_2026_PARAMETERS.oasRecovery.startIncome ? 0.15 : 0;
@@ -173,6 +190,8 @@ export function calculateTaxFromIncome(
     oasRecovery,
     marginalRate: federalMarginal + provincialMarginal + recoveryMarginal,
     credits,
+    dividendTaxCredit: federalDividendCredit,
+    foreignTaxCredit,
   };
 }
 
