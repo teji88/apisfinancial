@@ -202,3 +202,63 @@ export function calculateIncrementalWithdrawalCost(
   const incrementalTax = calculateIncrementalTax(currentTaxableIncome, gross, province, age);
   return { incrementalTax, effectiveCostRate: incrementalTax / gross };
 }
+
+export interface HouseholdTaxInput {
+  payer: TaxIncomeComponents;
+  spouse?: TaxIncomeComponents;
+  province?: ProvinceCode;
+  payerAge?: number;
+  spouseAge?: number;
+  pensionSplitPercent?: number;
+}
+
+export interface HouseholdTaxResult {
+  payer: TaxResult;
+  spouse: TaxResult;
+  householdTotalIncome: number;
+  householdNetIncome: number;
+  householdTax: number;
+  pensionSplit: number;
+}
+
+/**
+ * Applies a pension-splitting election between two individual tax returns.
+ * The transfer is limited to 50% of eligible pension income and is neutral
+ * to household gross income while changing the individual tax allocation.
+ */
+export function calculateHouseholdTax(input: HouseholdTaxInput): HouseholdTaxResult {
+  const payer = normalizeIncome(input.payer);
+  const spouse = normalizeIncome(input.spouse ?? {});
+  const requestedPercent = Math.min(50, Math.max(0, input.pensionSplitPercent ?? 0));
+  const payerAge = input.payerAge ?? payer.age;
+  const spouseAge = input.spouseAge ?? spouse.age;
+  const eligible = payerAge >= 65 ? payer.eligiblePensionIncome : 0;
+  const pensionSplit = Math.min(eligible * 0.5, eligible * requestedPercent / 100);
+
+  const payerComponents: TaxIncomeComponents = {
+    ...input.payer,
+    pension: Math.max(0, (input.payer.pension ?? 0) - pensionSplit),
+    eligiblePensionIncome: Math.max(0, (input.payer.eligiblePensionIncome ?? 0) - pensionSplit),
+    age: payerAge,
+    pensionSplitPercent: 0,
+  };
+  const spouseComponents: TaxIncomeComponents = {
+    ...input.spouse,
+    pension: Math.max(0, (input.spouse?.pension ?? 0) + pensionSplit),
+    eligiblePensionIncome: Math.max(0, (input.spouse?.eligiblePensionIncome ?? 0) + pensionSplit),
+    age: spouseAge,
+    pensionSplitPercent: 0,
+  };
+
+  const payerTax = calculateTaxFromIncome(payerComponents, input.province ?? "AB", payerAge);
+  const spouseTax = calculateTaxFromIncome(spouseComponents, input.province ?? "AB", spouseAge);
+
+  return {
+    payer: payerTax,
+    spouse: spouseTax,
+    householdTotalIncome: payerTax.totalIncome + spouseTax.totalIncome,
+    householdNetIncome: payerTax.netIncome + spouseTax.netIncome,
+    householdTax: payerTax.totalTax + spouseTax.totalTax,
+    pensionSplit,
+  };
+}
