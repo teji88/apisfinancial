@@ -307,3 +307,45 @@ describe("retirement financial invariants", () => {
     expect(stress.warnings.some(w => w.includes("not probabilities"))).toBe(true);
   });
 });
+  it("uses the same beginning-of-year RRIF reference for every month of a calendar year", () => {
+    const scenario = makeScenario({
+      goals: { ...makeScenario().goals, annualSpending: 0, planningAge: 73 },
+      household: {
+        ...makeScenario().household,
+        people: [{
+          ...makeScenario().household.people[0]!,
+          birthYear: 1955,
+          retirementAge: 65,
+          cppAt65: 0,
+          cppStartAge: 70,
+          oasStartAge: 70,
+        }],
+      },
+      accounts: [{
+        id: "rrif",
+        owner: "MAIN_USER",
+        type: "RRIF",
+        valuation: { mode: "MANUAL", value: 100000 },
+      }],
+      assumptions: {
+        ...makeScenario().assumptions,
+        investmentReturn: 12,
+        investmentFeeRate: 0,
+        inflationRate: 0,
+      },
+      strategy: {
+        withdrawalPolicy: "REGISTERED_FIRST",
+        objective: "MAX_SUSTAINABLE_SPENDING",
+      },
+    });
+
+    const result = runRetirementSimulation(scenario, 100000, 2026);
+    const age71Months = result.monthly.filter((month) => month.ages.MAIN_USER === 71);
+    expect(age71Months.length).toBeGreaterThanOrEqual(12);
+
+    const expectedAnnualMinimum = 100000 * 0.0528;
+    for (const month of age71Months) {
+      expect(month.withdrawals).toBeCloseTo(expectedAnnualMinimum / 12, 2);
+    }
+  });
+
