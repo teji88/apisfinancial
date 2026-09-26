@@ -14,6 +14,12 @@ export interface TaxIncomeComponents {
   foreignIncome?: number;
   capitalGains?: number;
   deductions?: number;
+  /** Eligible pension income received by this person. */
+  eligiblePensionIncome?: number;
+  /** Requested percentage of eligible pension income to split to spouse (0-50). */
+  pensionSplitPercent?: number;
+  /** Age at year end, used for pension-income eligibility. */
+  age?: number;
 }
 
 export interface TaxResult {
@@ -80,6 +86,9 @@ function normalizeIncome(components: TaxIncomeComponents): Required<TaxIncomeCom
     foreignIncome: Math.max(0, components.foreignIncome ?? 0),
     capitalGains,
     deductions: Math.max(0, components.deductions ?? 0),
+    eligiblePensionIncome: Math.max(0, components.eligiblePensionIncome ?? 0),
+    pensionSplitPercent: Math.min(50, Math.max(0, components.pensionSplitPercent ?? 0)),
+    age: Math.max(0, components.age ?? 65),
   };
 }
 
@@ -103,9 +112,11 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
     income.interest +
     income.foreignIncome;
 
+  const pensionSplitEligible = income.age >= 65 ? income.eligiblePensionIncome : 0;
+  const pensionSplit = Math.min(pensionSplitEligible * 0.5, pensionSplitEligible * income.pensionSplitPercent / 100);
   const totalIncome = ordinaryIncome + income.canadianDividends + income.capitalGains;
   const capitalGainInclusion = income.capitalGains * 0.5;
-  const netIncomeBeforeDeductions = ordinaryIncome + income.canadianDividends + capitalGainInclusion;
+  const netIncomeBeforeDeductions = Math.max(0, ordinaryIncome + income.canadianDividends + capitalGainInclusion - pensionSplit);
   const netIncome = Math.max(0, netIncomeBeforeDeductions - income.deductions);
   const taxableIncome = netIncome;
 
@@ -116,6 +127,8 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
     totalIncome,
     netIncome,
     taxableIncome,
+    pensionSplit,
+    pensionIncomeCreditBase: Math.min(2_000, income.eligiblePensionIncome - pensionSplit),
   };
 }
 
