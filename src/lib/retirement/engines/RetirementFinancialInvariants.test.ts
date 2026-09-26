@@ -4,6 +4,7 @@ import { runRetirementSimulation } from "./SimulationCoordinator";
 import { applyAccountDeathTreatment, classifyAccount, mandatoryRegisteredWithdrawal } from "./AccountEngine";
 import { calculateBasicTax, calculateIncrementalTax, calculateIncrementalWithdrawalCost } from "./TaxEngine";
 import { runStressTests } from "../scenario/ScenarioEngine";
+import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
 
 const makeScenario = (overrides: Partial<RetirementScenario> = {}): RetirementScenario => ({
   id: "invariant-test",
@@ -236,6 +237,65 @@ describe("retirement financial invariants", () => {
       expect(current.taxes).toBe(0);
       expect(current.benefits).toBe(0);
     }
+  });
+
+  it("does not pay CPP before its selected start age and applies the early/late adjustment", () => {
+    const person = makeScenario().household.people[0]!;
+    const before = estimateGovernmentBenefits({ ...person, cppAt65: 1000, cppStartAge: 65 }, 64).cpp;
+    const at65 = estimateGovernmentBenefits({ ...person, cppAt65: 1000, cppStartAge: 65 }, 65).cpp;
+    const at60 = estimateGovernmentBenefits({ ...person, cppAt65: 1000, cppStartAge: 60 }, 60).cpp;
+    const at70 = estimateGovernmentBenefits({ ...person, cppAt65: 1000, cppStartAge: 70 }, 70).cpp;
+    expect(before).toBe(0);
+    expect(at65).toBeCloseTo(12000, 8);
+    expect(at60).toBeCloseTo(12000 * 0.64, 8);
+    expect(at70).toBeCloseTo(12000 * 1.42, 8);
+  });
+
+  it("does not pay OAS before its selected start age and applies residence and deferral rules", () => {
+    const person = makeScenario().household.people[0]!;
+    const before = estimateGovernmentBenefits({ ...person, oasStartAge: 65, oasResidenceYears: 40 }, 64).oas;
+    const partial = estimateGovernmentBenefits({ ...person, oasStartAge: 65, oasResidenceYears: 20 }, 65).oas;
+    const deferred = estimateGovernmentBenefits({ ...person, oasStartAge: 70, oasResidenceYears: 40 }, 70).oas;
+    expect(before).toBe(0);
+    expect(partial).toBeCloseTo(751.97 * 12 * 0.5, 8);
+    expect(deferred).toBeCloseTo(751.97 * 12 * 1.36, 8);
+  });
+
+  it("applies the age-75 OAS increase without double-counting residence", () => {
+    const person = makeScenario().household.people[0]!;
+    const full = estimateGovernmentBenefits({ ...person, oasStartAge: 65, oasResidenceYears: 40 }, 75).oas;
+    const partial = estimateGovernmentBenefits({ ...person, oasStartAge: 65, oasResidenceYears: 20 }, 75).oas;
+    expect(full).toBeCloseTo(827.17 * 12, 8);
+    expect(partial).toBeCloseTo(827.17 * 12 * 0.5, 8);
+  });
+
+  it("uses prior-year income for GIS and removes GIS as income reaches the published cutoff", () => {
+    const person = makeScenario().household.people[0]!;
+    const eligible = estimateGovernmentBenefits(
+      { ...person, oasStartAge: 65, oasResidenceYears: 40 },
+      65,
+      0,
+      { householdSize: 1, previousYearIncome: 10000, calendarYear: 2026 },
+    ).gis;
+    const ineligible = estimateGovernmentBenefits(
+      { ...person, oasStartAge: 65, oasResidenceYears: 40 },
+      65,
+      0,
+      { householdSize: 1, previousYearIncome: 22800, calendarYear: 2026 },
+    ).gis;
+    expect(eligible).toBeGreaterThan(0);
+    expect(ineligible).toBe(0);
+  });
+
+  it("keeps CPP survivor benefits bounded and age-sensitive", () => {
+    const deceasedCpp = 12000;
+    const before65 = estimateCppSurvivorAnnual(deceasedCpp, 64, 0, 60);
+    const after65 = estimateCppSurvivorAnnual(deceasedCpp, 65, 0, 60);
+    const combined = estimateCppSurvivorAnnual(deceasedCpp, 65, 10000, 60);
+    expect(before65).toBeCloseTo(4500, 8);
+    expect(after65).toBeCloseTo(7200, 8);
+    expect(combined).toBeGreaterThanOrEqual(0);
+    expect(combined).toBeLessThanOrEqual(after65);
   });
 
   it("runs every default stress test and keeps the base result separate", () => {
