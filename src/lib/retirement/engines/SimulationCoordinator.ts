@@ -2,7 +2,7 @@ import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole,
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
 import { calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
-import { solveGrossWithdrawalForNetNeed } from "./WithdrawalEngine";
+import { solveGrossWithdrawalForNetNeed, chooseRegisteredWithdrawalOwner } from "./WithdrawalEngine";
 import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 import { validateRetirementScenario } from "../validation/RetirementValidation";
 
@@ -48,10 +48,10 @@ function sumBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>
   return accounts.filter((a) => bucketOf(a) === bucket).reduce((sum, a) => sum + a.balance, 0);
 }
 
-function withdrawFromBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>, amount: number) {
+function withdrawFromBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>, amount: number, owner?: PersonRole) {
   let remaining = Math.max(0, amount);
   let taken = 0;
-  for (const account of accounts.filter((a) => bucketOf(a) === bucket)) {
+  for (const account of accounts.filter((a) => bucketOf(a) === bucket && (owner === undefined || a.owner === owner))) {
     if (remaining <= 0) break;
     const part = withdraw(account, remaining);
     taken += part;
@@ -269,36 +269,36 @@ export function runRetirementSimulation(
 
     for (const bucket of withdrawalOrder(scenario.strategy.withdrawalPolicy)) {
       if (remainingNeed <= 0) break;
+      let selectedRegisteredOwner: PersonRole | undefined;
 
       const available = sumBucket(accounts, bucket);
       if (available <= 0) continue;
 
       let candidate = Math.min(available, remainingNeed);
       if (bucket === "registered") {
-        // Registered withdrawals are taxable, so solve gross-to-net rather
-        // than adding an approximate tax amount after the fact.
-        const payer = taxBaseByOwner.MAIN_USER;
-        const spouse = alivePeople.some((person) => person.role === "PARTNER")
-          ? taxBaseByOwner.PARTNER
-          : undefined;
-        const owner = accounts.find((account) => bucketOf(account) === "registered")?.owner ?? "MAIN_USER";
-        const ownerAge = ages[owner] ?? maxAge;
-        const solved = solveGrossWithdrawalForNetNeed({
+        // Evaluate each owner's registered balance against the same household
+        // tax position, rather than always draining the first account found.
+        const allocation = chooseRegisteredWithdrawalOwner({
           netNeed: remainingNeed,
-          payer,
-          spouse,
-          owner,
+          owners: (["MAIN_USER", "PARTNER"] as const)
+            .map((owner) => ({
+              owner,
+              balance: sumBucket(accounts.filter((account) => account.owner === owner), "registered"),
+              age: ages[owner] ?? maxAge,
+              taxInputs: taxBaseByOwner,
+            }))
+            .filter((owner) => owner.balance > 0),
           province: scenario.household.province,
           payerAge: ages.MAIN_USER ?? maxAge,
           spouseAge: ages.PARTNER,
           pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
-          maxGross: available,
         });
-        candidate = Math.min(available, solved.grossWithdrawal);
+        selectedRegisteredOwner = allocation?.owner;
+        candidate = Math.min(available, allocation?.solved.grossWithdrawal ?? remainingNeed);
       }
 
       const beforeBalances = new Map(accounts.map((account) => [account.id, account.balance]));
-      const taken = withdrawFromBucket(accounts, bucket, candidate);
+      const taken = withdrawFromBucket(accounts, bucket, candidate, selectedRegisteredOwner);
       if (taken <= 0) continue;
       withdrawals += taken;
 
@@ -312,7 +312,7 @@ export function runRetirementSimulation(
 
         // Convert the gross registered withdrawal into after-tax cash using
         // the same household tax model used for the annual tax ledger.
-        const owner = accounts.find((account) => bucketOf(account) === "registered" && (beforeBalances.get(account.id) ?? 0) > account.balance)?.owner ?? "MAIN_USER";
+        const owner = selectedRegisteredOwner ?? accounts.find((account) => bucketOf(account) === "registered" && (beforeBalances.get(account.id) ?? 0) > account.balance)?.owner ?? "MAIN_USER";
         const ownerAge = ages[owner] ?? maxAge;
         const solved = solveGrossWithdrawalForNetNeed({
           netNeed: Math.min(remainingNeed, taken),
