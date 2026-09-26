@@ -81,7 +81,8 @@ export function runRetirementSimulation(
 ): SimulationResult {
   const start = new Date(Date.UTC(startYear, 0, 1));
   const people = scenario.household.people;
-  const planningEndYear = Math.min(...people.map((p) => p.birthYear + scenario.goals.planningAge));\n  const months = Math.max(1, 12 * (planningEndYear - startYear) + 12);
+  const planningEndYear = Math.min(...people.map((p) => p.birthYear + scenario.goals.planningAge));
+  const months = Math.max(1, 12 * (planningEndYear - startYear) + 12);
   const accounts = scenario.accounts.length
     ? scenario.accounts.map(createAccountState)
     : Object.entries(portfolioByType).map(([type, value]) => createAccountState({
