@@ -28,7 +28,7 @@ export interface AccountScenario {
   type: AccountType;
   valuation: { mode: PortfolioLinkMode; value?: Money; snapshotDate?: string; linkedValue?: Money };
   contribution?: { annualAmount: Money; untilAge?: number };
-  protected?: boolean;
+  protected?: boolean;\n  nonRegisteredAcb?: Money;\n  deathTransfer?: "SPOUSE" | "ESTATE" | "BENEFICIARY";
 }
 
 export interface RetirementGoals {
