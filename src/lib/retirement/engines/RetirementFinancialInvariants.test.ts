@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RetirementScenario } from "../domain/types";
 import { runRetirementSimulation } from "./SimulationCoordinator";
 import { applyAccountDeathTreatment, classifyAccount, mandatoryRegisteredWithdrawal } from "./AccountEngine";
+import { calculateBasicTax, calculateIncrementalTax, calculateIncrementalWithdrawalCost } from "./TaxEngine";
 import { runStressTests } from "../scenario/ScenarioEngine";
 
 const makeScenario = (overrides: Partial<RetirementScenario> = {}): RetirementScenario => ({
@@ -186,6 +187,55 @@ describe("retirement financial invariants", () => {
     expect(deathIndex).toBeGreaterThan(0);
     expect(result.monthly[deathIndex! - 1]!.benefits).toBeGreaterThan(0);
     expect(result.monthly[deathIndex! + 1]!.benefits).toBeGreaterThan(0);
+  });
+
+  it("keeps TFSA withdrawals outside taxable income and tax", () => {
+    expect(calculateBasicTax(0, "AB", 65).totalTax).toBe(0);
+    expect(calculateIncrementalTax(50000, 10000, "AB", 65)).toBeGreaterThan(0);
+    expect(calculateIncrementalWithdrawalCost(50000, 10000, "AB", 65).effectiveCostRate).toBeGreaterThan(0);
+  });
+
+  it("has non-negative and monotonic tax as taxable income rises", () => {
+    const incomes = [0, 25000, 50000, 100000, 200000, 400000];
+    const taxes = incomes.map((income) => calculateBasicTax(income, "AB", 65).totalTax);
+    for (let i = 0; i < taxes.length; i++) {
+      expect(taxes[i]).toBeGreaterThanOrEqual(0);
+      if (i > 0) expect(taxes[i]).toBeGreaterThanOrEqual(taxes[i - 1]!);
+    }
+  });
+
+  it("conserves portfolio cash flow when returns, benefits and taxes are zero", () => {
+    const scenario = makeScenario({
+      goals: { ...makeScenario().goals, annualSpending: 12000, planningAge: 66 },
+      household: {
+        ...makeScenario().household,
+        people: [{
+          ...makeScenario().household.people[0]!,
+          birthYear: 1960,
+          cppAt65: 0,
+          cppStartAge: 70,
+          oasStartAge: 70,
+        }],
+      },
+      accounts: [{
+        id: "tfsa",
+        owner: "MAIN_USER",
+        type: "TFSA",
+        valuation: { mode: "MANUAL", value: 100000 },
+      }],
+      assumptions: { ...makeScenario().assumptions, investmentReturn: 0, investmentFeeRate: 0 },
+      strategy: { withdrawalPolicy: "TFSA_FIRST", objective: "MAX_SUSTAINABLE_SPENDING" },
+    });
+
+    const result = runRetirementSimulation(scenario, 100000, 2025);
+    expect(result.monthly.length).toBeGreaterThan(0);
+    for (let i = 0; i < result.monthly.length; i++) {
+      const current = result.monthly[i]!;
+      const previousPortfolio = i === 0 ? 100000 : result.monthly[i - 1]!.portfolio;
+      expect(previousPortfolio - current.portfolio).toBeCloseTo(current.withdrawals, 8);
+      expect(current.taxes).toBe(0);
+      expect(current.benefits).toBe(0);
+    }
   });
 
   it("runs every default stress test and keeps the base result separate", () => {
