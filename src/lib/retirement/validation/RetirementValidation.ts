@@ -1,7 +1,7 @@
 import type { RetirementScenario } from "../domain/types";
-import { applyAccountDeathTreatment, createAccountState, mandatoryRegisteredWithdrawal } from "./AccountEngine";
-import { estimateCppSurvivorAnnual, estimateGovernmentBenefits } from "./BenefitEngine";
-import { calculateBasicTax, calculateIncrementalWithdrawalCost } from "./TaxEngine";
+import { applyAccountDeathTreatment, createAccountState, mandatoryRegisteredWithdrawal } from "../engines/AccountEngine";
+import { estimateCppSurvivorAnnual, estimateGovernmentBenefits } from "../engines/BenefitEngine";
+import { calculateBasicTax, calculateIncrementalWithdrawalCost } from "../engines/TaxEngine";
 
 export interface RetirementValidationIssue {
   id: string;
