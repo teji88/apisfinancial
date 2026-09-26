@@ -50,14 +50,15 @@ export interface RegisteredWithdrawalAllocationResult {
 export function chooseRegisteredWithdrawalOwner(
   input: RegisteredWithdrawalAllocationInput,
 ): RegisteredWithdrawalAllocationResult | undefined {
+  const taxInputs = input.taxInputs ?? {};
   const candidates = input.owners
     .filter((owner) => owner.balance > 0)
     .map((owner) => {
       const spouseRole: PersonRole = owner.owner === "MAIN_USER" ? "PARTNER" : "MAIN_USER";
       const solved = solveGrossWithdrawalForNetNeed({
         netNeed: input.netNeed,
-        payer: input.taxInputs.MAIN_USER ?? {},
-        spouse: input.taxInputs.PARTNER ?? {},
+        payer: taxInputs.MAIN_USER ?? {},
+        spouse: taxInputs.PARTNER ?? {},
         owner: owner.owner,
         province: input.province,
         payerAge: input.payerAge,
