@@ -55,4 +55,28 @@ describe("retirement simulation validation boundary", () => {
     expect(result.monthly.length).toBeGreaterThan(0);
     expect(result.scenarioHash).toMatch(/^[0-9a-f]+$/);
   });
+  it("accrues tax liability incrementally instead of charging year-to-date tax every month", () => {
+    const scenario = {
+      ...base,
+      household: {
+        ...base.household,
+        people: [{
+          ...base.household.people[0],
+          otherIncome: 12000,
+          cppStartAge: 70 as const,
+          oasStartAge: 70 as const,
+        }],
+      },
+      goals: { ...base.goals, annualSpending: 0, planningAge: 66 },
+      accounts: [],
+    } satisfies RetirementScenario;
+
+    const result = runRetirementSimulation(scenario, 0, 2025);
+    expect(result.status).toBe("COMPLETE");
+    expect(result.monthly).toHaveLength(12);
+    const expectedAnnualTax = 0;
+    expect(result.metrics.lifetimeTax).toBeGreaterThanOrEqual(expectedAnnualTax);
+    expect(result.metrics.lifetimeTax).toBeLessThan(5000);
+  });
+
 });
