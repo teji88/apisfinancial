@@ -349,3 +349,29 @@ describe("retirement financial invariants", () => {
     }
   });
 
+
+
+describe("monthly cash flow reconciliation", () => {
+  it("keeps the asset ledger balanced through growth, contributions and withdrawals", () => {
+    const scenario = makeScenario({
+      goals: { ...makeScenario().goals, annualSpending: 12000, planningAge: 66 },
+      accounts: [{
+        id: "tfsa",
+        owner: "MAIN_USER",
+        type: "TFSA",
+        valuation: { mode: "MANUAL", value: 100000 },
+        contribution: { annualAmount: 12000 },
+      }],
+      assumptions: { ...makeScenario().assumptions, investmentReturn: 5, investmentFeeRate: 0 },
+      strategy: { withdrawalPolicy: "TFSA_FIRST", objective: "MAX_SUSTAINABLE_SPENDING" },
+    });
+
+    const result = runRetirementSimulation(scenario, 100000, 2025);
+    expect(result.status).toBe("COMPLETE");
+    for (const month of result.monthly) {
+      expect(month.cashFlow).toBeDefined();
+      expect(month.cashFlow!.assetReconciliation).toBeCloseTo(0, 7);
+      expect(month.cashFlow!.endingPortfolio).toBeCloseTo(month.portfolio, 7);
+    }
+  });
+});
