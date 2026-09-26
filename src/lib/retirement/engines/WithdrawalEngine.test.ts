@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { solveGrossWithdrawalForNetNeed } from "./WithdrawalEngine";
+import { chooseRegisteredWithdrawalOwner, solveGrossWithdrawalForNetNeed } from "./WithdrawalEngine";
 
 const base = {
   province: "AB" as const,
