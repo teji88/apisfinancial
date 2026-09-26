@@ -16,6 +16,10 @@ export interface PersonScenario {
   oasStartAge: number | "OPTIMIZE";
   oasResidenceYears: number;
   otherIncome?: Money;
+  /** Optional planning assumption; no identifying information. */
+  deathAge?: number;
+  /** Survivor CPP assumption as a percentage of the deceased person's CPP benefit. */
+  survivorCppPercent?: number;
 }
 
 export interface AccountScenario {
