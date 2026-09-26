@@ -38,6 +38,8 @@ export interface TaxResult {
   credits: number;
   dividendTaxCredit: number;
   foreignTaxCredit: number;
+  federalPensionIncomeCredit: number;
+  provincialPensionIncomeCredit: number;
 }
 
 function taxFromBrackets(income: number, brackets: readonly TaxBracket[]) {
@@ -73,9 +75,12 @@ function federalBasicCredit(): number {
   return CANADA_2026_PARAMETERS.tax.federalBasicPersonalAmount * 0.14;
 }
 
+function provincialBasicCreditRate(province: ProvinceCode): number {
+  return marginalBracketRate(0, bracketsForProvince(province));
+}
+
 function provincialBasicCredit(province: ProvinceCode): number {
-  const rate = marginalBracketRate(0, bracketsForProvince(province));
-  return provincialBasicPersonalAmount(province) * rate;
+  return provincialBasicPersonalAmount(province) * provincialBasicCreditRate(province);
 }
 
 function normalizeIncome(components: TaxIncomeComponents): Required<TaxIncomeComponents> {
@@ -172,9 +177,21 @@ export function calculateTaxFromIncome(
   const federalDividendCredit =
     ledgers.eligibleDividendGrossUp * CANADA_2026_PARAMETERS.tax.eligibleDividendFederalCreditRate +
     ledgers.nonEligibleDividendGrossUp * CANADA_2026_PARAMETERS.tax.nonEligibleDividendFederalCreditRate;
-  const credits = federalBasicCredit() + provincialBasicCredit(province) + federalDividendCredit;
-  const federalTax = Math.max(0, federalGross - federalBasicCredit() - federalDividendCredit);
-  const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province));
+  const pensionIncomeCreditBase = Math.max(0, ledgers.pensionIncomeCreditBase);
+  const federalPensionIncomeCredit = pensionIncomeCreditBase * CANADA_2026_PARAMETERS.tax.federalPensionIncomeCreditRate;
+  const provincialPensionIncomeCreditBase = Math.min(
+    pensionIncomeCreditBase,
+    CANADA_2026_PARAMETERS.tax.provincialPensionIncomeAmount[province] ?? 0,
+  );
+  const provincialPensionIncomeCredit = provincialPensionIncomeCreditBase * provincialBasicCreditRate(province);
+  const credits =
+    federalBasicCredit() +
+    provincialBasicCredit(province) +
+    federalDividendCredit +
+    federalPensionIncomeCredit +
+    provincialPensionIncomeCredit;
+  const federalTax = Math.max(0, federalGross - federalBasicCredit() - federalDividendCredit - federalPensionIncomeCredit);
+  const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province) - provincialPensionIncomeCredit);
   const oasRecovery = oasRecoveryForIncome(ledgers.netIncome, age);
   const foreignIncome = Math.max(0, ledgers.foreignIncome);
   const foreignTaxCredit = foreignIncome > 0
@@ -198,6 +215,8 @@ export function calculateTaxFromIncome(
     credits,
     dividendTaxCredit: federalDividendCredit,
     foreignTaxCredit,
+    federalPensionIncomeCredit,
+    provincialPensionIncomeCredit,
   };
 }
 
