@@ -155,7 +155,12 @@ export function runRetirementSimulation(
     const retired = alivePeople.some((person) => (ages[person.role] ?? 0) >= person.retirementAge);
     const allRetired = alivePeople.length > 0 && alivePeople.every((person) => (ages[person.role] ?? 0) >= person.retirementAge);
 
+    const calendarYear = date.getUTCFullYear();
     for (const account of accounts) {
+      if (account.minimumReferenceYear !== calendarYear && (account.type === "RRIF" || account.type === "LIF")) {
+        account.minimumReferenceBalance = account.balance;
+        account.minimumReferenceYear = calendarYear;
+      }
       account.balance = applyMonthlyReturn(
         account.balance,
         scenario.assumptions.investmentReturn,
@@ -226,6 +231,7 @@ export function runRetirementSimulation(
         account.type,
         ages[account.owner] ?? maxAge,
         account.balance,
+        account.minimumReferenceBalance ?? account.balance,
       );
     }
 
