@@ -6,6 +6,7 @@ import { solveGrossWithdrawalForNetNeed, chooseRegisteredWithdrawalOwner } from 
 import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, withdrawNonRegistered, estimateNonRegisteredMonthlyIncome, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 import { validateRetirementScenario } from "../validation/RetirementValidation";
 import { createDebtState, accrueDebtMonth, type DebtState } from "./DebtEngine";
+import { reconcileMonthlyCashFlow } from "./CashFlowEngine";
 
 function ageAtMonth(birthYear: number, birthMonth: number, date: Date) {
   return date.getUTCFullYear() - birthYear - (date.getUTCMonth() + 1 < birthMonth ? 1 : 0);
@@ -136,6 +137,9 @@ export function runRetirementSimulation(
   let previousStage: "BOTH_ALIVE" | "SURVIVOR" | "ESTATE" = "BOTH_ALIVE";
 
   for (let i = 0; i < months; i++) {
+    const beginningPortfolio = accounts.reduce((sum, account) => sum + Math.max(0, account.balance), 0);
+    let contributionsThisMonth = 0;
+    let investmentGrowthThisMonth = 0;
     const date = new Date(start.getTime());
     date.setUTCMonth(start.getUTCMonth() + i);
     const ages = Object.fromEntries(
@@ -153,11 +157,13 @@ export function runRetirementSimulation(
         account.minimumReferenceBalance = account.balance;
         account.minimumReferenceYear = calendarYear;
       }
+      const beforeReturn = account.balance;
       account.balance = applyMonthlyReturn(
         account.balance,
         scenario.assumptions.investmentReturn,
         scenario.assumptions.investmentFeeRate,
       );
+      investmentGrowthThisMonth += account.balance - beforeReturn;
 
       const ownerAge = ages[account.owner] ?? maxAge;
       if (
@@ -167,6 +173,7 @@ export function runRetirementSimulation(
       ) {
         const contribution = account.contributionAnnual / 12;
         account.balance += contribution;
+        contributionsThisMonth += contribution;
         if (account.type === "NON_REGISTERED") account.nonRegisteredAcb += contribution;
       }
     }
@@ -490,6 +497,18 @@ export function runRetirementSimulation(
     totalBenefits += benefits;
     maxShortfall = Math.max(maxShortfall, shortfall);
 
+    const cashFlow = reconcileMonthlyCashFlow({
+      beginningPortfolio,
+      investmentGrowth: investmentGrowthThisMonth,
+      contributions: contributionsThisMonth,
+      grossIncome: benefits + otherIncome + nonRegisteredInvestmentIncome,
+      withdrawals,
+      taxes: currentTax + deathTax,
+      spending: targetSpending,
+      debtPayments,
+      endingPortfolio: portfolio,
+    });
+
     monthly.push({
       date: date.toISOString(),
       ages,
@@ -510,6 +529,18 @@ export function runRetirementSimulation(
       debtInterest,
       debtPrincipal,
       shortfall,
+      cashFlow: {
+        beginningPortfolio,
+        investmentGrowth: investmentGrowthThisMonth,
+        contributions: contributionsThisMonth,
+        grossIncome: benefits + otherIncome + nonRegisteredInvestmentIncome,
+        grossWithdrawals: withdrawals,
+        taxes: currentTax + deathTax,
+        spending: targetSpending,
+        debtPayments,
+        endingPortfolio: portfolio,
+        assetReconciliation: cashFlow.assetReconciliation,
+      },
     });
 
     if (allRetired) spending *= 1 + monthlyInflation;
