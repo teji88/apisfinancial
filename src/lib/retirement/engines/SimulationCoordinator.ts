@@ -161,7 +161,9 @@ export function runRetirementSimulation(
         account.contributionAnnual > 0 &&
         (!account.contributionUntilAge || ownerAge < account.contributionUntilAge)
       ) {
-        account.balance += account.contributionAnnual / 12;
+        const contribution = account.contributionAnnual / 12;
+        account.balance += contribution;
+        if (account.type === "NON_REGISTERED") account.nonRegisteredAcb += contribution;
       }
     }
 
@@ -424,7 +426,7 @@ export function runRetirementSimulation(
         const treatment = applyAccountDeathTreatment(
           account,
           true,
-          scenarioAccount?.nonRegisteredAcb ?? 0,
+          account.nonRegisteredAcb,
           scenarioAccount?.deathTransfer ?? "SPOUSE",
         );
         if (treatment.transferredToSurvivor > 0) {
