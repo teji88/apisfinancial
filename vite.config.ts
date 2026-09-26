@@ -43,6 +43,10 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
+    define: {
+      "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(SUPABASE_PUBLIC_URL),
+      "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(SUPABASE_PUBLIC_KEY),
+    },
     resolve: {
       alias: {
         // Force the hoisted entities v4.5.0 copy; nested v7 breaks SSR.
