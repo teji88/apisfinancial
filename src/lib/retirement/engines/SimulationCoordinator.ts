@@ -1,8 +1,8 @@
 import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole, PersonScenario } from "../domain/types";
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
-import { estimateGovernmentBenefits } from "./BenefitEngine";
+import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
 import { calculateBasicTax } from "./TaxEngine";
-import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, type AccountState } from "./AccountEngine";
+import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 
 function ageAtMonth(birthYear: number, birthMonth: number, date: Date) {
   return date.getUTCFullYear() - birthYear - (date.getUTCMonth() + 1 < birthMonth ? 1 : 0);
@@ -143,6 +143,7 @@ export function runRetirementSimulation(
     let benefits = 0;
     let taxableBenefits = 0;
     let otherIncome = 0;
+    let survivorBenefits = 0;
 
     for (const person of alivePeople) {
       const age = ages[person.role] ?? 0;
@@ -170,6 +171,21 @@ export function runRetirementSimulation(
       otherIncome += (person.otherIncome ?? 0) / 12;
     }
 
+    if (stage === "SURVIVOR") {
+      const survivor = alivePeople[0];
+      const deceased = people.find((person) => person.role !== survivor?.role);
+      if (survivor && deceased) {
+        const deceasedP = deceased as PersonWithDeath;
+        const survivorAge = ages[survivor.role] ?? 0;
+        const deceasedCpp = estimateGovernmentBenefits(deceased, Math.max(0, (deceasedP.deathAge ?? 0) - 0.01), 0, { inflationRate: scenario.assumptions.inflationRate, calendarYear: date.getUTCFullYear() }).cpp;
+        const existingCpp = estimateGovernmentBenefits(survivor, survivorAge, priorYearTaxableIncome, { inflationRate: scenario.assumptions.inflationRate, calendarYear: date.getUTCFullYear() }).cpp;
+        const survivorCpp = estimateCppSurvivorAnnual(deceasedCpp, survivorAge, existingCpp, deceasedP.survivorCppPercent ?? 60);
+        survivorBenefits = survivorCpp / 12;
+        benefits += survivorBenefits;
+        taxableBenefits += survivorBenefits;
+      }
+    }
+
     let mandatoryWithdrawals = 0;
     for (const account of accounts) {
       mandatoryWithdrawals += mandatoryRegisteredWithdrawal(
@@ -181,7 +197,7 @@ export function runRetirementSimulation(
 
     const mandatoryTaken = withdrawFromBucket(accounts, "registered", mandatoryWithdrawals);
     const taxableMandatory = mandatoryTaken;
-    const targetSpending = retired ? spending : 0;
+    let targetSpending = retired ? spending : 0;\n    if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));\n    if (stage === "ESTATE") targetSpending = 0;
 
     const baseTaxableThisMonth = taxableBenefits + otherIncome + taxableMandatory;
     const baseTax = annualizedTax(
@@ -252,7 +268,7 @@ export function runRetirementSimulation(
       yearTaxableIncome = 0;
     }
 
-    const shortfall = Math.max(0, remainingNeed);
+    if (stage === "ESTATE") {\n      for (const account of accounts) {\n        const treatment = applyAccountDeathTreatment(account, false);\n        account.balance = treatment.estateValue;\n      }\n    }\n\n    const shortfall = Math.max(0, remainingNeed);
     const portfolio = accounts.reduce((sum, account) => sum + Math.max(0, account.balance), 0);
     const netWorth = portfolio;
 
@@ -298,7 +314,7 @@ export function runRetirementSimulation(
     "Simulation is deterministic and monthly; investment returns are smoothed rather than sequence-of-returns simulated.",
     "2026 federal and provincial tax brackets are loaded from the versioned rules dataset. Detailed credits, Quebec taxation and advanced tax rules remain incomplete.",
     "Non-registered withdrawals currently do not model security lots, adjusted cost base, dividends or capital-gain inclusion.",
-    "Death ages now transition the household through BOTH_ALIVE → SURVIVOR → ESTATE; survivor CPP/account death-tax treatment and pension splitting remain simplified.",
+    "Death ages now transition the household through BOTH_ALIVE → SURVIVOR → ESTATE; CPP survivor and account death treatment are modelled at a planning level, while final-return tax, beneficiary paperwork, ACB and detailed provincial estate rules remain simplified.",
     "GIS uses the prior-year household income ledger and published 2026 marital-status thresholds; detailed GIS table interpolation and earnings exemptions remain to be added.",
     "OAS recovery is modelled as an income-based estimate and is not yet tied to the actual OAS amount paid in each recovery period.",
   ];
