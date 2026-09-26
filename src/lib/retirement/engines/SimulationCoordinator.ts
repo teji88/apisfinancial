@@ -232,6 +232,23 @@ export function runRetirementSimulation(
       monthlyTaxInputs[account.owner].foreignTaxPaid =
         (monthlyTaxInputs[account.owner].foreignTaxPaid ?? 0) + investmentIncome.foreignTaxPaid;
     }
+    // Non-registered investment income is modeled as distributed cash in V1.
+    // The distribution therefore leaves the portfolio; otherwise the same
+    // dividend/interest would be both retained in the account and available
+    // for spending. Tax treatment remains attached to the income ledger above.
+    let investmentIncomeDistributed = 0;
+    for (const account of accounts) {
+      if (account.type !== "NON_REGISTERED" || account.balance <= 0) continue;
+      const income = estimateNonRegisteredMonthlyIncome(account);
+      const grossIncome =
+        income.eligibleCanadianDividends +
+        income.nonEligibleCanadianDividends +
+        income.interest +
+        income.foreignIncome;
+      const distributed = withdraw(account, Math.min(account.balance, grossIncome));
+      investmentIncomeDistributed += distributed;
+    }
+
     let survivorBenefits = 0;
     let deathTax = 0;
     let estateGross = 0;
@@ -305,7 +322,7 @@ export function runRetirementSimulation(
 
     const baseCashNeed = Math.max(0, targetSpending + debtPayments - benefits - otherIncome - nonRegisteredInvestmentIncome);
     let remainingNeed = Math.max(0, baseCashNeed - mandatoryTaken);
-    let withdrawals = mandatoryTaken;
+    let withdrawals = mandatoryTaken + investmentIncomeDistributed;
     let taxableWithdrawals = taxableMandatory;
 
     const registeredWithdrawalsByOwner: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
@@ -510,7 +527,7 @@ export function runRetirementSimulation(
       beginningPortfolio,
       investmentGrowth: investmentGrowthThisMonth,
       contributions: contributionsThisMonth,
-      grossIncome: benefits + otherIncome + nonRegisteredInvestmentIncome,
+      grossIncome: benefits + otherIncome,
       withdrawals,
       taxes: currentTax + deathTax,
       spending: targetSpending,
@@ -557,7 +574,7 @@ export function runRetirementSimulation(
         beginningPortfolio,
         investmentGrowth: investmentGrowthThisMonth,
         contributions: contributionsThisMonth,
-        grossIncome: benefits + otherIncome + nonRegisteredInvestmentIncome,
+        grossIncome: benefits + otherIncome,
         grossWithdrawals: withdrawals,
         taxes: currentTax + deathTax,
         spending: targetSpending,
