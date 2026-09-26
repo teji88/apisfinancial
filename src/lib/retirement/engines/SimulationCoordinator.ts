@@ -143,7 +143,7 @@ export function runRetirementSimulation(
     let benefits = 0;
     let taxableBenefits = 0;
     let otherIncome = 0;
-    let survivorBenefits = 0;
+    let survivorBenefits = 0;\n    let deathTax = 0;\n    let estateGross = 0;
 
     for (const person of alivePeople) {
       const age = ages[person.role] ?? 0;
@@ -268,12 +268,12 @@ export function runRetirementSimulation(
       yearTaxableIncome = 0;
     }
 
-    if (stage === "ESTATE") {\n      for (const account of accounts) {\n        const treatment = applyAccountDeathTreatment(account, false);\n        account.balance = treatment.estateValue;\n      }\n    }\n\n    const shortfall = Math.max(0, remainingNeed);
+    if (stage === "ESTATE") {\n      for (const account of accounts) {\n        const treatment = applyAccountDeathTreatment(account, false);\n        deathTax += calculateBasicTax(treatment.taxableAtDeath, scenario.household.province, maxAge).totalTax;\n        estateGross += treatment.estateValue + treatment.transferredToSurvivor;\n        account.balance = treatment.estateValue;\n      }\n    }\n\n    const shortfall = Math.max(0, remainingNeed);
     const portfolio = accounts.reduce((sum, account) => sum + Math.max(0, account.balance), 0);
     const netWorth = portfolio;
 
     lifetimeSpending += targetSpending;
-    lifetimeTax += currentTax;
+    lifetimeTax += currentTax + deathTax;
     totalBenefits += benefits;
     maxShortfall = Math.max(maxShortfall, shortfall);
 
@@ -291,7 +291,7 @@ export function runRetirementSimulation(
       grossIncome: benefits + otherIncome + withdrawals,
       benefits,
       withdrawals,
-      taxes: currentTax,
+      taxes: currentTax + deathTax,
       spending: targetSpending,
       shortfall,
     });
@@ -338,7 +338,7 @@ export function runRetirementSimulation(
       minimumPortfolio,
       maximumSpendingShortfall: maxShortfall,
       survivorShortfall: monthly.filter((x) => x.householdStage === "SURVIVOR").reduce((m, x) => Math.max(m, x.shortfall), 0),
-      estateValue: monthly.at(-1)?.householdStage === "ESTATE" ? endingPortfolio : undefined,
+      estateValue: monthly.at(-1)?.householdStage === "ESTATE" ? Math.max(0, estateGross - deathTax) : undefined,
     },
     warnings,
     assumptions: [
