@@ -14,6 +14,7 @@ export interface TaxIncomeComponents {
   nonEligibleCanadianDividends?: number;
   canadianDividends?: number;
   foreignIncome?: number;
+  foreignTaxPaid?: number;
   capitalGains?: number;
   deductions?: number;
   /** Eligible pension income received by this person. */
@@ -90,6 +91,7 @@ function normalizeIncome(components: TaxIncomeComponents): Required<TaxIncomeCom
     nonEligibleCanadianDividends: Math.max(0, components.nonEligibleCanadianDividends ?? 0),
     canadianDividends: Math.max(0, components.canadianDividends ?? 0),
     foreignIncome: Math.max(0, components.foreignIncome ?? 0),
+    foreignTaxPaid: Math.max(0, components.foreignTaxPaid ?? 0),
     capitalGains,
     deductions: Math.max(0, components.deductions ?? 0),
     eligiblePensionIncome: Math.max(0, components.eligiblePensionIncome ?? 0),
@@ -122,7 +124,9 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
   const pensionSplit = Math.min(pensionSplitEligible * 0.5, pensionSplitEligible * income.pensionSplitPercent / 100);
   const eligibleDividends = income.eligibleCanadianDividends;
   const nonEligibleDividends = income.nonEligibleCanadianDividends + income.canadianDividends;
-  const taxableCanadianDividends = eligibleDividends * 1.38 + nonEligibleDividends * 1.15;
+  const taxableCanadianDividends =
+    eligibleDividends * (1 + CANADA_2026_PARAMETERS.tax.eligibleDividendGrossUp) +
+    nonEligibleDividends * (1 + CANADA_2026_PARAMETERS.tax.nonEligibleDividendGrossUp);
   const totalIncome = ordinaryIncome + taxableCanadianDividends + income.capitalGains;
   const capitalGainInclusion = income.capitalGains * 0.5;
   const netIncomeBeforeDeductions = Math.max(0, ordinaryIncome + taxableCanadianDividends + capitalGainInclusion - pensionSplit);
@@ -132,8 +136,8 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
   return {
     ...income,
     ordinaryIncome,
-    eligibleDividendGrossUp: eligibleDividends * 0.38,
-    nonEligibleDividendGrossUp: nonEligibleDividends * 0.15,
+    eligibleDividendGrossUp: eligibleDividends * CANADA_2026_PARAMETERS.tax.eligibleDividendGrossUp,
+    nonEligibleDividendGrossUp: nonEligibleDividends * CANADA_2026_PARAMETERS.tax.nonEligibleDividendGrossUp,
     taxableCanadianDividends,
     capitalGainInclusion,
     totalIncome,
@@ -165,7 +169,9 @@ export function calculateTaxFromIncome(
   const provincialBrackets = bracketsForProvince(province);
   const federalGross = taxFromBrackets(ledgers.taxableIncome, federalBrackets);
   const provincialGross = taxFromBrackets(ledgers.taxableIncome, provincialBrackets);
-  const federalDividendCredit = ledgers.eligibleDividendGrossUp * (6 / 11) + ledgers.nonEligibleDividendGrossUp * (9 / 13);
+  const federalDividendCredit =
+    ledgers.eligibleDividendGrossUp * CANADA_2026_PARAMETERS.tax.eligibleDividendFederalCreditRate +
+    ledgers.nonEligibleDividendGrossUp * CANADA_2026_PARAMETERS.tax.nonEligibleDividendFederalCreditRate;
   const credits = federalBasicCredit() + provincialBasicCredit(province) + federalDividendCredit;
   const federalTax = Math.max(0, federalGross - federalBasicCredit() - federalDividendCredit);
   const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province));
