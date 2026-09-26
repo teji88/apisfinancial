@@ -98,7 +98,7 @@ export function applyAccountDeathTreatment(
   if (state.type === "TFSA" && deathTransfer === "SPOUSE") {
     return { transferredToSurvivor: value, taxableAtDeath: 0, estateValue: 0, notes: ["Modeled as spouse successor-holder treatment where available."], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
   }
-  if (state.type === "RRSP" || state.type === "RRIF") {
+  if (state.type === "RRSP" || state.type === "RRIF" || state.type === "LIRA" || state.type === "LIF") {
     return { transferredToSurvivor: 0, taxableAtDeath: value, estateValue: value, notes: ["Registered account included as taxable death value; final-return details are simplified."], capitalGainAtDeath: 0, taxableCapitalGainAtDeath: 0 };
   }
 
