@@ -172,9 +172,10 @@ export function withdrawNonRegistered(state: AccountState, amount: Money): { tak
   const taken = withdraw(state, amount);
   if (taken <= 0) return { taken: 0, realizedCapitalGain: 0, returnOfCapital: 0 };
   const startingBalance = state.balance + taken;
-  const acbRatio = startingBalance > 0 ? Math.min(1, Math.max(0, state.nonRegisteredAcb / startingBalance)) : 0;
+  const startingAcb = Number.isFinite(state.nonRegisteredAcb) ? state.nonRegisteredAcb : state.startingValue;
+  const acbRatio = startingBalance > 0 ? Math.min(1, Math.max(0, startingAcb / startingBalance)) : 0;
   const returnOfCapital = Math.min(taken, taken * acbRatio);
   const realizedCapitalGain = Math.max(0, taken - returnOfCapital);
-  state.nonRegisteredAcb = Math.max(0, state.nonRegisteredAcb - returnOfCapital);
+  state.nonRegisteredAcb = Math.max(0, startingAcb - returnOfCapital);
   return { taken, realizedCapitalGain, returnOfCapital };
 }
