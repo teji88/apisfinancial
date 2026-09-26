@@ -4,7 +4,7 @@ import { calculateTaxFromIncome, buildTaxIncome } from "./TaxEngine";
 describe("Canadian investment income taxation", () => {
   it("grosses up eligible dividends at 138%", () => {
     const ledgers = buildTaxIncome({ eligibleCanadianDividends: 10_000 });
-    expect(ledgers.taxableCanadianDividends).toBe(13_800);
+    expect(ledgers.taxableCanadianDividends).toBeCloseTo(13_800, 10);
     expect(ledgers.eligibleDividendGrossUp).toBe(3_800);
   });
 
