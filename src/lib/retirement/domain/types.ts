@@ -105,6 +105,10 @@ export interface MonthlyCashFlowSnapshot {
   debtPayments: Money;
   endingPortfolio: Money;
   assetReconciliation: Money;
+  externalCashChange?: Money;
+  debtReconciliation?: Money;
+  netWorthReconciliation?: Money;
+  financialLedger?: MonthlyFinancialLedger;
 }
 
 export interface MonthlySnapshot {
