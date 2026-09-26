@@ -3,6 +3,7 @@ import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
 import { calculateBasicTax } from "./TaxEngine";
 import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
+import { validateRetirementScenario } from "../validation/RetirementValidation";
 
 function ageAtMonth(birthYear: number, birthMonth: number, date: Date) {
   return date.getUTCFullYear() - birthYear - (date.getUTCMonth() + 1 < birthMonth ? 1 : 0);
