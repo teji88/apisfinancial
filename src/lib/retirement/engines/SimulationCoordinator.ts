@@ -622,6 +622,7 @@ export function runRetirementSimulation(
         endingHouseholdCash: householdCash,
         assetReconciliation: cashFlow.assetReconciliation,
         cashReconciliation: financialLedger.cashReconciliation,
+        cashShortfall: financialLedger.cashShortfall,
         externalCashChange: financialLedger.externalCashChange,
         debtReconciliation: financialLedger.debtReconciliation,
         netWorthReconciliation: financialLedger.netWorthReconciliation,
