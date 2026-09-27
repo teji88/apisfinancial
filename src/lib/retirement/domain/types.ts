@@ -96,6 +96,7 @@ export interface RetirementScenario {
 
 export interface MonthlyCashFlowSnapshot {
   beginningPortfolio: Money;
+  beginningHouseholdCash: Money;
   investmentGrowth: Money;
   contributions: Money;
   grossIncome: Money;
@@ -104,7 +105,9 @@ export interface MonthlyCashFlowSnapshot {
   spending: Money;
   debtPayments: Money;
   endingPortfolio: Money;
+  endingHouseholdCash: Money;
   assetReconciliation: Money;
+  cashReconciliation: Money;
   externalCashChange?: Money;
   debtReconciliation?: Money;
   netWorthReconciliation?: Money;
@@ -119,6 +122,7 @@ export interface MonthlySnapshot {
   tfsa: Money;
   nonRegistered: Money;
   cash: Money;
+  householdCash: Money;
   debt: Money;
   netWorth: Money;
   grossIncome: Money;
