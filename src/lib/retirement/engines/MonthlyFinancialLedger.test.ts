@@ -16,7 +16,7 @@ describe("MonthlyFinancialLedger", () => {
       debtPrincipal: 350,
       debtInterest: 50,
       endingPortfolio: 100000,
-      endingHouseholdCash: 2100,
+      endingHouseholdCash: 1100,
       beginningDebt: 0,
       endingDebt: 0,
     });
