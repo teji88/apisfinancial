@@ -160,41 +160,20 @@ export function buildRetirementAnalysis(result: SimulationResult | null): Analys
     otherCash = latest.cash + latest.householdCash;
   }
 
-  const withdrawal = result.monthly.reduce<WithdrawalAnalysis>((sum, month, index, months) => {
-    const previous = index === 0 ? 0 : months[index - 1]!.portfolio;
-    const growth = month.cashFlow?.investmentGrowth ?? 0;
-    const contributions = month.cashFlow?.contributions ?? 0;
-    // Portfolio bucket balances do not expose the exact source of each
-    // discretionary withdrawal, so registered/TFSA/non-registered amounts are
-    // estimated from month-over-month balance changes after growth/contributions.
-    // This is intentionally labelled as an allocation estimate in the UI.
-    const portfolioWithdrawal = Math.max(
-      0,
-      previous + growth + contributions - month.portfolio,
-    );
-    const bucketPrevious = index === 0 ? {
-      registered: month.registered,
-      tfsa: month.tfsa,
-      nonRegistered: month.nonRegistered,
-    } : {
-      registered: months[index - 1]!.registered,
-      tfsa: months[index - 1]!.tfsa,
-      nonRegistered: months[index - 1]!.nonRegistered,
-    };
-    const bucketDrops = [
-      Math.max(0, bucketPrevious.registered + growth * (bucketPrevious.registered / Math.max(1, previous)) - month.registered),
-      Math.max(0, bucketPrevious.tfsa + growth * (bucketPrevious.tfsa / Math.max(1, previous)) - month.tfsa),
-      Math.max(0, bucketPrevious.nonRegistered + growth * (bucketPrevious.nonRegistered / Math.max(1, previous)) - month.nonRegistered),
-    ];
-    const allocated = bucketDrops.reduce((a, b) => a + b, 0);
-    const scale = allocated > 0 ? Math.min(1, portfolioWithdrawal / allocated) : 0;
-    sum.registered += bucketDrops[0]! * scale;
-    sum.tfsa += bucketDrops[1]! * scale;
-    sum.nonRegistered += bucketDrops[2]! * scale;
-    sum.otherCash += Math.max(0, month.withdrawals - portfolioWithdrawal);
-    sum.total += month.withdrawals;
+  const withdrawal = result.monthly.reduce<WithdrawalAnalysis>((sum, month) => {
+    const sources = month.withdrawalSources;
+    if (!sources) return sum;
+    sum.registered += sources.registered;
+    sum.tfsa += sources.tfsa;
+    sum.nonRegistered += sources.nonRegistered;
+    sum.otherCash += sources.cash;
     return sum;
   }, { total: 0, registered: 0, tfsa: 0, nonRegistered: 0, otherCash: 0 });
+  withdrawal.total =
+    withdrawal.registered +
+    withdrawal.tfsa +
+    withdrawal.nonRegistered +
+    withdrawal.otherCash;
 
   const peakTax = maxBy(annual, (row) => row.taxes);
   const peakShortfall = maxBy(annual, (row) => row.shortfall);
