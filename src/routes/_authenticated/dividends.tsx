@@ -76,7 +76,7 @@ type ReviewDraft = {
   units: number;
   perShare: number;
   amount: number;
-  transactionId?: string;
+  transactionId?: string | undefined;
   withholdingRate: number;
 };
 

@@ -87,9 +87,9 @@ export type DividendSuggestion = {
   /** Amount that should be in the ledger (net of any legitimate withholding). */
   expected: number;
   /** For fixes: the existing transaction and what it currently says. */
-  transactionId?: string;
-  recordedAmount?: number;
-  recordedDate?: string;
+  transactionId?: string | undefined;
+  recordedAmount?: number | undefined;
+  recordedDate?: string | undefined;
   reasons: string[];
 };
 
