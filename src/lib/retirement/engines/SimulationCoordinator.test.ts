@@ -79,4 +79,29 @@ describe("retirement simulation validation boundary", () => {
     expect(result.metrics.lifetimeTax).toBeCloseTo(expectedAnnualTax, 6);
   });
 
+  it("tracks survivor transfers and final estate tax outcomes", () => {
+    const survivorScenario = {
+      ...base,
+      household: {
+        ...base.household,
+        people: [
+          { ...base.household.people[0], birthYear: 1955, deathAge: 70, survivorCppPercent: 60 },
+          { role: "PARTNER" as const, birthYear: 1955, birthMonth: 1, retirementAge: 65, cppStartAge: 65 as const, oasStartAge: 65 as const, oasResidenceYears: 40, deathAge: 90 },
+        ],
+      },
+      goals: { ...base.goals, annualSpending: 0, planningAge: 90 },
+      accounts: [
+        { id: "main-rrsp", owner: "MAIN_USER" as const, type: "RRSP" as const, valuation: { mode: "MANUAL" as const, value: 100_000 }, deathTransfer: "SPOUSE" as const },
+        { id: "partner-nr", owner: "PARTNER" as const, type: "NON_REGISTERED" as const, valuation: { mode: "MANUAL" as const, value: 100_000 }, nonRegisteredAcb: 50_000, deathTransfer: "ESTATE" as const },
+      ],
+    } satisfies RetirementScenario;
+
+    const result = runRetirementSimulation(survivorScenario, 200_000, 2026);
+    expect(result.status).toBe("COMPLETE");
+    expect(result.metrics.survivorTransferredAssets).toBeGreaterThan(0);
+    expect(result.metrics.estateValue).toBeDefined();
+    expect(result.metrics.deathCapitalGains).toBeGreaterThan(0);
+    expect(result.metrics.estateTax).toBeGreaterThan(0);
+  });
+
 });
