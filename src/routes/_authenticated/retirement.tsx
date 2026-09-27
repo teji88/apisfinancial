@@ -609,10 +609,18 @@ function ScenarioResults({ summaries }: { summaries: ScenarioSummary[] }) {
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="panel p-5">
           <h3 className="font-display font-semibold">Government benefits</h3>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Lifetime modeled CPP/QPP, OAS and GIS benefits total <span className="num font-medium text-foreground">{formatCad(result.metrics.totalBenefits)}</span>.
-            Benefit timing and survivor effects can be examined in the monthly timeline.
-          </p>
+          <p className="mt-2 text-sm text-muted-foreground">Lifetime modeled benefits total <span className="num font-medium text-foreground">{formatCad(result.metrics.totalBenefits)}</span>.</p>
+          <div className="mt-4 space-y-2 text-sm">
+            {[
+              ["CPP / QPP", analysis.annual.reduce((sum, row) => sum + row.cpp, 0)],
+              ["OAS", analysis.annual.reduce((sum, row) => sum + row.oas, 0)],
+              ["GIS", analysis.annual.reduce((sum, row) => sum + row.gis, 0)],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="flex justify-between border-b pb-2 last:border-0">
+                <span>{String(label)}</span><span className="num font-semibold">{formatCad(Number(value))}</span>
+              </div>
+            ))}
+          </div>
         </div>
         <div className="panel p-5">
           <h3 className="font-display font-semibold">Debt</h3>
