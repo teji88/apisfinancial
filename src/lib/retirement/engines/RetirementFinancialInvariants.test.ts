@@ -373,6 +373,74 @@ describe("retirement financial invariants", () => {
   });
 
 describe("monthly cash flow reconciliation", () => {
+
+  it("accumulates household cash from surplus income and includes it in net worth", () => {
+    const scenario = makeScenario({
+      goals: { ...makeScenario().goals, annualSpending: 6000, planningAge: 66 },
+      household: {
+        ...makeScenario().household,
+        people: [{
+          ...makeScenario().household.people[0]!,
+          otherIncome: 12000,
+          cppAt65: 0,
+          cppStartAge: 70,
+          oasStartAge: 70,
+        }],
+      },
+      accounts: [{
+        id: "tfsa",
+        owner: "MAIN_USER",
+        type: "TFSA",
+        valuation: { mode: "MANUAL", value: 100000 },
+      }],
+      assumptions: { ...makeScenario().assumptions, investmentReturn: 0, investmentFeeRate: 0 },
+      strategy: { withdrawalPolicy: "TFSA_FIRST", objective: "MAX_SUSTAINABLE_SPENDING" },
+    });
+
+    const result = runRetirementSimulation(scenario, 100000, 2025);
+    const first = result.monthly[0]!;
+    const last = result.monthly.at(-1)!;
+
+    expect(first.householdCash).toBeCloseTo(500, 8);
+    expect(first.portfolio).toBeCloseTo(100000, 8);
+    expect(first.netWorth).toBeCloseTo(first.portfolio + first.householdCash, 8);
+    expect(first.cashFlow?.cashReconciliation).toBeCloseTo(0, 8);
+    expect(last.householdCash).toBeGreaterThan(0);
+    expect(last.netWorth).toBeCloseTo(last.portfolio + last.householdCash, 8);
+  });
+
+  it("reconciles household cash, portfolio assets, debt and net worth together", () => {
+    const scenario = makeScenario({
+      goals: { ...makeScenario().goals, annualSpending: 6000, planningAge: 66 },
+      household: {
+        ...makeScenario().household,
+        people: [{
+          ...makeScenario().household.people[0]!,
+          otherIncome: 12000,
+          cppAt65: 0,
+          cppStartAge: 70,
+          oasStartAge: 70,
+        }],
+      },
+      accounts: [{
+        id: "tfsa",
+        owner: "MAIN_USER",
+        type: "TFSA",
+        valuation: { mode: "MANUAL", value: 100000 },
+      }],
+      assumptions: { ...makeScenario().assumptions, investmentReturn: 0, investmentFeeRate: 0 },
+    });
+
+    const result = runRetirementSimulation(scenario, 100000, 2025);
+    for (const month of result.monthly) {
+      expect(month.cashFlow?.assetReconciliation).toBeCloseTo(0, 8);
+      expect(month.cashFlow?.cashReconciliation).toBeCloseTo(0, 8);
+      expect(month.cashFlow?.netWorthReconciliation).toBeCloseTo(0, 8);
+      expect(month.netWorth).toBeCloseTo(month.portfolio + month.householdCash - month.debt, 8);
+    }
+  });
+
+
   it("keeps the asset ledger balanced through growth, contributions and withdrawals", () => {
     const scenario = makeScenario({
       goals: { ...makeScenario().goals, annualSpending: 12000, planningAge: 66 },
