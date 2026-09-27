@@ -164,6 +164,9 @@ export interface SimulationMetrics {
   endingDebt?: Money;
   survivorShortfall?: Money;
   estateValue?: Money;
+  estateTax?: Money;
+  deathCapitalGains?: Money;
+  survivorTransferredAssets?: Money;
 }
 
 export interface SimulationResult {
