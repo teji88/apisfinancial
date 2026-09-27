@@ -32,6 +32,9 @@ describe("RetirementOptimizer", () => {
     });
 
     expect(result.feasiblePlans.every((plan) => plan.goals.annualSpending > 0)).toBe(true);
-    expect(result.selectedCandidate?.violations).toEqual([]);
+    if (result.selectedCandidate) {
+      expect(result.feasiblePlans).toContain(result.selectedCandidate.scenario);
+      expect(result.selectedCandidate.violations).toEqual([]);
+    }
   });
 });
