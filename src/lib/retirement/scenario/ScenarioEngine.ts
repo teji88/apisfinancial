@@ -9,6 +9,14 @@ export type StressTestKind =
   | "POOR_SEQUENCE"
   | "LONGER_LIFE"
   | "EARLIER_RETIREMENT"
+  | "LATER_RETIREMENT"
+  | "LOWER_SPENDING"
+  | "HIGHER_SPENDING"
+  | "CPP_60"
+  | "CPP_65"
+  | "CPP_70"
+  | "OAS_65"
+  | "OAS_70"
   | "SURVIVOR";
 
 export interface StressTestDefinition {
@@ -114,6 +122,67 @@ export const DEFAULT_STRESS_TESTS: StressTestDefinition[] = [
       next.household.people = next.household.people.map((p) => ({ ...p, retirementAge: Math.max(50, p.retirementAge - 3) }));
       return next;
     },
+  },
+  {
+    kind: "LATER_RETIREMENT",
+    name: "Later retirement",
+    description: "Moves the retirement target 2 years later.",
+    assumptions: {},
+    apply: (s) => {
+      const next = cloneScenario(s);
+      next.goals.retirementAge += 2;
+      next.household.people = next.household.people.map((p) => ({ ...p, retirementAge: p.retirementAge + 2 }));
+      return next;
+    },
+  },
+  {
+    kind: "LOWER_SPENDING",
+    name: "Lower spending",
+    description: "Reduces planned annual spending by 10%.",
+    assumptions: {},
+    apply: (s) => ({ ...cloneScenario(s), goals: { ...s.goals, annualSpending: s.goals.annualSpending * 0.9 } }),
+  },
+  {
+    kind: "HIGHER_SPENDING",
+    name: "Higher spending",
+    description: "Increases planned annual spending by 10%.",
+    assumptions: {},
+    apply: (s) => ({ ...cloneScenario(s), goals: { ...s.goals, annualSpending: s.goals.annualSpending * 1.1 } }),
+  },
+  {
+    kind: "CPP_60",
+    name: "CPP/QPP at 60",
+    description: "Starts CPP/QPP at age 60 for each household member.",
+    assumptions: {},
+    apply: (s) => withAllPeople(s, (p) => ({ ...p, cppStartAge: 60 })),
+  },
+  {
+    kind: "CPP_65",
+    name: "CPP/QPP at 65",
+    description: "Starts CPP/QPP at age 65 for each household member.",
+    assumptions: {},
+    apply: (s) => withAllPeople(s, (p) => ({ ...p, cppStartAge: 65 })),
+  },
+  {
+    kind: "CPP_70",
+    name: "CPP/QPP at 70",
+    description: "Starts CPP/QPP at age 70 for each household member.",
+    assumptions: {},
+    apply: (s) => withAllPeople(s, (p) => ({ ...p, cppStartAge: 70 })),
+  },
+  {
+    kind: "OAS_65",
+    name: "OAS at 65",
+    description: "Starts OAS at age 65 for each household member.",
+    assumptions: {},
+    apply: (s) => withAllPeople(s, (p) => ({ ...p, oasStartAge: 65 })),
+  },
+  {
+    kind: "OAS_70",
+    name: "OAS at 70",
+    description: "Starts OAS at age 70 for each household member.",
+    assumptions: {},
+    apply: (s) => withAllPeople(s, (p) => ({ ...p, oasStartAge: 70 })),
   },
   {
     kind: "SURVIVOR",
