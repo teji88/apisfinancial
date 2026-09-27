@@ -170,10 +170,20 @@ export interface SimulationResult {
   scenarioHash: string;
 }
 
+export interface OptimizationCandidate {
+  scenario: RetirementScenario;
+  metrics: SimulationMetrics;
+  objectiveValue: number;
+  violations: string[];
+}
+
 export interface OptimizationResult {
+  candidates: OptimizationCandidate[];
   feasiblePlans: RetirementScenario[];
   paretoFrontier: RetirementScenario[];
+  paretoCandidates: OptimizationCandidate[];
   selectedPlan?: RetirementScenario;
+  selectedCandidate?: OptimizationCandidate;
   objective: StrategyPreferences["objective"];
   constraints: { name: string; satisfied: boolean; value?: number; limit?: number }[];
 }
