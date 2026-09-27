@@ -127,6 +127,11 @@ export interface MonthlySnapshot {
   netWorth: Money;
   grossIncome: Money;
   benefits: Money;
+  benefitSources?: {
+    cpp: Money;
+    oas: Money;
+    gis: Money;
+  };
   withdrawals: Money;
   withdrawalSources?: {
     registered: Money;
