@@ -87,4 +87,28 @@ describe("MonthlyFinancialLedger", () => {
     });
     expect(ledger.externalCashChange).toBeCloseTo(100, 8);
   });
+  it("reports an unmet cash need separately from reconciliation", () => {
+    const ledger = reconcileMonthlyFinancialLedger({
+      beginningPortfolio: 10000,
+      beginningHouseholdCash: 0,
+      investmentGrowth: 0,
+      contributions: 0,
+      grossIncome: 0,
+      withdrawals: 0,
+      taxes: 0,
+      spending: 1200,
+      debtPayments: 0,
+      debtPrincipal: 0,
+      debtInterest: 0,
+      endingPortfolio: 10000,
+      endingHouseholdCash: 0,
+      beginningDebt: 0,
+      endingDebt: 0,
+    });
+
+    expect(ledger.cashShortfall).toBeCloseTo(1200, 10);
+    expect(ledger.cashReconciliation).toBeCloseTo(0, 10);
+    expect(ledger.warnings).not.toContain("Household cash ledger does not reconcile for this month.");
+  });
+
 });
