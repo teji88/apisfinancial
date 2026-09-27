@@ -2,6 +2,7 @@ import type { Money } from "../domain/types";
 
 export interface MonthlyFinancialLedgerInput {
   beginningPortfolio: Money;
+  beginningHouseholdCash: Money;
   investmentGrowth: Money;
   contributions: Money;
   grossIncome: Money;
@@ -12,6 +13,7 @@ export interface MonthlyFinancialLedgerInput {
   debtPrincipal: Money;
   debtInterest: Money;
   endingPortfolio: Money;
+  endingHouseholdCash: Money;
   beginningDebt: Money;
   endingDebt: Money;
 }
@@ -19,17 +21,20 @@ export interface MonthlyFinancialLedgerInput {
 /**
  * Explicit accounting ledger for one simulation month.
  *
- * Household cash is intentionally not a modeled account in V1. The external
- * cash change therefore shows the amount of cash that must be supplied by or
- * retained outside the investment accounts for the month to balance.
+ * Household cash is a modeled balance-sheet asset. Portfolio withdrawals and
+ * external income flow into household cash; spending, taxes and debt payments
+ * flow out of it.
  */
 export interface MonthlyFinancialLedger {
   beginningAssets: Money;
   endingAssets: Money;
+  beginningHouseholdCash: Money;
+  endingHouseholdCash: Money;
   investmentGrowth: Money;
   contributions: Money;
   withdrawals: Money;
   assetReconciliation: Money;
+  cashReconciliation: Money;
   beginningDebt: Money;
   endingDebt: Money;
   debtInterest: Money;
@@ -62,20 +67,20 @@ export function reconcileMonthlyFinancialLedger(
     input.beginningDebt + input.debtInterest - input.debtPrincipal;
   const debtReconciliation = input.endingDebt - expectedEndingDebt;
 
-  const beginningNetWorth = input.beginningPortfolio - input.beginningDebt;
-  const endingNetWorth = input.endingPortfolio - input.endingDebt;
-  // Household cash is not a modeled balance-sheet asset in V1. Therefore the
-  // net-worth ledger reconciles only the modeled investment assets and debt;
-  // externalCashChange is reported separately as a diagnostic so it cannot be
-  // mistaken for investment performance or silently omitted.
-  const assetChange = input.endingPortfolio - input.beginningPortfolio;
+  const beginningNetWorth = input.beginningPortfolio + input.beginningHouseholdCash - input.beginningDebt;
+  const endingNetWorth = input.endingPortfolio + input.endingHouseholdCash - input.endingDebt;
+  const cashReconciliation =
+    input.endingHouseholdCash -
+    (input.beginningHouseholdCash +
+      input.grossIncome +
+      input.withdrawals -
+      input.taxes -
+      input.spending -
+      input.debtPayments);
+  const assetChange =
+    (input.endingPortfolio + input.endingHouseholdCash) -
+    (input.beginningPortfolio + input.beginningHouseholdCash);
   const debtChange = input.endingDebt - input.beginningDebt;
-  const externalCashChange =
-    input.grossIncome +
-    input.withdrawals -
-    input.taxes -
-    input.spending -
-    input.debtPayments;
   const netWorthReconciliation =
     endingNetWorth -
     beginningNetWorth -
@@ -85,6 +90,9 @@ export function reconcileMonthlyFinancialLedger(
   if (Math.abs(assetReconciliation) > EPSILON) {
     warnings.push("Portfolio asset ledger does not reconcile for this month.");
   }
+  if (Math.abs(cashReconciliation) > EPSILON) {
+    warnings.push("Household cash ledger does not reconcile for this month.");
+  }
   if (Math.abs(debtReconciliation) > EPSILON) {
     warnings.push("Debt liability ledger does not reconcile for this month.");
   }
@@ -93,12 +101,15 @@ export function reconcileMonthlyFinancialLedger(
   }
 
   return {
-    beginningAssets: input.beginningPortfolio,
-    endingAssets: input.endingPortfolio,
+    beginningAssets: input.beginningPortfolio + input.beginningHouseholdCash,
+    endingAssets: input.endingPortfolio + input.endingHouseholdCash,
+    beginningHouseholdCash: input.beginningHouseholdCash,
+    endingHouseholdCash: input.endingHouseholdCash,
     investmentGrowth: input.investmentGrowth,
     contributions: input.contributions,
     withdrawals: input.withdrawals,
     assetReconciliation,
+    cashReconciliation,
     beginningDebt: input.beginningDebt,
     endingDebt: input.endingDebt,
     debtInterest: input.debtInterest,
