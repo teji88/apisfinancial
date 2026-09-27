@@ -15,6 +15,7 @@ import {
   runBasicSimulation,
   runStressTests,
   summarizeStressTests,
+  DEFAULT_STRESS_TESTS,
   scenarioStatusText,
   type ScenarioStressTestResult,
   type ScenarioSummary,
@@ -286,7 +287,7 @@ function Overview({
         </div>
       )}
 
-      {stressResults && <StressOverview stressResults={stressResults} onScenarios={() => {}} />}
+      {stressResults && <StressOverview stressResults={stressResults} onScenarios={() => setSection("scenarios")} />}
 
       {optimization && (
         <div className="panel p-5">
@@ -551,32 +552,36 @@ function ScenarioPanel({
   onStress: (result: ScenarioStressTestResult) => void;
   running: boolean;
 }) {
-  const stress = (
-    label: string,
-    patch: Partial<RetirementScenario["assumptions"]>,
-  ) => {
-    const next = {
-      ...scenario,
-      name: label,
-      assumptions: { ...scenario.assumptions, ...patch },
-      id: crypto.randomUUID(),
-      metadata: { ...scenario.metadata, createdAt: new Date().toISOString() },
-    };
+  const runDefinition = (definition: (typeof DEFAULT_STRESS_TESTS)[number]) => {
+    const next = definition.apply(scenario);
+    next.id = crypto.randomUUID();
+    next.name = definition.name;
+    next.metadata = { ...next.metadata, createdAt: new Date().toISOString() };
     void onRun(next);
   };
 
   const runAllStressTests = () => {
-    const result = runStressTests(
-      scenario,
-      portfolio.total,
-      portfolio.byType,
-    );
-    onStress(result);
+    onStress(runStressTests(scenario, portfolio.total, portfolio.byType));
   };
 
   const summaries = stressResults
-    ? summarizeStressTests(stressResults).filter((s) => s.kind !== "BASE")
+    ? summarizeStressTests(stressResults)
     : [];
+
+  const groups = [
+    {
+      title: "Retirement & spending",
+      kinds: ["EARLIER_RETIREMENT", "LATER_RETIREMENT", "LOWER_SPENDING", "HIGHER_SPENDING"],
+    },
+    {
+      title: "Government benefit timing",
+      kinds: ["CPP_60", "CPP_65", "CPP_70", "OAS_65", "OAS_70"],
+    },
+    {
+      title: "Economic & longevity",
+      kinds: ["LOW_RETURN", "HIGH_INFLATION", "POOR_SEQUENCE", "LONGER_LIFE", "SURVIVOR"],
+    },
+  ] as const;
 
   return (
     <div className="space-y-5">
@@ -584,42 +589,40 @@ function ScenarioPanel({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="font-display text-xl font-semibold">Scenarios</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Stress the same plan without changing the linked portfolio or base scenario.
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Create reproducible what-if versions of the current plan. Each scenario is calculated independently and does not change the Portfolio Tracker.
             </p>
           </div>
           <Button onClick={runAllStressTests} disabled={running}>
-            {running ? "Calculating…" : "Run all stress tests"}
+            {running ? "Calculating…" : "Run all scenarios"}
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <ScenarioCard
-          title="Base plan"
-          text={`${scenario.assumptions.investmentReturn}% return / ${scenario.assumptions.inflationRate}% inflation`}
-          onClick={() => onRun()}
-          disabled={running}
-        />
-        <ScenarioCard
-          title="Lower returns"
-          text="2 percentage points below the base return"
-          onClick={() => stress("Lower-return stress", {
-            investmentReturn: Math.max(-5, scenario.assumptions.investmentReturn - 2),
-          })}
-          disabled={running}
-        />
-        <ScenarioCard
-          title="Higher inflation"
-          text="2 percentage points above the base inflation assumption"
-          onClick={() => stress("Higher-inflation stress", {
-            inflationRate: scenario.assumptions.inflationRate + 2,
-          })}
-          disabled={running}
-        />
-      </div>
+      {groups.map((group) => (
+        <div key={group.title} className="panel p-5">
+          <h3 className="font-display text-lg font-semibold">{group.title}</h3>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {group.kinds.map((kind) => {
+              const definition = DEFAULT_STRESS_TESTS.find((item) => item.kind === kind);
+              if (!definition) return null;
+              return (
+                <ScenarioCard
+                  key={definition.kind}
+                  title={definition.name}
+                  text={definition.description}
+                  onClick={() => runDefinition(definition)}
+                  disabled={running}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
 
-      {summaries.length > 0 && <ScenarioResults summaries={summaries} />}
+      {summaries.length > 0 && (
+        <ScenarioResults summaries={summaries} />
+      )}
 
       {stressResults?.warnings.length ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
