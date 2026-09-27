@@ -636,3 +636,92 @@ export async function seedLibrary(batchSize = 12): Promise<{
 
   return { remaining: pending.length - attempted.length, attempted, seeded, failed };
 }
+
+// ------------------------------------------------------------- dividends
+
+export type DividendEvent = {
+  exDate: string;
+  payDate: string | null;
+  amount: number;
+  currency: string;
+};
+
+const divMemory = new Map<string, { at: number; value: DividendEvent[] | null }>();
+
+/**
+ * Full dividend history for a symbol from TMX (covers TSX, TSXV and US
+ * listings), going back to `since`.
+ */
+export async function fetchDividendHistory(
+  raw: string,
+  since: string,
+): Promise<DividendEvent[] | null> {
+  const s = feedSymbol(raw);
+  let tmxSymbol: string;
+  if (/\.(TO|V|NE|CN)$/.test(s)) {
+    tmxSymbol = s.replace(/\.(TO|V|NE|CN)$/, "").replace(/-(UN|U)$/, ".$1");
+  } else {
+    tmxSymbol = `${s.replace(/\.US$/, "")}:US`;
+  }
+  const key = `${tmxSymbol}|${since}`;
+  const hit = divMemory.get(key);
+  if (hit && Date.now() - hit.at < MEM_TTL) return hit.value;
+
+  const out: DividendEvent[] = [];
+  let ok = false;
+  for (let page = 1; page <= 20; page++) {
+    const res = await fetchRetry("https://app-money.tmx.com/graphql", {
+      method: "POST",
+      headers: { "User-Agent": UA, "Content-Type": "application/json", locale: "en" },
+      body: JSON.stringify({
+        operationName: "getDividendsForSymbol",
+        variables: { symbol: tmxSymbol, page, batch: 100 },
+        query:
+          "query getDividendsForSymbol($symbol: String!, $page: Int, $batch: Int) { dividends: getDividendsForSymbol(symbol: $symbol, page: $page, batch: $batch) { hasNextPage dividends { exDate amount payableDate currency } } }",
+      }),
+    });
+    if (!res) break;
+    let json: {
+      data?: {
+        dividends?: {
+          hasNextPage?: boolean;
+          dividends?: Array<{
+            exDate?: string;
+            amount?: number;
+            payableDate?: string | null;
+            currency?: string;
+          }> | null;
+        } | null;
+      };
+    };
+    try {
+      json = await res.json();
+    } catch {
+      break;
+    }
+    const block = json.data?.dividends;
+    if (!block) break;
+    ok = true;
+    let reachedStart = false;
+    for (const d of block.dividends ?? []) {
+      const exDate = String(d.exDate ?? "").slice(0, 10);
+      const amount = Number(d.amount);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(exDate) || !(amount > 0)) continue;
+      if (exDate < since) {
+        reachedStart = true;
+        continue;
+      }
+      const pay = String(d.payableDate ?? "").slice(0, 10);
+      out.push({
+        exDate,
+        payDate: /^\d{4}-\d{2}-\d{2}$/.test(pay) ? pay : null,
+        amount,
+        currency: d.currency ?? (tmxSymbol.endsWith(":US") ? "USD" : "CAD"),
+      });
+    }
+    if (reachedStart || !block.hasNextPage) break;
+  }
+  const value = ok ? out.sort((a, b) => a.exDate.localeCompare(b.exDate)) : null;
+  divMemory.set(key, { at: Date.now(), value });
+  return value;
+}
