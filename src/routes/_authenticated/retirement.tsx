@@ -514,7 +514,7 @@ function ScenarioResults({ summaries }: { summaries: ScenarioSummary[] }) {
               <div className="h-7 overflow-hidden rounded-md bg-muted">
                 <div
                   className="h-full rounded-md bg-foreground/70"
-                  style={{ width: \`${Math.max(2, (row.endingPortfolio / maxPortfolio) * 100)}%\` }}
+                  style={{ width: `${Math.max(2, (row.endingPortfolio / maxPortfolio) * 100)}%` }}
                   title={formatCad(row.endingPortfolio)}
                 />
               </div>
@@ -557,7 +557,7 @@ function ScenarioResults({ summaries }: { summaries: ScenarioSummary[] }) {
                 <div className="h-5 overflow-hidden rounded-md bg-muted">
                   <div
                     className="h-full rounded-md bg-foreground/50"
-                    style={{ width: \`${Math.max(2, (row.taxes / maxTax) * 100)}%\` }}
+                    style={{ width: `${Math.max(2, (row.taxes / maxTax) * 100)}%` }}
                     title={formatCad(row.taxes)}
                   />
                 </div>
@@ -618,7 +618,7 @@ function ScenarioResults({ summaries }: { summaries: ScenarioSummary[] }) {
           <h3 className="font-display font-semibold">Debt</h3>
           <p className="mt-2 text-sm text-muted-foreground">
             {analysis.peakDebtYear
-              ? \`Peak modeled debt is ${formatCad(analysis.peakDebtYear.debt)} around ${analysis.peakDebtYear.year}.\`
+              ? `Peak modeled debt is ${formatCad(analysis.peakDebtYear.debt)} around ${analysis.peakDebtYear.year}.`
               : "No modeled debt balance remains in the simulation."}
           </p>
         </div>
@@ -626,7 +626,7 @@ function ScenarioResults({ summaries }: { summaries: ScenarioSummary[] }) {
           <h3 className="font-display font-semibold">Survivor & estate</h3>
           <p className="mt-2 text-sm text-muted-foreground">
             {analysis.survivor.begins
-              ? \`Survivor stage begins in ${yearOfAnalysisDate(analysis.survivor.begins)}; maximum modeled survivor shortfall is ${formatCad(analysis.survivor.maximumShortfall)}.\`
+              ? `Survivor stage begins in ${yearOfAnalysisDate(analysis.survivor.begins)}; maximum modeled survivor shortfall is ${formatCad(analysis.survivor.maximumShortfall)}.`
               : "No survivor transition was modeled in this scenario."}
           </p>
           {analysis.estate.value !== undefined && (
