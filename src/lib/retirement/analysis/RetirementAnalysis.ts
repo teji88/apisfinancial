@@ -7,6 +7,9 @@ export interface AnnualAnalysisRow {
   endingNetWorth: number;
   income: number;
   benefits: number;
+  cpp: number;
+  oas: number;
+  gis: number;
   withdrawals: number;
   taxes: number;
   spending: number;
@@ -91,6 +94,9 @@ export function buildRetirementAnalysis(result: SimulationResult | null): Analys
       endingNetWorth: month.netWorth,
       income: 0,
       benefits: 0,
+      cpp: 0,
+      oas: 0,
+      gis: 0,
       withdrawals: 0,
       taxes: 0,
       spending: 0,
@@ -107,6 +113,9 @@ export function buildRetirementAnalysis(result: SimulationResult | null): Analys
     row.endingNetWorth = month.netWorth;
     row.income += month.grossIncome;
     row.benefits += month.benefits;
+    row.cpp += month.benefitSources?.cpp ?? 0;
+    row.oas += month.benefitSources?.oas ?? 0;
+    row.gis += month.benefitSources?.gis ?? 0;
     row.withdrawals += month.withdrawals;
     row.taxes += month.taxes;
     row.spending += month.spending;
