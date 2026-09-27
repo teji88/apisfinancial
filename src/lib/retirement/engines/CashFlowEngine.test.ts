@@ -63,4 +63,27 @@ describe("CashFlowEngine", () => {
     expect(result.externalCashRequired).toBe(3000);
     expect(result.netCashFlowBeforeUnmodeledCash).toBe(0);
   });
+  it("reports an unmet cash need without treating the clamped cash balance as a ledger error", () => {
+    const result = reconcileMonthlyCashFlow({
+      beginningPortfolio: 10000,
+      beginningHouseholdCash: 0,
+      investmentGrowth: 0,
+      contributions: 0,
+      grossIncome: 0,
+      withdrawals: 0,
+      taxes: 0,
+      spending: 1200,
+      debtPayments: 0,
+      endingPortfolio: 10000,
+      endingHouseholdCash: 0,
+    });
+
+    expect(result.cashShortfall).toBeCloseTo(1200, 10);
+    expect(result.cashReconciliation).toBeCloseTo(0, 10);
+    expect(result.warnings).not.toContain("Household cash ledger does not reconcile for this month.");
+  });
+
 });
+
+
+  
