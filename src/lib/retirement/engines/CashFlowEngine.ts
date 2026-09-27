@@ -82,6 +82,7 @@ export function reconcileMonthlyCashFlow(input: MonthlyCashFlowInput): MonthlyCa
     expectedEndingPortfolio,
     assetReconciliation,
     cashReconciliation,
+    cashShortfall,
     externalCashAvailable,
     externalCashRequired,
     netCashFlowBeforeUnmodeledCash,
