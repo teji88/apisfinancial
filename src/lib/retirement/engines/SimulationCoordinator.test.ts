@@ -72,7 +72,7 @@ describe("retirement simulation validation boundary", () => {
       accounts: [],
     } satisfies RetirementScenario;
 
-    const result = runRetirementSimulation(scenario, 0, 2025);
+    const result = runRetirementSimulation(scenario, 0, 2026);
     expect(result.status).toBe("COMPLETE");
     expect(result.monthly).toHaveLength(12);
     const expectedAnnualTax = calculateBasicTax(60000, "AB", 65).totalTax;
