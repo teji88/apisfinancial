@@ -564,12 +564,13 @@ export function runRetirementSimulation(
       spending: targetSpending,
       debtPayments,
       endingPortfolio: portfolio,
+      endingHouseholdCash: householdCash,
     });
     const financialLedger = reconcileMonthlyFinancialLedger({
       beginningPortfolio,
       investmentGrowth: investmentGrowthThisMonth,
       contributions: contributionsThisMonth,
-      grossIncome: benefits + otherIncome + nonRegisteredInvestmentIncome,
+      grossIncome: benefits + otherIncome,
       withdrawals,
       taxes: currentTax + deathTax,
       spending: targetSpending,
@@ -577,6 +578,7 @@ export function runRetirementSimulation(
       debtPrincipal,
       debtInterest,
       endingPortfolio: portfolio,
+      endingHouseholdCash: householdCash,
       beginningDebt,
       endingDebt: debtBalance,
     });
@@ -615,6 +617,7 @@ export function runRetirementSimulation(
         endingPortfolio: portfolio,
         endingHouseholdCash: householdCash,
         assetReconciliation: cashFlow.assetReconciliation,
+        cashReconciliation: cashFlow.cashReconciliation,
         externalCashChange: financialLedger.externalCashChange,
         debtReconciliation: financialLedger.debtReconciliation,
         netWorthReconciliation: financialLedger.netWorthReconciliation,
