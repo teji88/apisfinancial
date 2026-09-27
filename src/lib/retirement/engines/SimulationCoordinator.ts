@@ -49,6 +49,11 @@ function bucketOf(state: AccountState) {
 
 function sumBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>) {
   return accounts.filter((a) => bucketOf(a) === bucket).reduce((sum, a) => sum + a.balance, 0);
+}\n\nfunction calculatePersonBenefitIncome(input: TaxIncomeComponents): number {
+  return Object.entries(input).reduce((sum, [key, value]) => {
+    if (key === "age" || typeof value !== "number") return sum;
+    return sum + Math.max(0, value);
+  }, 0);
 }
 
 function withdrawFromBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>, amount: number, owner?: PersonRole) {
@@ -136,6 +141,7 @@ export function runRetirementSimulation(
   let totalDebtPayments = 0;
   let yearTaxableIncome = 0;
   let priorYearTaxableIncome = 0;
+  const priorYearIncomeByRole: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
   let yearTax = 0;
   let currentTax = 0;
   let cumulativeTaxLiability = 0;
@@ -276,8 +282,8 @@ export function runRetirementSimulation(
           partnerReceivesOas,
           // Couple GIS thresholds are based on combined income. The current
           // simulation keeps a household-level prior-year income ledger.
-          partnerIncomeForBenefits: 0,
-          previousYearIncome: priorYearTaxableIncome,
+          partnerIncomeForBenefits: partner ? priorYearIncomeByRole[partner.role] : 0,
+          previousYearIncome: priorYearIncomeByRole[person.role],
           inflationRate: scenario.assumptions.inflationRate,
           calendarYear: date.getUTCFullYear(),
         });
@@ -500,6 +506,8 @@ export function runRetirementSimulation(
     if (yearEnd) {
       yearTax = householdTaxLiability;
       priorYearTaxableIncome = householdTax.householdNetIncome;
+      priorYearIncomeByRole.MAIN_USER = yearTaxInputs.MAIN_USER.age ? calculatePersonBenefitIncome(yearTaxInputs.MAIN_USER) : 0;
+      priorYearIncomeByRole.PARTNER = yearTaxInputs.PARTNER.age ? calculatePersonBenefitIncome(yearTaxInputs.PARTNER) : 0;
       yearTaxableIncome = 0;
       yearTaxInputs.MAIN_USER = {};
       yearTaxInputs.PARTNER = {};
