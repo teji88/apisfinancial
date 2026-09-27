@@ -81,6 +81,12 @@ export function reconcileMonthlyFinancialLedger(
     (input.endingPortfolio + input.endingHouseholdCash) -
     (input.beginningPortfolio + input.beginningHouseholdCash);
   const debtChange = input.endingDebt - input.beginningDebt;
+  const externalCashChange =
+    input.grossIncome +
+    input.withdrawals -
+    input.taxes -
+    input.spending -
+    input.debtPayments;
   const netWorthReconciliation =
     endingNetWorth -
     beginningNetWorth -
