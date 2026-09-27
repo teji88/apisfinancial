@@ -49,6 +49,7 @@ function RetirementPage() {
 
   const portfolio = useMemo(() => {
     const byType: Record<string, number> = {};
+    const accountValues: Record<string, { value: number; name: string; type: string; owner: "MAIN_USER" | "PARTNER" }> = {};
     let total = 0;
     for (const account of accounts) {
       const summary = summariseAccount(
@@ -59,10 +60,12 @@ function RetirementPage() {
         fxUsdCad,
       );
       const value = Math.max(0, summary.marketValue + Math.max(0, summary.cash));
+      const owner = account.owner_type === "partner" ? "PARTNER" : "MAIN_USER";
+      accountValues[account.id] = { value, name: account.account_name, type: account.account_type, owner };
       byType[account.account_type] = (byType[account.account_type] ?? 0) + value;
       total += value;
     }
-    return { total, byType };
+    return { total, byType, accountValues };
   }, [accounts, holdings, transactions, quotes, fxUsdCad]);
 
   useEffect(() => {
@@ -79,6 +82,34 @@ function RetirementPage() {
   }, []);
 
   const activeScenario = scenario ?? createDefaultRetirementScenario();
+
+  useEffect(() => {
+    if (!scenario || accounts.length === 0) return;
+    const retirementTypes = new Set(["TFSA", "RRSP", "Spousal RRSP", "LIRA", "LRSP", "Non-Registered"]);
+    const existing = new Map(scenario.accounts.map((a) => [a.id, a]));
+    const nextAccounts = accounts
+      .filter((account) => retirementTypes.has(account.account_type))
+      .map((account) => {
+        const current = existing.get(account.id);
+        const tracked = portfolio.accountValues[account.id];
+        const type = account.account_type === "TFSA" ? "TFSA"
+          : account.account_type === "RRSP" || account.account_type === "Spousal RRSP" ? "RRSP"
+          : account.account_type === "LIRA" || account.account_type === "LRSP" ? "LIRA"
+          : "NON_REGISTERED";
+        return current ?? {
+          id: account.id,
+          owner: tracked?.owner ?? "MAIN_USER",
+          type,
+          valuation: { mode: "SNAPSHOT" as const, linkedValue: tracked?.value ?? 0, snapshotDate: new Date().toISOString().slice(0, 10) },
+        };
+      });
+    const changed = nextAccounts.length !== scenario.accounts.length ||
+      nextAccounts.some((next) => {
+        const old = existing.get(next.id);
+        return !old || old.valuation.mode === "SNAPSHOT" && old.valuation.linkedValue !== portfolio.accountValues[next.id]?.value;
+      });
+    if (changed) setScenario({ ...scenario, accounts: nextAccounts });
+  }, [accounts, portfolio.accountValues, scenario]);
   const overview = buildRetirementOverview(result, activeScenario);
 
   const runOptimization = async () => {
@@ -100,7 +131,8 @@ function RetirementPage() {
   const runSimulation = async (nextScenario = activeScenario) => {
     setRunning(true);
     try {
-      const simulation = runBasicSimulation(nextScenario, portfolio.total, new Date().getUTCFullYear(), portfolio.byType);
+      const effective = getEffectiveRetirementPortfolio(nextScenario, portfolio);
+      const simulation = runBasicSimulation(nextScenario, effective.total, new Date().getUTCFullYear(), effective.byType);
       await retirementStore.saveResult(simulation);
       const persistedScenario = { ...nextScenario, metadata: { ...nextScenario.metadata, scenarioHash: simulation.scenarioHash } };
       await retirementStore.saveScenario(persistedScenario);
@@ -311,9 +343,29 @@ function Overview({
   );
 }
 
+
+
+function getEffectiveRetirementPortfolio(
+  scenario: RetirementScenario,
+  portfolio: { total: number; byType: Record<string, number>; accountValues: Record<string, { value: number; name: string; type: string; owner: "MAIN_USER" | "PARTNER" }> },
+) {
+  const byType: Record<string, number> = {};
+  let total = 0;
+  for (const account of scenario.accounts) {
+    const tracked = portfolio.accountValues[account.id];
+    const value = account.valuation.mode === "MANUAL"
+      ? Math.max(0, account.valuation.value ?? 0)
+      : Math.max(0, account.valuation.linkedValue ?? tracked?.value ?? 0);
+    if (account.type === "RESP" || account.type === "RDSP" || account.type === "FHSA") continue;
+    byType[account.type] = (byType[account.type] ?? 0) + value;
+    total += value;
+  }
+  return { total, byType };
+}
+
 function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
   scenario: RetirementScenario;
-  portfolio: { total: number; byType: Record<string, number> };
+  portfolio: { total: number; byType: Record<string, number>; accountValues: Record<string, { value: number; name: string; type: string; owner: "MAIN_USER" | "PARTNER" }> };
   onChange: (patch: Partial<RetirementScenario>) => void;
   onSave: () => Promise<void>;
   saved: boolean;
@@ -351,9 +403,66 @@ function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
         <Field label="Essential spending"><Input type="number" value={scenario.goals.essentialSpending ?? ""} onChange={(e) => setGoals({ essentialSpending: e.target.value ? Number(e.target.value) : undefined })} /></Field>
       </Section>
 
-      <Section title="Portfolio" subtitle="Linked values are read-only here. Manual scenario overrides will be added without changing Portfolio Tracker.">
-        {Object.entries(portfolio.byType).map(([type, value]) => <div key={type} className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">{type}</p><p className="num mt-1 font-semibold">{formatCad(value)}</p><p className="mt-1 text-[11px] text-muted-foreground">Portfolio Tracker</p></div>)}
-        <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Total</p><p className="num mt-1 font-semibold">{formatCad(portfolio.total)}</p><p className="mt-1 text-[11px] text-muted-foreground">Current linked value</p></div>
+      <Section title="Portfolio" subtitle="Each retirement account is linked to Portfolio Tracker unless you choose a scenario-only override.">
+        <div className="space-y-3 sm:col-span-2">
+          {scenario.accounts.map((account) => {
+            const tracked = portfolio.accountValues[account.id];
+            if (!tracked) return null;
+            const manual = account.valuation.mode === "MANUAL";
+            return (
+              <div key={account.id} className="rounded-lg border p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{tracked.name}</p>
+                    <p className="text-xs text-muted-foreground">{tracked.type} · {account.owner === "PARTNER" ? "Partner" : "You"}</p>
+                  </div>
+                  <Badge variant={manual ? "secondary" : "outline"}>{manual ? "Scenario override" : "Linked"}</Badge>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_180px]">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Portfolio Tracker value</p>
+                    <p className="num mt-1 font-semibold">{formatCad(tracked.value)}</p>
+                  </div>
+                  <div>
+                    <Label>Scenario value</Label>
+                    <Input
+                      className="mt-1"
+                      type="number"
+                      min="0"
+                      value={manual ? account.valuation.value ?? "" : tracked.value}
+                      onChange={(e) => {
+                        const value = Math.max(0, Number(e.target.value) || 0);
+                        onChange({
+                          accounts: scenario.accounts.map((item) => item.id === account.id
+                            ? { ...item, valuation: { ...item.valuation, mode: "MANUAL" as const, value, linkedValue: tracked.value, snapshotDate: new Date().toISOString().slice(0, 10) } }
+                            : item),
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onChange({
+                      accounts: scenario.accounts.map((item) => item.id === account.id
+                        ? { ...item, valuation: { mode: "SNAPSHOT" as const, linkedValue: tracked.value, snapshotDate: new Date().toISOString().slice(0, 10), value: undefined } }
+                        : item),
+                    })}
+                  >
+                    Use Tracker value
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+          <div className="rounded-lg border p-4">
+            <p className="text-xs text-muted-foreground">Effective retirement starting portfolio</p>
+            <p className="num mt-1 text-lg font-semibold">{formatCad(getEffectiveRetirementPortfolio(scenario, portfolio).total)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Scenario overrides never change Portfolio Tracker.</p>
+          </div>
+        </div>
       </Section>
 
       <Section title="Investment assumptions" subtitle="Economic assumptions are separate from government rules.">
