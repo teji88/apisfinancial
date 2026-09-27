@@ -360,7 +360,7 @@ describe("retirement financial invariants", () => {
         owner: "MAIN_USER",
         type: "NON_REGISTERED",
         valuation: { mode: "MANUAL", value: 120000 },
-        nonRegisteredInterestYield: 0.10,
+        nonRegisteredInterestYield: 10,
       }],
       assumptions: { ...makeScenario().assumptions, investmentReturn: 0, investmentFeeRate: 0 },
     });
