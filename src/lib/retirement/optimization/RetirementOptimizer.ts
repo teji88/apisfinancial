@@ -249,7 +249,11 @@ export function optimizeRetirementPlan(
   const feasible = candidates.filter(
     (candidate) => candidate.violations.length === 0,
   );
-  const pool = feasible.length > 0 ? feasible : candidates;
+  // Explicit constraints are hard constraints. Never select or present an
+  // infeasible candidate as the chosen plan merely because no feasible plan
+  // exists. The caller can inspect all candidates/violations and adjust the
+  // problem instead.
+  const pool = feasible;
 
   const paretoCandidates = pool.filter(
     (candidate, index) =>
