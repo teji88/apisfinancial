@@ -5,6 +5,7 @@ describe("CashFlowEngine", () => {
   it("reconciles portfolio assets from growth, contributions and withdrawals", () => {
     const result = reconcileMonthlyCashFlow({
       beginningPortfolio: 100000,
+      beginningHouseholdCash: 0,
       investmentGrowth: 500,
       contributions: 1000,
       grossIncome: 2000,
@@ -15,6 +16,7 @@ describe("CashFlowEngine", () => {
       debtPrincipal: 800,
       debtInterest: 200,
       endingPortfolio: 98500,
+      endingHouseholdCash: 2100,
     });
 
     expect(result.expectedEndingPortfolio).toBe(98500);
@@ -25,6 +27,7 @@ describe("CashFlowEngine", () => {
   it("flags an asset ledger mismatch instead of silently accepting it", () => {
     const result = reconcileMonthlyCashFlow({
       beginningPortfolio: 100000,
+      beginningHouseholdCash: 0,
       investmentGrowth: 500,
       contributions: 0,
       grossIncome: 0,
@@ -33,6 +36,7 @@ describe("CashFlowEngine", () => {
       spending: 1000,
       debtPayments: 0,
       endingPortfolio: 99600,
+      endingHouseholdCash: 0,
     });
 
     expect(result.assetReconciliation).toBeCloseTo(100, 10);
@@ -42,6 +46,7 @@ describe("CashFlowEngine", () => {
   it("separates asset reconciliation from household cash-need diagnostics", () => {
     const result = reconcileMonthlyCashFlow({
       beginningPortfolio: 50000,
+      beginningHouseholdCash: 0,
       investmentGrowth: 0,
       contributions: 0,
       grossIncome: 1000,
@@ -50,6 +55,7 @@ describe("CashFlowEngine", () => {
       spending: 1800,
       debtPayments: 900,
       endingPortfolio: 48000,
+      endingHouseholdCash: 0,
     });
 
     expect(result.assetReconciliation).toBeCloseTo(0, 10);
