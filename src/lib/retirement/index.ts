@@ -2,3 +2,5 @@ export * from "./domain/types"; export * from "./scenario/defaults"; export * fr
 export * from "./scenario/ScenarioEngine";
 export * from "./scenario/ScenarioSummary";
 export * from "./validation/RetirementValidation";
+
+export * from "./analysis/RetirementAnalysis";
