@@ -16,7 +16,7 @@ describe("CashFlowEngine", () => {
       debtPrincipal: 800,
       debtInterest: 200,
       endingPortfolio: 98500,
-      endingHouseholdCash: 2100,
+      endingHouseholdCash: 1100,
     });
 
     expect(result.expectedEndingPortfolio).toBe(98500);
