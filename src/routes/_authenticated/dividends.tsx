@@ -300,12 +300,13 @@ function DividendsPage() {
             recorded{hiddenCount > 0 ? " or skipped" : ""}.
           </p>
         ) : (
-          <Table className="mt-3">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Symbol</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>Ex-date</TableHead>
+          <div className="mt-3 max-h-[30rem] overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead>Symbol</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Ex-date</TableHead>
                 <TableHead className="text-right">Units</TableHead>
                 <TableHead className="text-right">Per share</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
@@ -350,8 +351,9 @@ function DividendsPage() {
                   </TableCell>
                 </TableRow>
               ))}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
 
@@ -366,21 +368,22 @@ function DividendsPage() {
             No holdings yet. Add trades in the ledger or import a statement.
           </p>
         ) : (
-          <Table className="mt-3">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Symbol</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead className="text-right">Units</TableHead>
-                <TableHead className="text-right">Rate / share</TableHead>
-                <TableHead className="text-right">Forward income</TableHead>
-                <TableHead className="text-right">Yield</TableHead>
-                <TableHead className="text-right">Yield on cost</TableHead>
-                <TableHead className="text-right">Received 12m</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
+          <div className="mt-3 max-h-[28rem] overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead>Symbol</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead className="text-right">Units</TableHead>
+                  <TableHead className="text-right">Rate / share</TableHead>
+                  <TableHead className="text-right">Forward income</TableHead>
+                  <TableHead className="text-right">Yield</TableHead>
+                  <TableHead className="text-right">Yield on cost</TableHead>
+                  <TableHead className="text-right">Received 12m</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
                 <TableRow key={r.holdingId}>
                   <TableCell className="font-medium">
                     {r.symbol}
@@ -402,9 +405,10 @@ function DividendsPage() {
                   </TableCell>
                   <TableCell className="num text-right">{formatCad(r.received12m)}</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
         <p className="mt-3 text-xs text-muted-foreground">
           Forward income assumes today&apos;s payout rate stays flat for the next twelve months.
