@@ -128,6 +128,12 @@ export interface MonthlySnapshot {
   grossIncome: Money;
   benefits: Money;
   withdrawals: Money;
+  withdrawalSources?: {
+    registered: Money;
+    tfsa: Money;
+    nonRegistered: Money;
+    cash: Money;
+  };
   taxes: Money;
   spending: Money;
   debtPayments?: Money;
