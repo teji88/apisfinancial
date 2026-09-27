@@ -356,7 +356,6 @@ function getEffectiveRetirementPortfolio(
     const value = account.valuation.mode === "MANUAL"
       ? Math.max(0, account.valuation.value ?? 0)
       : Math.max(0, account.valuation.linkedValue ?? tracked?.value ?? 0);
-    if (account.type === "RESP" || account.type === "RDSP" || account.type === "FHSA") continue;
     byType[account.type] = (byType[account.type] ?? 0) + value;
     total += value;
   }
@@ -397,10 +396,46 @@ function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
       </Section>
 
       <Section title="Retirement goals" subtitle="Spending is entered in today's dollars and is inflation-adjusted by the engine.">
-        <Field label="Retirement age"><Input type="number" value={scenario.goals.retirementAge} onChange={(e) => setGoals({ retirementAge: Number(e.target.value) })} /></Field>
-        <Field label="Annual spending"><Input type="number" value={scenario.goals.annualSpending} onChange={(e) => setGoals({ annualSpending: Number(e.target.value) })} /></Field>
-        <Field label="Planning age"><Input type="number" value={scenario.goals.planningAge} onChange={(e) => setGoals({ planningAge: Number(e.target.value) })} /></Field>
-        <Field label="Essential spending"><Input type="number" value={scenario.goals.essentialSpending ?? ""} onChange={(e) => setGoals({ essentialSpending: e.target.value ? Number(e.target.value) : undefined })} /></Field>
+        <Field label="Retirement age"><Input type="number" min="50" max="90" value={scenario.goals.retirementAge} onChange={(e) => setGoals({ retirementAge: Number(e.target.value) })} /></Field>
+        <Field label="Annual spending"><Input type="number" min="0" value={scenario.goals.annualSpending} onChange={(e) => setGoals({ annualSpending: Math.max(0, Number(e.target.value) || 0) })} /></Field>
+        <Field label="Planning age"><Input type="number" min="70" max="110" value={scenario.goals.planningAge} onChange={(e) => setGoals({ planningAge: Number(e.target.value) })} /></Field>
+        <Field label="Essential spending"><Input type="number" min="0" value={scenario.goals.essentialSpending ?? ""} onChange={(e) => setGoals({ essentialSpending: e.target.value ? Math.max(0, Number(e.target.value)) : undefined })} /></Field>
+        <Field label="Survivor spending %"><Input type="number" min="0" max="100" step="1" value={(scenario.goals.survivorSpendingRate ?? 75) * 100} onChange={(e) => setGoals({ survivorSpendingRate: Math.min(1, Math.max(0, Number(e.target.value) / 100)) })} /></Field>
+        <Field label="Minimum estate"><Input type="number" min="0" value={scenario.goals.minimumEstate ?? ""} onChange={(e) => setGoals({ minimumEstate: e.target.value ? Math.max(0, Number(e.target.value)) : undefined })} /></Field>
+      </Section>
+
+      <Section title="Government benefits & other income" subtitle="These inputs are used by the CPP/QPP, OAS/GIS and tax engines.">
+        {scenario.household.people.map((member, index) => (
+          <div key={member.role} className="rounded-lg border p-4 sm:col-span-2">
+            <p className="font-medium">{member.role === "MAIN_USER" ? "You" : "Partner"}</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Retirement age"><Input type="number" min="50" max="90" value={member.retirementAge} onChange={(e) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, retirementAge: Number(e.target.value) } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }} /></Field>
+              <Field label="CPP/QPP estimate at 65"><Input type="number" min="0" value={member.cppAt65 ?? ""} onChange={(e) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, cppAt65: e.target.value ? Math.max(0, Number(e.target.value)) : undefined } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }} /></Field>
+              <Field label="CPP/QPP start"><Select value={String(member.cppStartAge)} onValueChange={(v) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, cppStartAge: v === "OPTIMIZE" ? "OPTIMIZE" as const : Number(v) } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["OPTIMIZE","60","65","70"].map((v) => <SelectItem key={v} value={v}>{v === "OPTIMIZE" ? "Optimizer chooses" : v}</SelectItem>)}</SelectContent></Select></Field>
+              <Field label="OAS start"><Select value={String(member.oasStartAge)} onValueChange={(v) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, oasStartAge: v === "OPTIMIZE" ? "OPTIMIZE" as const : Number(v) } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["OPTIMIZE","65","70"].map((v) => <SelectItem key={v} value={v}>{v === "OPTIMIZE" ? "Optimizer chooses" : v}</SelectItem>)}</SelectContent></Select></Field>
+              <Field label="OAS residence years"><Input type="number" min="0" max="50" value={member.oasResidenceYears} onChange={(e) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, oasResidenceYears: Math.min(50, Math.max(0, Number(e.target.value))) } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }} /></Field>
+              <Field label="Other annual income"><Input type="number" min="0" value={member.otherIncome ?? ""} onChange={(e) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, otherIncome: e.target.value ? Math.max(0, Number(e.target.value)) : undefined } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }} /></Field>
+            </div>
+          </div>
+        ))}
       </Section>
 
       <Section title="Portfolio" subtitle="Each retirement account is linked to Portfolio Tracker unless you choose a scenario-only override.">
@@ -471,9 +506,31 @@ function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
         <Field label="Investment fees"><Input type="number" step="0.1" value={scenario.assumptions.investmentFeeRate} onChange={(e) => onChange({ assumptions: { ...scenario.assumptions, investmentFeeRate: Number(e.target.value) } })} /></Field>
       </Section>
 
-      <Section title="Strategy" subtitle="Withdrawal policies are explicit inputs, not hidden inside the tax engine.">
+      <Section title="Strategy" subtitle="Withdrawal policies and optimization objectives are explicit inputs.">
         <Field label="Withdrawal policy"><Select value={scenario.strategy.withdrawalPolicy} onValueChange={(v) => onChange({ strategy: { ...scenario.strategy, withdrawalPolicy: v as RetirementScenario["strategy"]["withdrawalPolicy"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["OPTIMIZE","USER_DEFINED","TAX_TARGETED","REGISTERED_FIRST","TFSA_FIRST","NON_REGISTERED_FIRST"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
-        <Field label="Minimum cash reserve"><Input type="number" value={scenario.strategy.cashReserve ?? 0} onChange={(e) => onChange({ strategy: { ...scenario.strategy, cashReserve: Number(e.target.value) } })} /></Field>
+        <Field label="Optimization objective"><Select value={scenario.strategy.objective} onValueChange={(v) => onChange({ strategy: { ...scenario.strategy, objective: v as RetirementScenario["strategy"]["objective"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["MAX_SUSTAINABLE_SPENDING","MAX_LIFETIME_AFTER_TAX_CASH","MAX_ESTATE","MIN_DEPLETION_RISK","MIN_TAX","CUSTOM"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Minimum cash reserve"><Input type="number" min="0" value={scenario.strategy.cashReserve ?? 0} onChange={(e) => onChange({ strategy: { ...scenario.strategy, cashReserve: Math.max(0, Number(e.target.value) || 0) } })} /></Field>
+        <Field label="Target taxable income"><Input type="number" min="0" value={scenario.strategy.taxableIncomeTarget ?? ""} onChange={(e) => onChange({ strategy: { ...scenario.strategy, taxableIncomeTarget: e.target.value ? Math.max(0, Number(e.target.value)) : undefined } })} /></Field>
+        <Field label="Pension split %"><Input type="number" min="0" max="100" value={(scenario.strategy.pensionSplitPercent ?? 0) * 100} onChange={(e) => onChange({ strategy: { ...scenario.strategy, pensionSplitPercent: Math.min(1, Math.max(0, Number(e.target.value) / 100)) } })} /></Field>
+        <Field label="Estate target"><Input type="number" min="0" value={scenario.strategy.estateTarget ?? ""} onChange={(e) => onChange({ strategy: { ...scenario.strategy, estateTarget: e.target.value ? Math.max(0, Number(e.target.value)) : undefined } })} /></Field>
+      </Section>
+
+      <Section title="Debt" subtitle="Debt payments reduce available retirement cash flow and balances remain part of net worth.">
+        {(scenario.debts ?? []).map((debt, index) => (
+          <div key={debt.id} className="rounded-lg border p-4 sm:col-span-2">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Type"><Select value={debt.type} onValueChange={(v) => {
+                const debts = [...(scenario.debts ?? [])]; debts[index] = { ...debt, type: v as RetirementScenario["debts"][number]["type"] }; onChange({ debts });
+              }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["MORTGAGE","HELOC","LINE_OF_CREDIT","PERSONAL_LOAN","OTHER"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
+              <Field label="Balance"><Input type="number" min="0" value={debt.startingBalance} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,startingBalance:Math.max(0,Number(e.target.value)||0)};onChange({debts}); }} /></Field>
+              <Field label="Interest rate %"><Input type="number" min="0" step="0.1" value={debt.annualInterestRate} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,annualInterestRate:Math.max(0,Number(e.target.value)||0)};onChange({debts}); }} /></Field>
+              <Field label="Monthly payment"><Input type="number" min="0" value={debt.paymentAmount ?? ""} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,paymentAmount:e.target.value?Math.max(0,Number(e.target.value)):undefined};onChange({debts}); }} /></Field>
+            </div>
+          </div>
+        ))}
+        <Button variant="outline" onClick={() => onChange({ debts: [...(scenario.debts ?? []), { id: crypto.randomUUID(), type: "MORTGAGE", startingBalance: 0, annualInterestRate: 0, paymentAmount: 0 }] })}>
+          Add debt
+        </Button>
       </Section>
     </div>
   );
