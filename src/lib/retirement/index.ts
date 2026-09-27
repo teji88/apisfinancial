@@ -4,3 +4,5 @@ export * from "./scenario/ScenarioSummary";
 export * from "./validation/RetirementValidation";
 
 export * from "./analysis/RetirementAnalysis";
+
+export * from "./reporting/RetirementReport";
