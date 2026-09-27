@@ -20,6 +20,7 @@ import {
   type ScenarioSummary,
   type RetirementScenario,
   type SimulationResult,
+  type OptimizationResult,
 } from "@/lib/retirement";
 
 export const Route = createFileRoute("/_authenticated/retirement")({
@@ -43,6 +44,8 @@ function RetirementPage() {
   const [saved, setSaved] = useState(false);
   const [running, setRunning] = useState(false);
   const [stressResults, setStressResults] = useState<ScenarioStressTestResult | null>(null);
+  const [optimization, setOptimization] = useState<OptimizationResult | null>(null);
+  const [optimizing, setOptimizing] = useState(false);
 
   const portfolio = useMemo(() => {
     const byType: Record<string, number> = {};
@@ -78,6 +81,22 @@ function RetirementPage() {
   const activeScenario = scenario ?? createDefaultRetirementScenario();
   const overview = buildRetirementOverview(result, activeScenario);
 
+  const runOptimization = async () => {
+    setOptimizing(true);
+    try {
+      const { optimizeRetirementPlan } = await import("@/lib/retirement");
+      const next = optimizeRetirementPlan({
+        scenario: activeScenario,
+        startingPortfolio: portfolio.total,
+        startYear: new Date().getUTCFullYear(),
+        portfolioByType: portfolio.byType,
+      });
+      setOptimization(next);
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
   const runSimulation = async (nextScenario = activeScenario) => {
     setRunning(true);
     try {
@@ -88,6 +107,7 @@ function RetirementPage() {
       setScenario(persistedScenario);
       setResult(simulation);
       setStressResults(null);
+      setOptimization(null);
       setSaved(true);
     } finally {
       setRunning(false);
@@ -136,7 +156,16 @@ function RetirementPage() {
       </nav>
 
       {section === "overview" && (
-        <Overview overview={overview} portfolioTotal={portfolio.total} onPlan={() => setSection("plan")} onRun={() => runSimulation()} running={running} />
+        <Overview
+          overview={overview}
+          portfolioTotal={portfolio.total}
+          optimization={optimization}
+          optimizing={optimizing}
+          onPlan={() => setSection("plan")}
+          onRun={() => runSimulation()}
+          onOptimize={runOptimization}
+          running={running}
+        />
       )}
       {section === "plan" && (
         <PlanEditor scenario={activeScenario} portfolio={portfolio} onChange={updateScenario} onSave={saveScenario} saved={saved} running={running} />
@@ -157,11 +186,23 @@ function RetirementPage() {
   );
 }
 
-function Overview({ overview, portfolioTotal, onPlan, onRun, running }: {
+function Overview({
+  overview,
+  portfolioTotal,
+  optimization,
+  optimizing,
+  onPlan,
+  onRun,
+  onOptimize,
+  running,
+}: {
   overview: ReturnType<typeof buildRetirementOverview>;
   portfolioTotal: number;
+  optimization: OptimizationResult | null;
+  optimizing: boolean;
   onPlan: () => void;
   onRun: () => Promise<void>;
+  onOptimize: () => Promise<void>;
   running: boolean;
 }) {
   return (
@@ -175,6 +216,9 @@ function Overview({ overview, portfolioTotal, onPlan, onRun, running }: {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onPlan}>Edit plan</Button>
+            <Button variant="outline" onClick={onOptimize} disabled={running || optimizing}>
+              {optimizing ? "Analyzing strategies…" : "Analyze strategies"}
+            </Button>
             <Button onClick={onRun} disabled={running}>{running ? "Calculating…" : "Run simulation"}</Button>
           </div>
         </div>
@@ -189,6 +233,33 @@ function Overview({ overview, portfolioTotal, onPlan, onRun, running }: {
 
 
       {stressResults && <StressOverview stressResults={stressResults} onScenarios={() => {}} />}
+
+      {optimization && (
+        <div className="panel p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Strategy analysis</p>
+              <h3 className="mt-1 font-display text-lg font-semibold">
+                {optimization.feasiblePlans.length > 0
+                  ? `${optimization.feasiblePlans.length} strategies meet the current constraints`
+                  : "No strategy met the current constraints"}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This compares explicit strategy combinations; it does not represent a probability or guarantee.
+              </p>
+            </div>
+            <Badge variant="outline">{optimization.candidates.length} candidates tested</Badge>
+          </div>
+          {optimization.selectedCandidate && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Metric label="Selected objective" value={optimization.objective.replaceAll("_", " ")} />
+              <Metric label="Lifetime spending" value={formatCad(optimization.selectedCandidate.metrics.lifetimeSpending)} />
+              <Metric label="Lifetime tax" value={formatCad(optimization.selectedCandidate.metrics.lifetimeTax)} />
+              <Metric label="Ending portfolio" value={formatCad(optimization.selectedCandidate.metrics.endingPortfolio)} />
+            </div>
+          )}
+        </div>
+      )}
 \n      {overview.warnings.length > 0 && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
           <p className="font-medium">Model limitations</p>
