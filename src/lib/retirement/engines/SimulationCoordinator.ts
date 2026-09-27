@@ -1,7 +1,7 @@
 import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole, PersonScenario } from "../domain/types";
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
-import { calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
+import { calculateBasicTax, calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
 import { solveGrossWithdrawalForNetNeed, chooseRegisteredWithdrawalOwner } from "./WithdrawalEngine";
 import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, withdrawNonRegistered, estimateNonRegisteredMonthlyIncome, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 import { validateRetirementScenario } from "../validation/RetirementValidation";
