@@ -2,6 +2,7 @@ import type { Money } from "../domain/types";
 
 export interface MonthlyCashFlowInput {
   beginningPortfolio: Money;
+  beginningHouseholdCash: Money;
   investmentGrowth: Money;
   contributions: Money;
   grossIncome: Money;
@@ -12,6 +13,7 @@ export interface MonthlyCashFlowInput {
   debtPrincipal?: Money;
   debtInterest?: Money;
   endingPortfolio: Money;
+  endingHouseholdCash: Money;
 }
 
 /**
@@ -26,6 +28,7 @@ export interface MonthlyCashFlowResult {
   assetChange: Money;
   expectedEndingPortfolio: Money;
   assetReconciliation: Money;
+  cashReconciliation: Money;
   externalCashAvailable: Money;
   externalCashRequired: Money;
   netCashFlowBeforeUnmodeledCash: Money;
@@ -43,6 +46,14 @@ export function reconcileMonthlyCashFlow(input: MonthlyCashFlowInput): MonthlyCa
     input.withdrawals;
 
   const assetReconciliation = input.endingPortfolio - expectedEndingPortfolio;
+  const expectedEndingHouseholdCash =
+    input.beginningHouseholdCash +
+    input.grossIncome +
+    input.withdrawals -
+    input.taxes -
+    input.spending -
+    input.debtPayments;
+  const cashReconciliation = input.endingHouseholdCash - expectedEndingHouseholdCash;
   const externalCashAvailable = input.grossIncome + input.withdrawals;
   const externalCashRequired = input.spending + input.debtPayments + input.taxes;
   const netCashFlowBeforeUnmodeledCash = externalCashAvailable - externalCashRequired;
@@ -60,11 +71,15 @@ export function reconcileMonthlyCashFlow(input: MonthlyCashFlowInput): MonthlyCa
   if (Math.abs(assetReconciliation) > EPSILON) {
     warnings.push("Portfolio asset ledger does not reconcile for this month.");
   }
+  if (Math.abs(cashReconciliation) > EPSILON) {
+    warnings.push("Household cash ledger does not reconcile for this month.");
+  }
 
   return {
     assetChange: input.endingPortfolio - input.beginningPortfolio,
     expectedEndingPortfolio,
     assetReconciliation,
+    cashReconciliation,
     externalCashAvailable,
     externalCashRequired,
     netCashFlowBeforeUnmodeledCash,
