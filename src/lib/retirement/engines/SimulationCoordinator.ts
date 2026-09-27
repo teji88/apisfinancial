@@ -519,15 +519,18 @@ export function runRetirementSimulation(
         );
         if (treatment.transferredToSurvivor > 0) {
           survivorTransferredAssets += treatment.transferredToSurvivor;
-          const target = accounts.find((candidate) => candidate.owner === survivor.role && candidate.type === account.type)
-            ?? accounts.find((candidate) => candidate.owner === survivor.role && candidate.type === "CASH");
-          if (target) target.balance += treatment.transferredToSurvivor;
-          else {
+          const target = accounts.find((candidate) => candidate !== account && candidate.owner === survivor.role && candidate.type === account.type)
+            ?? accounts.find((candidate) => candidate !== account && candidate.owner === survivor.role && candidate.type === "CASH");
+          if (target) {
+            target.balance += treatment.transferredToSurvivor;
+            account.balance = 0;
+          } else {
             account.owner = survivor.role;
             account.balance = treatment.transferredToSurvivor;
           }
+        } else {
+          account.balance = treatment.estateValue;
         }
-        account.balance = 0;
       }
     }
 
