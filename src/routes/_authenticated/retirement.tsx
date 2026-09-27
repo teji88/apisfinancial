@@ -520,7 +520,7 @@ function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
           <div key={debt.id} className="rounded-lg border p-4 sm:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="Type"><Select value={debt.type} onValueChange={(v) => {
-                const debts = [...(scenario.debts ?? [])]; debts[index] = { ...debt, type: v as RetirementScenario["debts"][number]["type"] }; onChange({ debts });
+                const debts = [...(scenario.debts ?? [])]; debts[index] = { ...debt, type: v as typeof debt.type }; onChange({ debts });
               }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["MORTGAGE","HELOC","LINE_OF_CREDIT","PERSONAL_LOAN","OTHER"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
               <Field label="Balance"><Input type="number" min="0" value={debt.startingBalance} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,startingBalance:Math.max(0,Number(e.target.value)||0)};onChange({debts}); }} /></Field>
               <Field label="Interest rate %"><Input type="number" min="0" step="0.1" value={debt.annualInterestRate} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,annualInterestRate:Math.max(0,Number(e.target.value)||0)};onChange({debts}); }} /></Field>
