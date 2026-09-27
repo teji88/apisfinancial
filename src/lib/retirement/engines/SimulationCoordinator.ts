@@ -203,6 +203,7 @@ export function runRetirementSimulation(
     totalDebtPayments += debtPayments;
 
     let benefits = 0;
+    const benefitSources = { cpp: 0, oas: 0, gis: 0 };
     let taxableBenefits = 0;
     let otherIncome = 0;
     let nonRegisteredInvestmentIncome = 0;
@@ -282,6 +283,9 @@ export function runRetirementSimulation(
         const monthlyOas = benefit.oas / 12;
         const monthlyGis = benefit.gis / 12;
         benefits += monthlyCpp + monthlyOas + monthlyGis;
+        benefitSources.cpp += monthlyCpp;
+        benefitSources.oas += monthlyOas;
+        benefitSources.gis += monthlyGis;
         taxableBenefits += monthlyCpp + monthlyOas;
         monthlyTaxInputs[person.role].cpp = (monthlyTaxInputs[person.role].cpp ?? 0) + monthlyCpp;
         monthlyTaxInputs[person.role].oas = (monthlyTaxInputs[person.role].oas ?? 0) + monthlyOas;
@@ -302,6 +306,7 @@ export function runRetirementSimulation(
         const survivorCpp = estimateCppSurvivorAnnual(deceasedCpp, survivorAge, existingCpp, deceasedP.survivorCppPercent ?? 60);
         survivorBenefits = survivorCpp / 12;
         benefits += survivorBenefits;
+        benefitSources.cpp += survivorBenefits;
         taxableBenefits += survivorBenefits;
       }
     }
@@ -611,6 +616,7 @@ export function runRetirementSimulation(
       netWorth,
       grossIncome: benefits + otherIncome + withdrawals,
       benefits,
+      benefitSources,
       withdrawals,
       withdrawalSources,
       taxes: currentTax + deathTax,
