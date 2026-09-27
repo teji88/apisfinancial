@@ -13,7 +13,11 @@ import {
 } from "recharts";
 import { CalendarClock, Coins, Percent, Sprout } from "lucide-react";
 import { toast } from "sonner";
-import { usePortfolio, useAddTransaction } from "@/lib/portfolio";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { usePortfolio, useAddTransaction, useUpdateTransaction } from "@/lib/portfolio";
+import { getDividendHistory } from "@/lib/history.functions";
+import { reconcileDividends, type DividendSuggestion } from "@/lib/dividend-reconcile";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 
@@ -72,6 +76,8 @@ type ReviewDraft = {
   units: number;
   perShare: number;
   amount: number;
+  transactionId?: string;
+  withholdingRate: number;
 };
 
 const DISMISSED_KEY = "maplewealth.dismissedDividends";
@@ -91,6 +97,8 @@ function DividendsPage() {
   const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
     usePortfolio();
   const addTransaction = useAddTransaction();
+  const updateTransaction = useUpdateTransaction();
+  const fetchDivHistory = useServerFn(getDividendHistory);
   const { entitlement } = useEntitlement();
   const [recording, setRecording] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewDraft | null>(null);
@@ -126,12 +134,57 @@ function DividendsPage() {
   );
 
   const months = useMemo(() => monthlyIncome(transactions), [transactions]);
-  const allPending = useMemo(
-    () => pendingDividends(rows, transactions, holdings),
-    [rows, transactions, holdings],
-  );
+  const historyItems = useMemo(() => {
+    const first = new Map<string, string>();
+    for (const t of transactions) {
+      if (!t.holding_id || (t.transaction_type !== "BUY" && t.transaction_type !== "DRIP")) continue;
+      const prev = first.get(t.holding_id);
+      if (!prev || t.transaction_date < prev) first.set(t.holding_id, t.transaction_date);
+    }
+    return holdings
+      .filter((h) => first.has(h.id) && h.asset_type !== "Cash")
+      .map((h) => ({ symbol: h.symbol.toUpperCase(), since: first.get(h.id)! }))
+      .sort((a, b) => a.symbol.localeCompare(b.symbol));
+  }, [holdings, transactions]);
+
+  const divHistory = useQuery({
+    queryKey: ["dividend-history", historyItems],
+    queryFn: () => fetchDivHistory({ data: { items: historyItems } }),
+    enabled: historyItems.length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const allPending = useMemo<DividendSuggestion[]>(() => {
+    const { suggestions, covered } = reconcileDividends(
+      holdings,
+      accounts,
+      transactions,
+      divHistory.data?.bySymbol ?? {},
+    );
+    // Holdings with no dividend history available fall back to the latest
+    // ex-dividend date from the quote feed.
+    const fallback: DividendSuggestion[] = pendingDividends(rows, transactions, holdings)
+      .filter((p) => !covered.has(p.holdingId))
+      .map((p) => ({
+        key: p.holdingId + p.exDivDate,
+        kind: "missing",
+        holdingId: p.holdingId,
+        accountId: p.accountId,
+        symbol: p.symbol,
+        currency: p.currency,
+        exDate: p.exDivDate,
+        payDate: p.exDivDate,
+        units: p.units,
+        perShare: p.perShare,
+        gross: p.amount,
+        withholdingRate: 0,
+        expected: p.amount,
+        reasons: [],
+      }));
+    return [...suggestions, ...fallback].sort((a, b) => b.payDate.localeCompare(a.payDate));
+  }, [holdings, accounts, transactions, divHistory.data, rows]);
   const pending = useMemo(
-    () => allPending.filter((p) => !dismissed.includes(p.holdingId + p.exDivDate)),
+    () => allPending.filter((p) => !dismissed.includes(p.key)),
     [allPending, dismissed],
   );
   const hiddenCount = allPending.length - pending.length;
@@ -169,21 +222,23 @@ function DividendsPage() {
     return a ? `${a.account_type} · ${a.account_name}` : "—";
   };
 
-  const openReview = (p: (typeof pending)[number]) => {
+  const openReview = (p: DividendSuggestion) => {
     if (entitlement.readOnly) {
       setUpgradeOpen(true);
       return;
     }
     setReview({
-      key: p.holdingId + p.exDivDate,
+      key: p.key,
       holdingId: p.holdingId,
       accountId: p.accountId,
       symbol: p.symbol,
       currency: p.currency,
-      date: p.exDivDate,
-      units: p.units,
+      date: p.payDate,
+      units: Number(p.units.toFixed(4)),
       perShare: p.perShare,
-      amount: Number(p.amount.toFixed(2)),
+      amount: Number(p.expected.toFixed(2)),
+      transactionId: p.transactionId,
+      withholdingRate: p.withholdingRate,
     });
   };
 
@@ -191,6 +246,29 @@ function DividendsPage() {
     setRecording(draft.key);
     try {
       const holding = holdings.find((h) => h.id === draft.holdingId);
+      const existing = draft.transactionId
+        ? transactions.find((t) => t.id === draft.transactionId)
+        : undefined;
+      if (existing) {
+        await updateTransaction.mutateAsync({
+          id: existing.id,
+          accountId: draft.accountId,
+          symbol: draft.symbol,
+          name: holding?.name ?? null,
+          assetType: holding?.asset_type ?? "Stock",
+          transactionType: existing.transaction_type,
+          units: 0,
+          pricePerUnit: 0,
+          amount: Number(draft.amount.toFixed(2)),
+          currency: draft.currency,
+          fxRate: draft.currency === "USD" ? existing.fx_rate || fxUsdCad : 1,
+          fee: existing.fee,
+          date: draft.date,
+        });
+        toast.success(`Corrected the ${draft.symbol} dividend`);
+        setReview(null);
+        return;
+      }
       await addTransaction.mutateAsync({
         accountId: draft.accountId,
         symbol: draft.symbol,
@@ -279,10 +357,11 @@ function DividendsPage() {
       <div className="panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Ex-dividend events to record
+            Dividends to record or fix
           </h2>
           <span className="flex items-center gap-3 text-xs text-muted-foreground">
-            {pending.length} not yet in your ledger
+            {divHistory.isFetching ? "Checking dividend history… · " : ""}
+            {pending.length} to review
             {hiddenCount > 0 ? (
               <button
                 type="button"
@@ -304,53 +383,93 @@ function DividendsPage() {
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
+                  <TableHead>Status</TableHead>
                   <TableHead>Symbol</TableHead>
                   <TableHead>Account</TableHead>
-                  <TableHead>Ex-date</TableHead>
-                <TableHead className="text-right">Units</TableHead>
-                <TableHead className="text-right">Per share</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pending.map((p) => (
-                <TableRow key={p.holdingId + p.exDivDate}>
-                  <TableCell className="font-medium">{p.symbol}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {accountName(p.accountId)}
-                  </TableCell>
-                  <TableCell className="num">{p.exDivDate}</TableCell>
-                  <TableCell className="num text-right">{formatUnits(p.units)}</TableCell>
-                  <TableCell className="num text-right">
-                    {p.perShare.toFixed(4)} {p.currency}
-                  </TableCell>
-                  <TableCell className="num text-right">
-                    {p.amount.toFixed(2)} {p.currency}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        size="sm"
-                        disabled={recording === p.holdingId + p.exDivDate}
-                        onClick={() => openReview(p)}
-                      >
-                        Review &amp; record
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          saveDismissed([...dismissed, p.holdingId + p.exDivDate]);
-                          toast.message(`Skipped the ${p.symbol} payment`);
-                        }}
-                      >
-                        Skip
-                      </Button>
-                    </div>
-                  </TableCell>
+                  <TableHead>Pay date</TableHead>
+                  <TableHead className="text-right">Units</TableHead>
+                  <TableHead className="text-right">Expected</TableHead>
+                  <TableHead className="text-right">Recorded</TableHead>
+                  <TableHead />
                 </TableRow>
-              ))}
+              </TableHeader>
+              <TableBody>
+                {pending.map((p) => (
+                  <TableRow key={p.key}>
+                    <TableCell>
+                      <span
+                        className={
+                          p.kind === "fix"
+                            ? "rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground"
+                            : "rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground"
+                        }
+                      >
+                        {p.kind === "fix" ? "Needs fix" : "Missing"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {p.symbol}
+                      {p.reasons.length > 0 ? (
+                        <ul className="mt-1 max-w-sm space-y-0.5 text-xs font-normal text-muted-foreground">
+                          {p.reasons.map((r) => (
+                            <li key={r}>{r}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {accountName(p.accountId)}
+                    </TableCell>
+                    <TableCell className="num">
+                      {p.payDate}
+                      {p.exDate !== p.payDate ? (
+                        <span className="block text-xs text-muted-foreground">ex {p.exDate}</span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="num text-right">{formatUnits(p.units)}</TableCell>
+                    <TableCell className="num text-right">
+                      {p.expected.toFixed(2)} {p.currency}
+                      {p.withholdingRate > 0 ? (
+                        <span className="block text-xs text-muted-foreground">
+                          after {(p.withholdingRate * 100).toFixed(0)}% US tax
+                        </span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="num text-right">
+                      {p.recordedAmount != null ? (
+                        <>
+                          {p.recordedAmount.toFixed(2)} {p.currency}
+                          <span className="block text-xs text-muted-foreground">
+                            {p.recordedDate}
+                          </span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          disabled={recording === p.key}
+                          onClick={() => openReview(p)}
+                        >
+                          {p.kind === "fix" ? "Review fix" : "Review & record"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            saveDismissed([...dismissed, p.key]);
+                            toast.message(`Skipped the ${p.symbol} payment`);
+                          }}
+                        >
+                          Skip
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
@@ -510,7 +629,9 @@ function DividendsPage() {
       <Dialog open={review !== null} onOpenChange={(o) => !o && setReview(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Check this dividend before it is saved</DialogTitle>
+            <DialogTitle>
+              {review?.transactionId ? "Correct this dividend" : "Check this dividend before it is saved"}
+            </DialogTitle>
             <DialogDescription>
               {review ? `${review.symbol} · ${accountName(review.accountId)}` : ""}
             </DialogDescription>
