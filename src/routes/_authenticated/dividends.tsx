@@ -300,12 +300,13 @@ function DividendsPage() {
             recorded{hiddenCount > 0 ? " or skipped" : ""}.
           </p>
         ) : (
-          <Table className="mt-3">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Symbol</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>Ex-date</TableHead>
+          <div className="mt-3 max-h-[30rem] overflow-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead>Symbol</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Ex-date</TableHead>
                 <TableHead className="text-right">Units</TableHead>
                 <TableHead className="text-right">Per share</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
@@ -350,8 +351,9 @@ function DividendsPage() {
                   </TableCell>
                 </TableRow>
               ))}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
 
