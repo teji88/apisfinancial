@@ -232,6 +232,28 @@ function Overview({
       </div>
 
 
+      {overview.sections.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {overview.sections.map((section) => (
+            <div key={section.title} className="panel p-5">
+              <h3 className="font-display text-lg font-semibold">{section.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{section.summary}</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {section.metrics.map((metric) => (
+                  <div key={metric.label} className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">{metric.label}</p>
+                    <p className={`num mt-1 font-semibold ${metric.tone === "warning" ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                      {typeof metric.value === "number" ? formatCad(metric.value) : metric.value}
+                    </p>
+                    {metric.note && <p className="mt-1 text-[11px] text-muted-foreground">{metric.note}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {stressResults && <StressOverview stressResults={stressResults} onScenarios={() => {}} />}
 
       {optimization && (
