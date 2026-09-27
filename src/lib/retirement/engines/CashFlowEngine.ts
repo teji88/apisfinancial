@@ -29,6 +29,7 @@ export interface MonthlyCashFlowResult {
   expectedEndingPortfolio: Money;
   assetReconciliation: Money;
   cashReconciliation: Money;
+  cashShortfall: Money;
   externalCashAvailable: Money;
   externalCashRequired: Money;
   netCashFlowBeforeUnmodeledCash: Money;
@@ -53,7 +54,8 @@ export function reconcileMonthlyCashFlow(input: MonthlyCashFlowInput): MonthlyCa
     input.taxes -
     input.spending -
     input.debtPayments;
-  const cashReconciliation = input.endingHouseholdCash - expectedEndingHouseholdCash;
+  const cashShortfall = Math.max(0, -expectedEndingHouseholdCash);
+  const cashReconciliation = input.endingHouseholdCash - Math.max(0, expectedEndingHouseholdCash);
   const externalCashAvailable = input.grossIncome + input.withdrawals;
   const externalCashRequired = input.spending + input.debtPayments + input.taxes;
   const netCashFlowBeforeUnmodeledCash = externalCashAvailable - externalCashRequired;
