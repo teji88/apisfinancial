@@ -258,6 +258,8 @@ export function runRetirementSimulation(
     let survivorBenefits = 0;
     let deathTax = 0;
     let estateGross = 0;
+  let survivorTransferredAssets = 0;
+  let deathCapitalGains = 0;
 
     for (const person of alivePeople) {
       const age = ages[person.role] ?? 0;
@@ -516,6 +518,7 @@ export function runRetirementSimulation(
           scenarioAccount?.deathTransfer ?? "SPOUSE",
         );
         if (treatment.transferredToSurvivor > 0) {
+          survivorTransferredAssets += treatment.transferredToSurvivor;
           const target = accounts.find((candidate) => candidate.owner === survivor.role && candidate.type === account.type)
             ?? accounts.find((candidate) => candidate.owner === survivor.role && candidate.type === "CASH");
           if (target) target.balance += treatment.transferredToSurvivor;
@@ -535,6 +538,7 @@ export function runRetirementSimulation(
         const transfer = scenarioAccount?.deathTransfer ?? (hasSpouse ? "SPOUSE" : "ESTATE");
         const treatment = applyAccountDeathTreatment(account, hasSpouse, scenarioAccount?.nonRegisteredAcb ?? 0, transfer);
         const deathTaxableIncome = treatment.taxableAtDeath + treatment.taxableCapitalGainAtDeath;
+        deathCapitalGains += treatment.capitalGainAtDeath;
         deathTax += calculateBasicTax(deathTaxableIncome, scenario.household.province, maxAge).totalTax;
         estateGross += treatment.estateValue + treatment.transferredToSurvivor;
         account.balance = treatment.estateValue;
@@ -690,6 +694,9 @@ export function runRetirementSimulation(
       maximumSpendingShortfall: maxShortfall,
       survivorShortfall: monthly.filter((x) => x.householdStage === "SURVIVOR").reduce((m, x) => Math.max(m, x.shortfall), 0),
       estateValue: monthly.at(-1)?.householdStage === "ESTATE" ? Math.max(0, estateGross - deathTax) : undefined,
+      estateTax: deathTax > 0 ? deathTax : undefined,
+      deathCapitalGains: deathCapitalGains > 0 ? deathCapitalGains : undefined,
+      survivorTransferredAssets: survivorTransferredAssets > 0 ? survivorTransferredAssets : undefined,
     },
     warnings,
     assumptions: [
