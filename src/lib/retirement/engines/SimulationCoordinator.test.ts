@@ -99,7 +99,7 @@ describe("retirement simulation validation boundary", () => {
     const result = runRetirementSimulation(survivorScenario, 200_000, 2026);
     expect(result.status).toBe("COMPLETE");
     expect(result.metrics.survivorTransferredAssets).toBeGreaterThan(0);
-    expect(result.metrics.estateValue).toBeDefined();
+    expect(result.metrics.estateValue).toBeGreaterThan(100_000);
     expect(result.metrics.deathCapitalGains).toBeGreaterThan(0);
     expect(result.metrics.estateTax).toBeGreaterThan(0);
   });
