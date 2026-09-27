@@ -5,6 +5,7 @@ describe("MonthlyFinancialLedger", () => {
   it("reconciles assets exactly", () => {
     const ledger = reconcileMonthlyFinancialLedger({
       beginningPortfolio: 100000,
+      beginningHouseholdCash: 0,
       investmentGrowth: 500,
       contributions: 1000,
       grossIncome: 2000,
@@ -15,6 +16,7 @@ describe("MonthlyFinancialLedger", () => {
       debtPrincipal: 350,
       debtInterest: 50,
       endingPortfolio: 100000,
+      endingHouseholdCash: 2100,
       beginningDebt: 0,
       endingDebt: 0,
     });
@@ -24,6 +26,7 @@ describe("MonthlyFinancialLedger", () => {
   it("reconciles debt from interest and principal", () => {
     const ledger = reconcileMonthlyFinancialLedger({
       beginningPortfolio: 100000,
+      beginningHouseholdCash: 0,
       investmentGrowth: 0,
       contributions: 0,
       grossIncome: 0,
@@ -34,6 +37,7 @@ describe("MonthlyFinancialLedger", () => {
       debtPrincipal: 350,
       debtInterest: 50,
       endingPortfolio: 100000,
+      endingHouseholdCash: 4000,
       beginningDebt: 20000,
       endingDebt: 19700,
     });
@@ -43,6 +47,7 @@ describe("MonthlyFinancialLedger", () => {
   it("treats debt principal as a transfer, not a net-worth expense", () => {
     const ledger = reconcileMonthlyFinancialLedger({
       beginningPortfolio: 100000,
+      beginningHouseholdCash: 0,
       investmentGrowth: 1000,
       contributions: 0,
       grossIncome: 0,
@@ -53,6 +58,7 @@ describe("MonthlyFinancialLedger", () => {
       debtPrincipal: 350,
       debtInterest: 50,
       endingPortfolio: 100000,
+      endingHouseholdCash: 600,
       beginningDebt: 20000,
       endingDebt: 19700,
     });
@@ -64,6 +70,7 @@ describe("MonthlyFinancialLedger", () => {
   it("exposes external household cash as a diagnostic instead of hiding it", () => {
     const ledger = reconcileMonthlyFinancialLedger({
       beginningPortfolio: 100000,
+      beginningHouseholdCash: 0,
       investmentGrowth: 0,
       contributions: 0,
       grossIncome: 2000,
@@ -74,6 +81,7 @@ describe("MonthlyFinancialLedger", () => {
       debtPrincipal: 350,
       debtInterest: 50,
       endingPortfolio: 99000,
+      endingHouseholdCash: 100,
       beginningDebt: 20000,
       endingDebt: 19700,
     });
