@@ -338,6 +338,12 @@ export function runRetirementSimulation(
     );
     let remainingNeed = Math.max(0, baseCashNeed - mandatoryTaken);
     let withdrawals = mandatoryTaken + investmentIncomeDistributed;
+    const withdrawalSources = {
+      registered: mandatoryTaken,
+      tfsa: 0,
+      nonRegistered: investmentIncomeDistributed,
+      cash: 0,
+    };
     let taxableWithdrawals = taxableMandatory;
 
     const registeredWithdrawalsByOwner: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
@@ -410,6 +416,10 @@ export function runRetirementSimulation(
       }
       if (taken <= 0) continue;
       withdrawals += taken;
+      if (bucket === "registered") withdrawalSources.registered += taken;
+      else if (bucket === "tfsa") withdrawalSources.tfsa += taken;
+      else if (bucket === "nonRegistered") withdrawalSources.nonRegistered += taken;
+      else if (bucket === "cash") withdrawalSources.cash += taken;
 
       if (bucket === "registered") {
         taxableWithdrawals += taken;
@@ -563,6 +573,7 @@ export function runRetirementSimulation(
       contributions: contributionsThisMonth,
       grossIncome: benefits + otherIncome,
       withdrawals,
+      withdrawalSources,
       taxes: currentTax + deathTax,
       spending: targetSpending,
       debtPayments,
