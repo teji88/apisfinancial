@@ -617,11 +617,10 @@ export function runRetirementSimulation(
         endingPortfolio: portfolio,
         endingHouseholdCash: householdCash,
         assetReconciliation: cashFlow.assetReconciliation,
-        cashReconciliation: cashFlow.cashReconciliation,
+        cashReconciliation: financialLedger.cashReconciliation,
         externalCashChange: financialLedger.externalCashChange,
         debtReconciliation: financialLedger.debtReconciliation,
         netWorthReconciliation: financialLedger.netWorthReconciliation,
-        cashReconciliation: financialLedger.cashReconciliation,
       },
     });
 
