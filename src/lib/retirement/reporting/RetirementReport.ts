@@ -1,5 +1,5 @@
 import type { RetirementScenario, SimulationResult } from "../domain/types";
-import { buildRetirementAnalysis, type RetirementAnalysis } from "../analysis/RetirementAnalysis";
+import { buildRetirementAnalysis, type AnalysisViewModel } from "../analysis/RetirementAnalysis";
 
 export interface RetirementReport {
   title: string;
@@ -20,7 +20,7 @@ export interface RetirementReport {
     minimumPortfolio: number;
   };
   scenario: RetirementScenario;
-  analysis: RetirementAnalysis | null;
+  analysis: AnalysisViewModel | null;
   warnings: string[];
 }
 
