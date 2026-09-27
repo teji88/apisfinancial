@@ -101,7 +101,7 @@ export function runRetirementSimulation(
   const start = new Date(Date.UTC(startYear, 0, 1));
   const people = scenario.household.people;
   const planningEndYear = Math.min(...people.map((p) => p.birthYear + scenario.goals.planningAge));
-  const months = Math.max(1, 12 * (planningEndYear - startYear) + 12);
+  const months = Math.max(1, 12 * Math.max(1, planningEndYear - startYear + 1));
   const debtStates: Array<{ state: DebtState; startDate?: string; endDate?: string }> = (scenario.debts ?? []).map((debt) => ({ state: createDebtState(debt), startDate: debt.startDate, endDate: debt.endDate }));
   const accounts = scenario.accounts.length
     ? scenario.accounts.map(createAccountState)
@@ -582,6 +582,7 @@ export function runRetirementSimulation(
       debtInterest,
       endingPortfolio: portfolio,
       endingHouseholdCash: householdCash,
+      beginningHouseholdCash,
       beginningDebt,
       endingDebt: debtBalance,
     });
