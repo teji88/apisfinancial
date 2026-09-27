@@ -35,6 +35,8 @@ describe("RetirementOptimizer", () => {
     if (result.selectedCandidate) {
       expect(result.feasiblePlans).toContain(result.selectedCandidate.scenario);
       expect(result.selectedCandidate.violations).toEqual([]);
+    } else {
+      expect(result.selectedPlan).toBeUndefined();
     }
   });
 });
