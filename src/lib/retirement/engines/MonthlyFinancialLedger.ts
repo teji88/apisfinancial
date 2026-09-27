@@ -35,6 +35,7 @@ export interface MonthlyFinancialLedger {
   withdrawals: Money;
   assetReconciliation: Money;
   cashReconciliation: Money;
+  cashShortfall: Money;
   beginningDebt: Money;
   endingDebt: Money;
   debtInterest: Money;
@@ -69,14 +70,16 @@ export function reconcileMonthlyFinancialLedger(
 
   const beginningNetWorth = input.beginningPortfolio + input.beginningHouseholdCash - input.beginningDebt;
   const endingNetWorth = input.endingPortfolio + input.endingHouseholdCash - input.endingDebt;
+  const expectedEndingHouseholdCash =
+    input.beginningHouseholdCash +
+    input.grossIncome +
+    input.withdrawals -
+    input.taxes -
+    input.spending -
+    input.debtPayments;
+  const cashShortfall = Math.max(0, -expectedEndingHouseholdCash);
   const cashReconciliation =
-    input.endingHouseholdCash -
-    (input.beginningHouseholdCash +
-      input.grossIncome +
-      input.withdrawals -
-      input.taxes -
-      input.spending -
-      input.debtPayments);
+    input.endingHouseholdCash - Math.max(0, expectedEndingHouseholdCash);
   const assetChange =
     (input.endingPortfolio + input.endingHouseholdCash) -
     (input.beginningPortfolio + input.beginningHouseholdCash);
@@ -116,6 +119,7 @@ export function reconcileMonthlyFinancialLedger(
     withdrawals: input.withdrawals,
     assetReconciliation,
     cashReconciliation,
+    cashShortfall,
     beginningDebt: input.beginningDebt,
     endingDebt: input.endingDebt,
     debtInterest: input.debtInterest,
