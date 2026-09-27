@@ -17,6 +17,9 @@ import {
   summarizeStressTests,
   DEFAULT_STRESS_TESTS,
   scenarioStatusText,
+  buildRetirementReport,
+  serializeRetirementReport,
+  buildPrintableRetirementReport,
   type ScenarioStressTestResult,
   type ScenarioSummary,
   type RetirementScenario,
@@ -214,7 +217,7 @@ function RetirementPage() {
         />
       )}
       {section === "analysis" && <Analysis result={result} />}
-      {section === "reports" && <Reports result={result} />}
+      {section === "reports" && <Reports result={result} scenario={scenario} />}
     </div>
   );
 }
@@ -838,16 +841,116 @@ function yearOfAnalysisDate(date: string): number {
   return new Date(date).getUTCFullYear();
 }
 
-function Reports({ result }: { result: SimulationResult | null }) {
-  if (!result) return <ComingSoon title="Reports" text="Run a simulation to generate a reproducible retirement report. The report will preserve assumptions, rules version, engine version and simulation ID." />;
-  const download = () => {
-    const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+function Reports({ result, scenario }: { result: SimulationResult | null; scenario: RetirementScenario | null }) {
+  if (!result || !scenario) {
+    return <ComingSoon title="Reports" text="Run a simulation to generate a readable retirement report and a detailed reproducibility export. The report preserves assumptions, rules version and engine version." />;
+  }
+
+  const report = buildRetirementReport(result, scenario);
+
+  const downloadFile = (content: string, type: string, filename: string) => {
+    const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `retirement-simulation-${result.simulationId}.json`; a.click(); URL.revokeObjectURL(url);
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   };
-  return <div className="space-y-5"><div className="panel p-5"><h2 className="font-display text-xl font-semibold">Simulation report</h2><p className="mt-2 text-sm text-muted-foreground">Reproducibility metadata is included so a future engine can explain how this result was produced.</p><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Engine" value={result.engineVersion} /><Metric label="Rules" value={result.rulesVersion} /><Metric label="Status" value={result.status} /><Metric label="Simulation ID" value={result.simulationId.slice(0, 12)} /></div><Button className="mt-5" onClick={download}>Export JSON</Button></div></div>;
+
+  const downloadJson = () => downloadFile(
+    serializeRetirementReport(report),
+    "application/json",
+    `retirement-report-${result.simulationId}.json`,
+  );
+
+  const downloadPrintable = () => downloadFile(
+    buildPrintableRetirementReport(result, scenario),
+    "text/html",
+    `retirement-report-${result.simulationId}.html`,
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="panel p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-2xl">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Retirement report</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold">Your modeled retirement plan</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              A human-readable summary is provided alongside a detailed JSON export that preserves the scenario and reproducibility metadata.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={downloadJson}>Export detailed JSON</Button>
+            <Button onClick={downloadPrintable}>Export printable report</Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric label="Ending portfolio" value={formatCad(report.summary.endingPortfolio)} />
+        <Metric label="Ending net worth" value={formatCad(report.summary.endingNetWorth)} />
+        <Metric label="Lifetime spending" value={formatCad(report.summary.lifetimeSpending)} />
+        <Metric label="Lifetime after-tax cash" value={formatCad(report.summary.lifetimeAfterTaxCash)} />
+        <Metric label="Lifetime tax" value={formatCad(report.summary.lifetimeTax)} />
+        <Metric label="Government benefits" value={formatCad(report.summary.totalBenefits)} />
+        <Metric label="Maximum shortfall" value={formatCad(report.summary.maximumSpendingShortfall)} />
+        <Metric label="Minimum portfolio" value={formatCad(report.summary.minimumPortfolio)} />
+      </div>
+
+      <div className="panel p-5">
+        <h3 className="font-display text-lg font-semibold">Report metadata</h3>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Status" value={report.status} />
+          <Metric label="Engine" value={report.engineVersion} />
+          <Metric label="Rules" value={report.rulesVersion} />
+          <Metric label="Simulation" value={report.simulationId.slice(0, 16)} />
+        </div>
+      </div>
+
+      {report.analysis && (
+        <div className="panel p-5">
+          <h3 className="font-display text-lg font-semibold">Annual analysis</h3>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="pb-2 pr-4">Year</th>
+                  <th className="pb-2 pr-4">Ending portfolio</th>
+                  <th className="pb-2 pr-4">Spending</th>
+                  <th className="pb-2 pr-4">Taxes</th>
+                  <th className="pb-2">Benefits</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.analysis.annual.map((row) => (
+                  <tr key={row.year} className="border-b last:border-0">
+                    <td className="py-2 pr-4">{row.year}</td>
+                    <td className="py-2 pr-4 num">{formatCad(row.endingPortfolio)}</td>
+                    <td className="py-2 pr-4 num">{formatCad(row.spending)}</td>
+                    <td className="py-2 pr-4 num">{formatCad(row.taxes)}</td>
+                    <td className="py-2 num">{formatCad(row.benefits)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {report.warnings.length > 0 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+          <p className="font-medium">Model notes</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+            {report.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
+
 
 function ScenarioCard({ title, text, onClick, disabled }: { title: string; text: string; onClick: () => void; disabled: boolean }) {
   return <button type="button" onClick={onClick} disabled={disabled} className="panel p-5 text-left transition hover:-translate-y-0.5 hover:border-foreground/20 disabled:opacity-50"><p className="font-display font-semibold">{title}</p><p className="mt-2 text-sm text-muted-foreground">{text}</p></button>;
