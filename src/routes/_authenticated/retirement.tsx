@@ -476,29 +476,189 @@ function ScenarioResults({ summaries }: { summaries: ScenarioSummary[] }) {
   return <div className="panel p-5"><h3 className="font-display text-lg font-semibold">Stress-test results</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2 pr-4">Scenario</th><th className="pb-2 pr-4">Result</th><th className="pb-2 pr-4">Ending portfolio</th><th className="pb-2 pr-4">Max shortfall</th><th className="pb-2">Change vs base</th></tr></thead><tbody>{summaries.map(s => <tr key={s.kind} className="border-b last:border-0"><td className="py-3 pr-4 font-medium">{s.name}</td><td className="py-3 pr-4">{scenarioStatusText(s)}</td><td className="py-3 pr-4 num">{formatCad(s.endingPortfolio)}</td><td className="py-3 pr-4 num">{formatCad(s.maximumShortfall)}</td><td className="py-3 num">{formatCad(s.deltaEndingPortfolio)}</td></tr>)}</tbody></table></div></div>;
 }
 \nfunction Analysis({ result }: { result: SimulationResult | null }) {
-  if (!result) return <ComingSoon title="Analysis" text="Run the plan from Overview or Plan first. Detailed monthly cash flow, withdrawals, taxes, benefits and portfolio trajectory will appear here." />;
-  const last = result.monthly.at(-1);
+  const analysis = buildRetirementAnalysis(result);
+  if (!result || !analysis) {
+    return <ComingSoon title="Analysis" text="Run the plan from Overview or Plan first. Detailed cash flow, withdrawals, taxes, benefits, portfolio trajectory, debt and reconciliation diagnostics will appear here." />;
+  }
+
+  const maxPortfolio = Math.max(1, ...analysis.annual.map((row) => row.endingPortfolio));
+  const maxTax = Math.max(1, ...analysis.annual.map((row) => row.taxes));
+
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Metric label="Feasible under base assumptions" value={result.metrics.feasible ? "Yes" : "No"} />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Ending portfolio" value={formatCad(result.metrics.endingPortfolio)} />
-        <Metric label="Maximum spending shortfall" value={formatCad(result.metrics.maximumSpendingShortfall)} />
+        <Metric label="Ending net worth" value={formatCad(result.metrics.endingNetWorth)} />
         <Metric label="Lifetime spending" value={formatCad(result.metrics.lifetimeSpending)} />
         <Metric label="Lifetime tax" value={formatCad(result.metrics.lifetimeTax)} />
-        <Metric label="Total benefits" value={formatCad(result.metrics.totalBenefits)} />
+        <Metric label="Government benefits" value={formatCad(result.metrics.totalBenefits)} />
+        <Metric label="Maximum shortfall" value={formatCad(result.metrics.maximumSpendingShortfall)} />
+        <Metric label="Minimum portfolio" value={formatCad(result.metrics.minimumPortfolio)} />
+        <Metric label="Plan status" value={result.metrics.feasible ? "No modeled shortfall" : "Shortfall detected"} />
       </div>
+
       <div className="panel p-5">
-        <h3 className="font-display text-lg font-semibold">Latest simulation month</h3>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-          <Metric label="Portfolio" value={formatCad(last?.portfolio ?? 0)} />
-          <Metric label="Benefits" value={formatCad(last?.benefits ?? 0)} />
-          <Metric label="Withdrawals" value={formatCad(last?.withdrawals ?? 0)} />
-          <Metric label="Taxes" value={formatCad(last?.taxes ?? 0)} />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Portfolio trajectory</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Year-end portfolio and net worth across the selected planning horizon.</p>
+          </div>
+          {analysis.depletionAge !== undefined && (
+            <Badge variant="outline">Portfolio reaches zero around age {analysis.depletionAge}</Badge>
+          )}
+        </div>
+        <div className="mt-5 space-y-3">
+          {analysis.annual.map((row) => (
+            <div key={row.year} className="grid grid-cols-[52px_1fr_auto] items-center gap-3 text-sm">
+              <span className="num text-muted-foreground">{row.year}</span>
+              <div className="h-7 overflow-hidden rounded-md bg-muted">
+                <div
+                  className="h-full rounded-md bg-foreground/70"
+                  style={{ width: \`${Math.max(2, (row.endingPortfolio / maxPortfolio) * 100)}%\` }}
+                  title={formatCad(row.endingPortfolio)}
+                />
+              </div>
+              <span className="num w-28 text-right">{formatCad(row.endingPortfolio)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="panel p-5">
+          <h2 className="font-display text-lg font-semibold">Withdrawal sources</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Actual modeled withdrawals recorded by the simulation engine.</p>
+          <div className="mt-4 space-y-3">
+            {[
+              ["Registered", analysis.withdrawal.registered],
+              ["TFSA", analysis.withdrawal.tfsa],
+              ["Non-registered", analysis.withdrawal.nonRegistered],
+              ["Portfolio cash", analysis.withdrawal.otherCash],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="flex items-center justify-between gap-4 border-b pb-2 last:border-0">
+                <span className="text-sm">{String(label)}</span>
+                <span className="num font-semibold">{formatCad(Number(value))}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">Total modeled withdrawals</p>
+            <p className="num mt-1 text-lg font-semibold">{formatCad(analysis.withdrawal.total)}</p>
+          </div>
+        </div>
+
+        <div className="panel p-5">
+          <h2 className="font-display text-lg font-semibold">Tax by year</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Annual tax liability generated by the simulation's tax ledger.</p>
+          <div className="mt-4 space-y-3">
+            {analysis.annual.map((row) => (
+              <div key={row.year} className="grid grid-cols-[52px_1fr_auto] items-center gap-3 text-sm">
+                <span className="num text-muted-foreground">{row.year}</span>
+                <div className="h-5 overflow-hidden rounded-md bg-muted">
+                  <div
+                    className="h-full rounded-md bg-foreground/50"
+                    style={{ width: \`${Math.max(2, (row.taxes / maxTax) * 100)}%\` }}
+                    title={formatCad(row.taxes)}
+                  />
+                </div>
+                <span className="num w-28 text-right">{formatCad(row.taxes)}</span>
+              </div>
+            ))}
+          </div>
+          {analysis.peakTaxYear && (
+            <p className="mt-4 text-xs text-muted-foreground">
+              Highest modeled annual tax: {formatCad(analysis.peakTaxYear.taxes)} in {analysis.peakTaxYear.year}.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="panel p-5">
+        <h2 className="font-display text-lg font-semibold">Annual cash flow</h2>
+        <p className="mt-1 text-sm text-muted-foreground">This table separates spending, benefits, withdrawals, taxes and debt service.</p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead>
+              <tr className="border-b text-left text-xs text-muted-foreground">
+                <th className="pb-2 pr-4">Year</th>
+                <th className="pb-2 pr-4 text-right">Benefits</th>
+                <th className="pb-2 pr-4 text-right">Withdrawals</th>
+                <th className="pb-2 pr-4 text-right">Taxes</th>
+                <th className="pb-2 pr-4 text-right">Spending</th>
+                <th className="pb-2 pr-4 text-right">Debt payments</th>
+                <th className="pb-2 text-right">Shortfall</th>
+              </tr>
+            </thead>
+            <tbody>
+              {analysis.annual.map((row) => (
+                <tr key={row.year} className="border-b last:border-0">
+                  <td className="py-3 pr-4 num">{row.year}</td>
+                  <td className="py-3 pr-4 text-right num">{formatCad(row.benefits)}</td>
+                  <td className="py-3 pr-4 text-right num">{formatCad(row.withdrawals)}</td>
+                  <td className="py-3 pr-4 text-right num">{formatCad(row.taxes)}</td>
+                  <td className="py-3 pr-4 text-right num">{formatCad(row.spending)}</td>
+                  <td className="py-3 pr-4 text-right num">{formatCad(row.debtPayments)}</td>
+                  <td className="py-3 text-right num">{formatCad(row.shortfall)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="panel p-5">
+          <h3 className="font-display font-semibold">Government benefits</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Lifetime modeled CPP/QPP, OAS and GIS benefits total <span className="num font-medium text-foreground">{formatCad(result.metrics.totalBenefits)}</span>.
+            Benefit timing and survivor effects can be examined in the monthly timeline.
+          </p>
+        </div>
+        <div className="panel p-5">
+          <h3 className="font-display font-semibold">Debt</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {analysis.peakDebtYear
+              ? \`Peak modeled debt is ${formatCad(analysis.peakDebtYear.debt)} around ${analysis.peakDebtYear.year}.\`
+              : "No modeled debt balance remains in the simulation."}
+          </p>
+        </div>
+        <div className="panel p-5">
+          <h3 className="font-display font-semibold">Survivor & estate</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {analysis.survivor.begins
+              ? \`Survivor stage begins in ${yearOfAnalysisDate(analysis.survivor.begins)}; maximum modeled survivor shortfall is ${formatCad(analysis.survivor.maximumShortfall)}.\`
+              : "No survivor transition was modeled in this scenario."}
+          </p>
+          {analysis.estate.value !== undefined && (
+            <p className="mt-2 text-sm text-muted-foreground">Modeled estate value: <span className="num font-medium text-foreground">{formatCad(analysis.estate.value)}</span>.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="panel p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Calculation diagnostics</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Reconciliation checks run against every simulated month.</p>
+          </div>
+          <Badge variant={analysis.reconciliation.maxAbsoluteError <= 0.01 ? "outline" : "destructive"}>
+            {analysis.reconciliation.maxAbsoluteError <= 0.01 ? "Reconciled" : "Review required"}
+          </Badge>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Metric label="Months checked" value={String(analysis.reconciliation.monthsChecked)} />
+          <Metric label="Cash issues" value={String(analysis.reconciliation.cashIssues)} />
+          <Metric label="Asset issues" value={String(analysis.reconciliation.assetIssues)} />
+          <Metric label="Debt issues" value={String(analysis.reconciliation.debtIssues)} />
+          <Metric label="Max error" value={analysis.reconciliation.maxAbsoluteError.toFixed(4)} />
         </div>
       </div>
     </div>
   );
+}
+
+function yearOfAnalysisDate(date: string): number {
+  return new Date(date).getUTCFullYear();
 }
 
 function Reports({ result }: { result: SimulationResult | null }) {
