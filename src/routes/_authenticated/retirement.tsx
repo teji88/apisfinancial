@@ -83,7 +83,7 @@ function RetirementPage() {
     try {
       const simulation = runBasicSimulation(nextScenario, portfolio.total, new Date().getUTCFullYear(), portfolio.byType);
       await retirementStore.saveResult(simulation);
-      const persistedScenario = { ...nextScenario, metadata: { ...nextScenario.metadata, scenarioHash: simulation.simulationId } };
+      const persistedScenario = { ...nextScenario, metadata: { ...nextScenario.metadata, scenarioHash: simulation.scenarioHash } };
       await retirementStore.saveScenario(persistedScenario);
       setScenario(persistedScenario);
       setResult(simulation);
@@ -142,7 +142,14 @@ function RetirementPage() {
         <PlanEditor scenario={activeScenario} portfolio={portfolio} onChange={updateScenario} onSave={saveScenario} saved={saved} running={running} />
       )}
       {section === "scenarios" && (
-        <ScenarioPanel scenario={activeScenario} portfolio={portfolio} onRun={runSimulation} running={running} />
+        <ScenarioPanel
+          scenario={activeScenario}
+          portfolio={portfolio}
+          stressResults={stressResults}
+          onStress={setStressResults}
+          onRun={runSimulation}
+          running={running}
+        />
       )}
       {section === "analysis" && <Analysis result={result} />}
       {section === "reports" && <Reports result={result} />}
@@ -270,24 +277,102 @@ function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
   );
 }
 
-function ScenarioPanel({ scenario, portfolio, stressResults, onRun, onStress, running }: { scenario: RetirementScenario; portfolio: { total: number; byType: Record<string, number> }; stressResults: ScenarioStressTestResult | null; onRun: (scenario?: RetirementScenario) => Promise<void>; onStress: (result: ScenarioStressTestResult) => void; running: boolean }) {
-  const stress = (label: string, patch: Partial<RetirementScenario["assumptions"]>) => {
-    const next = { ...scenario, name: label, assumptions: { ...scenario.assumptions, ...patch }, id: crypto.randomUUID(), metadata: { ...scenario.metadata, createdAt: new Date().toISOString() } };
+function ScenarioPanel({
+  scenario,
+  portfolio,
+  stressResults,
+  onRun,
+  onStress,
+  running,
+}: {
+  scenario: RetirementScenario;
+  portfolio: { total: number; byType: Record<string, number> };
+  stressResults: ScenarioStressTestResult | null;
+  onRun: (scenario?: RetirementScenario) => Promise<void>;
+  onStress: (result: ScenarioStressTestResult) => void;
+  running: boolean;
+}) {
+  const stress = (
+    label: string,
+    patch: Partial<RetirementScenario["assumptions"]>,
+  ) => {
+    const next = {
+      ...scenario,
+      name: label,
+      assumptions: { ...scenario.assumptions, ...patch },
+      id: crypto.randomUUID(),
+      metadata: { ...scenario.metadata, createdAt: new Date().toISOString() },
+    };
     void onRun(next);
   };
+
+  const runAllStressTests = () => {
+    const result = runStressTests(
+      scenario,
+      portfolio.total,
+      portfolio.byType,
+    );
+    onStress(result);
+  };
+
+  const summaries = stressResults
+    ? summarizeStressTests(stressResults).filter((s) => s.kind !== "BASE")
+    : [];
+
   return (
     <div className="space-y-5">
-      <div className="panel p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="font-display text-xl font-semibold">Scenarios</h2><p className="mt-1 text-sm text-muted-foreground">Stress the same plan without changing the linked portfolio or base scenario.</p></div><Button onClick={runAllStressTests} disabled={running}>{running ? "Calculating…" : "Run all stress tests"}</Button></div></div>
-      <div className="grid gap-4 md:grid-cols-3">
-        <ScenarioCard title="Base plan" text={`${scenario.assumptions.investmentReturn}% return / ${scenario.assumptions.inflationRate}% inflation`} onClick={() => onRun()} disabled={running} />
-        <ScenarioCard title="Lower returns" text="4% return / current inflation" onClick={() => stress("Lower-return stress", { investmentReturn: 4 })} disabled={running} />
-        <ScenarioCard title="Higher inflation" text="6% return / 4% inflation" onClick={() => stress("Higher-inflation stress", { investmentReturn: 6, inflationRate: 4 })} disabled={running} />
+      <div className="panel p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="font-display text-xl font-semibold">Scenarios</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Stress the same plan without changing the linked portfolio or base scenario.
+            </p>
+          </div>
+          <Button onClick={runAllStressTests} disabled={running}>
+            {running ? "Calculating…" : "Run all stress tests"}
+          </Button>
+        </div>
       </div>
-      {summaries.length > 0 && <ScenarioResults summaries={summaries} />}\n      <p className="text-xs text-muted-foreground">Scenario results are deterministic. More advanced sequence-of-returns and longevity stress testing is planned for the optimizer layer.</p>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <ScenarioCard
+          title="Base plan"
+          text={`${scenario.assumptions.investmentReturn}% return / ${scenario.assumptions.inflationRate}% inflation`}
+          onClick={() => onRun()}
+          disabled={running}
+        />
+        <ScenarioCard
+          title="Lower returns"
+          text="2 percentage points below the base return"
+          onClick={() => stress("Lower-return stress", {
+            investmentReturn: Math.max(-5, scenario.assumptions.investmentReturn - 2),
+          })}
+          disabled={running}
+        />
+        <ScenarioCard
+          title="Higher inflation"
+          text="2 percentage points above the base inflation assumption"
+          onClick={() => stress("Higher-inflation stress", {
+            inflationRate: scenario.assumptions.inflationRate + 2,
+          })}
+          disabled={running}
+        />
+      </div>
+
+      {summaries.length > 0 && <ScenarioResults summaries={summaries} />}
+
+      {stressResults?.warnings.length ? (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+          <p className="font-medium">Scenario limitations</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+            {stressResults.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
-
 
 function StressOverview({ stressResults }: { stressResults: ScenarioStressTestResult; onScenarios: () => void }) {
   const summaries = summarizeStressTests(stressResults).filter(s => s.kind !== "BASE");
