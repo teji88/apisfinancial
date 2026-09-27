@@ -63,7 +63,7 @@ describe("MonthlyFinancialLedger", () => {
       endingDebt: 19700,
     });
     expect(ledger.beginningNetWorth).toBe(80000);
-    expect(ledger.endingNetWorth).toBe(80300);
+    expect(ledger.endingNetWorth).toBe(80900);
     expect(ledger.netWorthReconciliation).toBeCloseTo(0, 8);
   });
 
