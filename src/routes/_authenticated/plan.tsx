@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { PlanUpgrade } from "@/components/PlanUpgrade";
-import { ReferralCard } from "@/components/ReferralCard";
+
 
 import { useEntitlement, formatDate } from "@/lib/entitlement";
 import { getStripeEnvironment } from "@/lib/stripe";
@@ -243,7 +243,7 @@ function PlanPage() {
         )}
       </div>
 
-      <ReferralCard />
+    
 
       {!isPaid && !isInvite && !isOwner && <PlanUpgrade />}
     </div>
