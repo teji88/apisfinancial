@@ -252,12 +252,3 @@ export const createPortalSession = createServerFn({ method: "POST" })
       return { error: getStripeErrorMessage(error) };
     }
   });
-   await supabaseAdmin.from("subscriptions").upsert(rows, { onConflict: "stripe_subscription_id" });
- 
--  // Safety net for referral rewards when the provider callback was missed.
--  const { grantReferralReward } = await import("@/lib/referral.server");
--  for (const row of rows) {
--    await grantReferralReward(row.user_id, row.price_id, row.status);
--  }
-   return rows.length;
- }
