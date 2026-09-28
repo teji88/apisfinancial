@@ -203,7 +203,7 @@ export function reconcileDividends(
       used.add(match.id);
       if (match.transaction_type === "DRIP") continue; // Reinvested — amount recorded as units.
 
-      const amt = recordedInListing(match, currency);
+      const amt = recordedInListing(match, currency, expected, gross).amount;
       const reasons: string[] = [];
       const diff = expected > 0 ? (amt - expected) / expected : 0;
 
