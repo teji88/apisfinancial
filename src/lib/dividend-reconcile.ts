@@ -10,6 +10,7 @@
 
 import { isDividendType } from "./dividends";
 import { splitRatio, type Account, type Holding, type Transaction } from "./finance";
+import { CANADIAN_BASE_SET } from "./ticker-universe";
 
 export type DividendEvent = {
   exDate: string;
@@ -24,10 +25,17 @@ const US_WHT = 0.15;
 
 const TREATY_EXEMPT = ["RRSP", "SPOUSAL RRSP", "LIRA", "LRSP", "RRIF", "LIF", "PRIF", "RLIF"];
 
-export function isUsListed(holding: Holding, event?: DividendEvent): boolean {
-  const s = holding.symbol.toUpperCase();
+/**
+ * True only for genuinely US-domiciled listings. Canadian companies and REITs
+ * that declare in USD (BIP.UN, NTR, CSU…) never carry US withholding.
+ */
+export function isUsListed(holding: Holding, _event?: DividendEvent): boolean {
+  const s = holding.symbol.toUpperCase().replace(/\s+/g, "");
   if (/\.(TO|V|NE|CN)$/.test(s) || /^(TSX|TSE|TOR|CVE|TSXV):/.test(s)) return false;
-  if (event) return event.currency === "USD";
+  if (/[.-]UN(\.TO)?$/.test(s)) return false;
+  if (holding.currency === "CAD") return false;
+  const bare = s.replace(/^[A-Z]+:/, "").replace(/-/g, ".");
+  if (CANADIAN_BASE_SET.has(bare) && holding.currency !== "USD") return false;
   return holding.currency === "USD";
 }
 
@@ -58,15 +66,35 @@ export function unitsBefore(txns: Transaction[], exDate: string): number {
   return units;
 }
 
-/** Recorded dividend expressed in the listing currency. */
-function recordedInListing(t: Transaction, listingCurrency: string): number {
+const FX_MIN = 1.2;
+const FX_MAX = 1.55;
+
+/**
+ * Recorded dividend expressed in the listing currency. When a USD payout was
+ * deposited in CAD without a usable FX rate, infer the rate from the expected
+ * amount; if it sits in the realistic USD/CAD range, treat it as a conversion.
+ */
+function recordedInListing(
+  t: Transaction,
+  listingCurrency: string,
+  expected: number,
+  gross: number,
+): { amount: number; impliedFx: number | null } {
   const raw = t.amount != null && t.amount !== 0 ? t.amount : (t.units || 0) * (t.price_per_unit || 0);
-  if (t.currency === listingCurrency) return raw;
   const fx = t.fx_rate || 1;
-  // Recorded in CAD for a USD listing (or vice-versa): convert with the stored rate.
-  if (listingCurrency === "USD" && t.currency === "CAD") return fx > 0 ? raw / fx : raw;
-  if (listingCurrency === "CAD" && t.currency === "USD") return raw * fx;
-  return raw;
+  if (listingCurrency === "USD" && (t.currency === "CAD" || t.currency !== "USD")) {
+    if (fx > 1.05) return { amount: raw / fx, impliedFx: null };
+    for (const base of [expected, gross]) {
+      if (base > 0) {
+        const implied = raw / base;
+        if (implied >= FX_MIN && implied <= FX_MAX) return { amount: base, impliedFx: implied };
+      }
+    }
+    return { amount: raw, impliedFx: null };
+  }
+  if (t.currency === listingCurrency) return { amount: raw, impliedFx: null };
+  if (listingCurrency === "CAD" && t.currency === "USD") return { amount: raw * (fx > 1.05 ? fx : 1), impliedFx: null };
+  return { amount: raw, impliedFx: null };
 }
 
 export type SuggestionKind = "missing" | "fix";
