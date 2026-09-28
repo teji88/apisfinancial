@@ -125,7 +125,11 @@ export function reconcileDividends(
     const used = new Set<string>();
     const account = accountById.get(h.account_id);
 
+    const seenEvents = new Set<string>();
     for (const ev of events) {
+      const evKey = `${ev.exDate}|${ev.payDate ?? ""}|${ev.amount}|${ev.currency}`;
+      if (seenEvents.has(evKey)) continue; // Duplicate feed row — same payment.
+      seenEvents.add(evKey);
       if (ev.exDate <= firstBuy.transaction_date) continue;
       const payDate = ev.payDate ?? ev.exDate;
       if (payDate > today) continue;
@@ -165,7 +169,7 @@ export function reconcileDividends(
       }
 
       if (!match) {
-        out.push({ ...base, key: `${h.id}|${ev.exDate}`, kind: "missing", reasons: [] });
+        out.push({ ...base, key: `${h.id}|${ev.exDate}|${ev.amount}`, kind: "missing", reasons: [] });
         continue;
       }
       used.add(match.id);
@@ -206,7 +210,7 @@ export function reconcileDividends(
       if (reasons.length > 0) {
         out.push({
           ...base,
-          key: `${h.id}|${ev.exDate}|fix`,
+          key: `${h.id}|${ev.exDate}|${ev.amount}|fix`,
           kind: "fix",
           transactionId: match.id,
           recordedAmount: amt,
