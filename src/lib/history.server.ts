@@ -721,7 +721,15 @@ export async function fetchDividendHistory(
     }
     if (reachedStart || !block.hasNextPage) break;
   }
-  const value = ok ? out.sort((a, b) => a.exDate.localeCompare(b.exDate)) : null;
+  // TMX pagination can repeat the same rows across pages — keep one per distinct payment.
+  const seen = new Set<string>();
+  const unique = out.filter((e) => {
+    const k = `${e.exDate}|${e.payDate ?? ""}|${e.amount}|${e.currency}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  const value = ok ? unique.sort((a, b) => a.exDate.localeCompare(b.exDate)) : null;
   divMemory.set(key, { at: Date.now(), value });
   return value;
 }

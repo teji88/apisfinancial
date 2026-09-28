@@ -181,13 +181,25 @@ function DividendsPage() {
         expected: p.amount,
         reasons: [],
       }));
-    return [...suggestions, ...fallback].sort((a, b) => b.payDate.localeCompare(a.payDate));
+    const seen = new Set<string>();
+    return [...suggestions, ...fallback]
+      .filter((p) => (seen.has(p.key) ? false : (seen.add(p.key), true)))
+      .sort((a, b) => b.payDate.localeCompare(a.payDate));
   }, [holdings, accounts, transactions, divHistory.data, rows]);
+  const [pendingAccount, setPendingAccount] = useState("all");
   const pending = useMemo(
-    () => allPending.filter((p) => !dismissed.includes(p.key)),
-    [allPending, dismissed],
+    () =>
+      allPending.filter(
+        (p) =>
+          !dismissed.includes(p.key) &&
+          (pendingAccount === "all" || p.accountId === pendingAccount),
+      ),
+    [allPending, dismissed, pendingAccount],
   );
-  const hiddenCount = allPending.length - pending.length;
+  const hiddenCount = allPending.filter(
+    (p) =>
+      dismissed.includes(p.key) && (pendingAccount === "all" || p.accountId === pendingAccount),
+  ).length;
 
   const totals = useMemo(() => {
     const marketValue = rows.reduce((s, r) => s + r.marketValue, 0);
@@ -360,6 +372,20 @@ function DividendsPage() {
             Dividends to record or fix
           </h2>
           <span className="flex items-center gap-3 text-xs text-muted-foreground">
+            <select
+              aria-label="Filter by account"
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+              value={pendingAccount}
+              onChange={(e) => setPendingAccount(e.target.value)}
+            >
+              <option value="all">All accounts</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                  {a.account_type ? ` · ${a.account_type}` : ""}
+                </option>
+              ))}
+            </select>
             {divHistory.isFetching ? "Checking dividend history… · " : ""}
             {pending.length} to review
             {hiddenCount > 0 ? (
