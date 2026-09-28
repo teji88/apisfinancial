@@ -134,3 +134,10 @@ export const Route = createFileRoute("/api/public/payments/webhook")({
     },
   },
 });
+       { onConflict: "stripe_subscription_id" },
+     );
+-
+-  // A yearly plan bought by somebody who was referred earns the referrer a free year.
+-  const { grantReferralReward } = await import("@/lib/referral.server");
+-  await grantReferralReward(userId, priceIdOf(item), subscription.status);
+ }
