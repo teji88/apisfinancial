@@ -657,12 +657,28 @@ export async function fetchDividendHistory(
   since: string,
 ): Promise<DividendEvent[] | null> {
   const s = feedSymbol(raw);
-  let tmxSymbol: string;
+  const { CANADIAN_BASE_SET } = await import("./ticker-universe");
+  const candidates: string[] = [];
   if (/\.(TO|V|NE|CN)$/.test(s)) {
-    tmxSymbol = s.replace(/\.(TO|V|NE|CN)$/, "").replace(/-(UN|U)$/, ".$1");
+    candidates.push(s.replace(/\.(TO|V|NE|CN)$/, "").replace(/-(UN|U)$/, ".$1"));
   } else {
-    tmxSymbol = `${s.replace(/\.US$/, "")}:US`;
+    const bare = s.replace(/\.US$/, "");
+    const canadian = bare.replace(/-(UN|U)$/, ".$1");
+    // Trust units / REITs (.UN) are always TSX; known TSX names try Canada first.
+    if (/[.-]UN$/.test(bare)) candidates.push(canadian);
+    else if (CANADIAN_BASE_SET.has(bare.replace(/-/g, "."))) candidates.push(canadian, `${bare}:US`);
+    else candidates.push(`${bare}:US`, canadian);
   }
+  let fallback: DividendEvent[] | null = null;
+  for (const c of candidates) {
+    const r = await fetchTmxDividends(c, since);
+    if (r && r.length > 0) return r;
+    if (r && !fallback) fallback = r;
+  }
+  return fallback;
+}
+
+async function fetchTmxDividends(tmxSymbol: string, since: string): Promise<DividendEvent[] | null> {
   const key = `${tmxSymbol}|${since}`;
   const hit = divMemory.get(key);
   if (hit && Date.now() - hit.at < MEM_TTL) return hit.value;
