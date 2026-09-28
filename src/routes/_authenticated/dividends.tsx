@@ -381,7 +381,7 @@ function DividendsPage() {
               <option value="all">All accounts</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}
+                  {a.account_name}
                   {a.account_type ? ` · ${a.account_type}` : ""}
                 </option>
               ))}
