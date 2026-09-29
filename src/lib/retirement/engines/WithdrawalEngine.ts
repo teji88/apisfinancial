@@ -30,7 +30,7 @@ export type WithdrawalBucket = "CASH" | "NON_REGISTERED" | "RRSP_RRIF" | "LIRA_L
 export interface WithdrawalSequenceInput {
   netNeed: number;
   taxInputs: Record<PersonRole, TaxIncomeComponents>;
-  owners: Array<{ owner: PersonRole; type: WithdrawalBucket; balance: number; age: number; gainFraction?: number; registeredAccountType?: "RRSP" | "RRIF" | "LIRA" }>;
+  owners: Array<{ accountId?: string; owner: PersonRole; type: WithdrawalBucket; balance: number; age: number; gainFraction?: number; registeredAccountType?: "RRSP" | "RRIF" | "LIRA" }>;
   province: ProvinceCode;
   payerAge: number;
   spouseAge?: number;
@@ -42,6 +42,7 @@ export interface WithdrawalSequenceInput {
 export interface WithdrawalSequenceStep {
   bucket: WithdrawalBucket;
   owner: PersonRole;
+  accountId?: string;
   grossWithdrawal: number;
   incrementalTax: number;
   netCash: number;
@@ -90,7 +91,7 @@ export function planWithdrawalSequence(input: WithdrawalSequenceInput): Withdraw
       });
       const netCash = Math.min(remainingNeed, solved.netCash);
       if (solved.grossWithdrawal <= 0 || netCash <= 0) continue;
-      steps.push({ bucket, owner: account.owner, grossWithdrawal: solved.grossWithdrawal, incrementalTax: solved.incrementalTax, netCash });
+      steps.push({ bucket, owner: account.owner, accountId: account.accountId, grossWithdrawal: solved.grossWithdrawal, incrementalTax: solved.incrementalTax, netCash });
       remainingNeed = Math.max(0, remainingNeed - netCash);
     }
   }
