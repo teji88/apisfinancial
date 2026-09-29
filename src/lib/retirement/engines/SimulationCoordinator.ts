@@ -53,9 +53,16 @@ function sumBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>
 
 function calculatePersonBenefitIncome(input: TaxIncomeComponents): number {
   return Object.entries(input).reduce((sum, [key, value]) => {
-    if (key === "age" || typeof value !== "number") return sum;
+    // GIS income excludes OAS itself. Other net-income components remain in
+    // the ledger and employment/self-employment earnings are separately
+    // supplied so the BenefitEngine can apply the statutory exemption.
+    if (key === "age" || key === "oas" || typeof value !== "number") return sum;
     return sum + Math.max(0, value);
   }, 0);
+}
+
+function calculatePersonEmploymentIncome(input: TaxIncomeComponents): number {
+  return Math.max(0, input.employment ?? 0);
 }
 
 function withdrawFromBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>, amount: number, owner?: PersonRole) {
@@ -148,6 +155,7 @@ export function runRetirementSimulation(
   let yearTaxableIncome = 0;
   let priorYearTaxableIncome = 0;
   const priorYearIncomeByRole: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
+  const priorYearEmploymentIncomeByRole: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
   let yearTax = 0;
   let currentTax = 0;
   let cumulativeTaxLiability = 0;
@@ -224,6 +232,12 @@ export function runRetirementSimulation(
     for (const person of alivePeople) {
       monthlyTaxInputs[person.role] = { age: ages[person.role] ?? 0 };
       yearTaxInputs[person.role].age = ages[person.role] ?? 0;
+      const annualEmploymentIncome = Math.max(0, person.employmentIncome ?? 0);
+      const annualSelfEmploymentIncome = Math.max(0, person.selfEmploymentIncome ?? 0);
+      if ((ages[person.role] ?? 0) < person.retirementAge || annualEmploymentIncome > 0 || annualSelfEmploymentIncome > 0) {
+        monthlyTaxInputs[person.role].employment =
+          (annualEmploymentIncome + annualSelfEmploymentIncome) / 12;
+      }
     }
 
     // Generate taxable investment income from current non-registered values.
@@ -286,6 +300,8 @@ export function runRetirementSimulation(
           // simulation keeps a household-level prior-year income ledger.
           partnerIncomeForBenefits: partner ? priorYearIncomeByRole[partner.role] : 0,
           previousYearIncome: priorYearIncomeByRole[person.role],
+          previousYearEmploymentIncome: priorYearEmploymentIncomeByRole[person.role],
+          partnerPreviousYearEmploymentIncome: partner ? priorYearEmploymentIncomeByRole[partner.role] : 0,
           inflationRate: scenario.assumptions.inflationRate,
           calendarYear: date.getUTCFullYear(),
         });
@@ -510,6 +526,8 @@ export function runRetirementSimulation(
       priorYearTaxableIncome = householdTax.householdNetIncome;
       priorYearIncomeByRole.MAIN_USER = yearTaxInputs.MAIN_USER.age ? calculatePersonBenefitIncome(yearTaxInputs.MAIN_USER) : 0;
       priorYearIncomeByRole.PARTNER = yearTaxInputs.PARTNER.age ? calculatePersonBenefitIncome(yearTaxInputs.PARTNER) : 0;
+      priorYearEmploymentIncomeByRole.MAIN_USER = yearTaxInputs.MAIN_USER.age ? calculatePersonEmploymentIncome(yearTaxInputs.MAIN_USER) : 0;
+      priorYearEmploymentIncomeByRole.PARTNER = yearTaxInputs.PARTNER.age ? calculatePersonEmploymentIncome(yearTaxInputs.PARTNER) : 0;
       yearTaxableIncome = 0;
       yearTaxInputs.MAIN_USER = {};
       yearTaxInputs.PARTNER = {};
