@@ -25,12 +25,12 @@ export interface GrossWithdrawalSolveResult {
   iterations: number;
 }
 
-export type WithdrawalBucket = "NON_REGISTERED" | "RRSP_RRIF" | "LIRA_LIF" | "TFSA";
+export type WithdrawalBucket = "CASH" | "NON_REGISTERED" | "RRSP_RRIF" | "LIRA_LIF" | "TFSA";
 
 export interface WithdrawalSequenceInput {
   netNeed: number;
   taxInputs: Record<PersonRole, TaxIncomeComponents>;
-  owners: Array<{ owner: PersonRole; type: WithdrawalBucket; balance: number; age: number; gainFraction?: number }>;
+  owners: Array<{ owner: PersonRole; type: WithdrawalBucket; balance: number; age: number; gainFraction?: number; registeredAccountType?: "RRSP" | "RRIF" | "LIRA" }>;
   province: ProvinceCode;
   payerAge: number;
   spouseAge?: number;
@@ -63,7 +63,7 @@ export interface WithdrawalSequenceResult {
  * priority for future strategy variants.
  */
 export function planWithdrawalSequence(input: WithdrawalSequenceInput): WithdrawalSequenceResult {
-  const priority = input.priority ?? ["NON_REGISTERED", "RRSP_RRIF", "LIRA_LIF", "TFSA"];
+  const priority = input.priority ?? ["CASH", "NON_REGISTERED", "RRSP_RRIF", "LIRA_LIF", "TFSA"];
   let remainingNeed = Math.max(0, input.netNeed);
   const steps: WithdrawalSequenceStep[] = [];
 
@@ -73,7 +73,7 @@ export function planWithdrawalSequence(input: WithdrawalSequenceInput): Withdraw
     for (const account of candidates) {
       if (remainingNeed <= 0) break;
       const taxableRegistered = bucket === "RRSP_RRIF" || bucket === "LIRA_LIF";
-      const accountType = bucket === "RRSP_RRIF" ? "RRIF" : bucket === "LIRA_LIF" ? "LIRA" : undefined;
+      const accountType = account.registeredAccountType ?? (bucket === "RRSP_RRIF" ? "RRIF" : bucket === "LIRA_LIF" ? "LIRA" : undefined);
       const solved = solveGrossWithdrawalForNetNeed({
         netNeed: remainingNeed,
         payer: input.taxInputs.MAIN_USER ?? {},
@@ -86,7 +86,7 @@ export function planWithdrawalSequence(input: WithdrawalSequenceInput): Withdraw
         maxGross: account.balance,
         taxableRegistered,
         registeredAccountType: accountType,
-        nonRegisteredGainFraction: bucket === "NON_REGISTERED" ? (account as { gainFraction?: number }).gainFraction : undefined,
+        nonRegisteredGainFraction: bucket === "NON_REGISTERED" ? account.gainFraction : undefined,
       });
       const netCash = Math.min(remainingNeed, solved.netCash);
       if (solved.grossWithdrawal <= 0 || netCash <= 0) continue;
