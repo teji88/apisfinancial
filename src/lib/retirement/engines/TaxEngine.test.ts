@@ -25,6 +25,19 @@ describe("TaxEngine Canadian retirement ledgers", () => {
     expect(result.totalTax).toBe(0);
   });
 
+
+  it("caps OAS recovery at the OAS actually received", () => {
+    const result = calculateTaxFromIncome({ oas: 5_000, rrspRrif: 200_000 }, "AB", 65);
+    expect(result.oasRecovery).toBe(5_000);
+    expect(result.totalTax).toBeGreaterThanOrEqual(result.oasRecovery);
+  });
+
+  it("uses the 2026 tax-year OAS recovery upper threshold", () => {
+    const belowUpper = calculateTaxFromIncome({ oas: 12_000, rrspRrif: 154_752 }, "AB", 65);
+    const aboveUpper = calculateTaxFromIncome({ oas: 12_000, rrspRrif: 154_754 }, "AB", 65);
+    expect(aboveUpper.oasRecovery - belowUpper.oasRecovery).toBeCloseTo(0.30, 2);
+  });
+
   it("keeps pension income available for a future pension-income credit", () => {
     const result = buildTaxIncome({ pension: 24_000 });
     expect(result.totalIncome).toBe(24_000);
