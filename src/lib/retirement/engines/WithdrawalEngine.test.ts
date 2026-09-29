@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseRegisteredWithdrawalOwner, solveGrossWithdrawalForNetNeed } from "./WithdrawalEngine";
+import { chooseRegisteredWithdrawalOwner, planWithdrawalSequence, solveGrossWithdrawalForNetNeed } from "./WithdrawalEngine";
 
 const base = {
   province: "AB" as const,
@@ -111,6 +111,51 @@ describe("tax-aware gross withdrawal solver", () => {
     });
     expect(result).toBeDefined();
     expect(result!.solved.grossWithdrawal).toBeGreaterThan(10_000);
+  });
+
+  it("funds a need from the configured sequence and preserves account-level traceability", () => {
+    const result = planWithdrawalSequence({
+      netNeed: 12_000,
+      province: "AB",
+      payerAge: 70,
+      spouseAge: 70,
+      taxInputs: {
+        MAIN_USER: { age: 70 },
+        PARTNER: { age: 70 },
+      },
+      owners: [
+        { accountId: "cash-1", owner: "MAIN_USER", type: "CASH", balance: 5_000, age: 70 },
+        { accountId: "tfsa-1", owner: "MAIN_USER", type: "TFSA", balance: 20_000, age: 70 },
+      ],
+      priority: ["CASH", "TFSA"],
+    });
+    expect(result.fullyFunded).toBe(true);
+    expect(result.remainingNeed).toBeLessThanOrEqual(0.005);
+    expect(result.steps.map((step) => step.accountId)).toEqual(["cash-1", "tfsa-1"]);
+    expect(result.totalGrossWithdrawal).toBe(12_000);
+    expect(result.totalNetCash).toBe(12_000);
+  });
+
+  it("does not treat a non-registered capital gain as the full withdrawal", () => {
+    const result = planWithdrawalSequence({
+      netNeed: 10_000,
+      province: "AB",
+      payerAge: 70,
+      spouseAge: 70,
+      taxInputs: { MAIN_USER: { age: 70 }, PARTNER: { age: 70 } },
+      owners: [{
+        accountId: "nr-1",
+        owner: "MAIN_USER",
+        type: "NON_REGISTERED",
+        balance: 20_000,
+        age: 70,
+        gainFraction: 0.5,
+      }],
+      priority: ["NON_REGISTERED"],
+    });
+    expect(result.fullyFunded).toBe(true);
+    expect(result.steps[0]!.grossWithdrawal).toBeGreaterThan(10_000);
+    expect(result.steps[0]!.netCash).toBeGreaterThanOrEqual(10_000);
   });
 
 });
