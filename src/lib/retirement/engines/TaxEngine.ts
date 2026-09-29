@@ -153,15 +153,21 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
   };
 }
 
-function oasRecoveryForIncome(income: number, age: number): number {
+function oasRecoveryForIncome(income: number, age: number, oasReceived = 0): number {
   const threshold = CANADA_2026_PARAMETERS.oasRecovery.startIncome;
   const upper = age >= 75
     ? CANADA_2026_PARAMETERS.oasRecovery.upperIncome75Plus
     : CANADA_2026_PARAMETERS.oasRecovery.upperIncomeUnder75;
-  return Math.max(0, Math.min(
-    Math.max(0, income - threshold) * 0.15,
-    Math.max(0, upper - threshold) * 0.15,
-  ));
+  const incomeBasedRecovery = Math.max(
+    0,
+    Math.min(
+      Math.max(0, income - threshold) * 0.15,
+      Math.max(0, upper - threshold) * 0.15,
+    ),
+  );
+
+  // OAS recovery cannot exceed the OAS pension actually received for the year.
+  return Math.min(incomeBasedRecovery, Math.max(0, oasReceived));
 }
 
 export function calculateTaxFromIncome(
@@ -192,7 +198,7 @@ export function calculateTaxFromIncome(
     provincialPensionIncomeCredit;
   const federalTax = Math.max(0, federalGross - federalBasicCredit() - federalDividendCredit - federalPensionIncomeCredit);
   const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province) - provincialPensionIncomeCredit);
-  const oasRecovery = oasRecoveryForIncome(ledgers.netIncome, age);
+  const oasRecovery = oasRecoveryForIncome(ledgers.netIncome, age, ledgers.oas);
   const foreignIncome = Math.max(0, ledgers.foreignIncome);
   const foreignTaxCredit = foreignIncome > 0
     ? Math.min(ledgers.foreignTaxPaid, Math.max(0, (federalTax + provincialTax) * foreignIncome / Math.max(1, ledgers.taxableIncome)))
