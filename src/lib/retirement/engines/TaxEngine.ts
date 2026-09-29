@@ -67,12 +67,34 @@ function bracketsForProvince(province: ProvinceCode): readonly TaxBracket[] {
 }
 
 function provincialBasicPersonalAmount(province: ProvinceCode): number {
-  if (province === "AB") return CANADA_2026_PARAMETERS.tax.albertaBasicPersonalAmount;
-  return 0;
+  const amounts: Partial<Record<ProvinceCode, number>> = {
+    AB: 22_769,
+    BC: 13_216,
+    MB: 15_780,
+    NB: 13_664,
+    NL: 13_094,
+    NS: 11_932,
+    NT: 18_198,
+    NU: 19_659,
+    ON: 12_989,
+    PE: 15_000,
+    SK: 20_381,
+  };
+  return amounts[province] ?? 0;
 }
 
-function federalBasicCredit(): number {
-  return CANADA_2026_PARAMETERS.tax.federalBasicPersonalAmount * 0.14;
+function federalBasicPersonalAmount(netIncome: number): number {
+  const maximum = CANADA_2026_PARAMETERS.tax.federalBasicPersonalAmount;
+  const minimum = CANADA_2026_PARAMETERS.tax.federalMinimumBasicPersonalAmount ?? maximum;
+  const phaseOutStart = 181_440;
+  const phaseOutEnd = 258_482;
+  if (netIncome <= phaseOutStart) return maximum;
+  if (netIncome >= phaseOutEnd) return minimum;
+  return maximum - (netIncome - phaseOutStart) * (maximum - minimum) / (phaseOutEnd - phaseOutStart);
+}
+
+function federalBasicCredit(netIncome: number): number {
+  return federalBasicPersonalAmount(netIncome) * 0.14;
 }
 
 function provincialBasicCreditRate(province: ProvinceCode): number {
@@ -192,12 +214,12 @@ export function calculateTaxFromIncome(
   );
   const provincialPensionIncomeCredit = provincialPensionIncomeCreditBase * provincialBasicCreditRate(province);
   const credits =
-    federalBasicCredit() +
+    federalBasicCredit(ledgers.netIncome) +
     provincialBasicCredit(province) +
     federalDividendCredit +
     federalPensionIncomeCredit +
     provincialPensionIncomeCredit;
-  const federalTax = Math.max(0, federalGross - federalBasicCredit() - federalDividendCredit - federalPensionIncomeCredit);
+  const federalTax = Math.max(0, federalGross - federalBasicCredit(ledgers.netIncome) - federalDividendCredit - federalPensionIncomeCredit);
   const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province) - provincialPensionIncomeCredit);
   const oasRecovery = oasRecoveryForIncome(ledgers.netIncome, age, ledgers.oas);
   const foreignIncome = Math.max(0, ledgers.foreignIncome);
