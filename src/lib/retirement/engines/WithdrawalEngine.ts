@@ -72,7 +72,7 @@ export function planWithdrawalSequence(input: WithdrawalSequenceInput): Withdraw
     const candidates = input.owners.filter((x) => x.type === bucket && x.balance > 0);
     for (const account of candidates) {
       if (remainingNeed <= 0) break;
-      const taxableRegistered = bucket !== "TFSA";
+      const taxableRegistered = bucket === "RRSP_RRIF" || bucket === "LIRA_LIF";
       const accountType = bucket === "RRSP_RRIF" ? "RRIF" : bucket === "LIRA_LIF" ? "LIRA" : undefined;
       const solved = solveGrossWithdrawalForNetNeed({
         netNeed: remainingNeed,
