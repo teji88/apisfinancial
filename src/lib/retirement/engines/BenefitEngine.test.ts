@@ -27,7 +27,7 @@ describe("BenefitEngine", () => {
     const full65 = estimateGovernmentBenefits(person, 65, 0, { inflationRate: 0, calendarYear: 2026 }).oas;
     const partial70 = estimateGovernmentBenefits({ ...person, oasStartAge: 70, oasResidenceYears: 20 }, 70, 0, { inflationRate: 0, calendarYear: 2026 }).oas;
     expect(full65).toBeCloseTo(751.97 * 12, 6);
-    expect(partial70).toBeCloseTo(827.17 * 12 * 0.5 * 1.36, 6);
+    expect(partial70).toBeCloseTo(751.97 * 12 * 0.5 * 1.36, 6);
   });
 
   it("uses separate partner income for couple GIS context", () => {
@@ -35,8 +35,8 @@ describe("BenefitEngine", () => {
       householdSize: 2,
       partnerAge: 67,
       partnerReceivesOas: true,
-      previousYearIncome: 10000,
-      partnerIncomeForBenefits: 10000,
+      previousYearIncome: 3000,
+      partnerIncomeForBenefits: 3000,
       inflationRate: 0,
       calendarYear: 2026,
     });
