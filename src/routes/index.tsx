@@ -1,3 +1,4 @@
+import { postLoginPath } from "@/lib/pending-plan";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import {
@@ -7,7 +8,6 @@ import {
   FileUp,
   Landmark,
   LayoutDashboard,
-  Minus,
   Receipt,
 } from "lucide-react";
 
@@ -76,32 +76,12 @@ const FEATURES = [
   },
 ];
 
-const COMPARISON: Array<{
-  label: string;
-  free: string | boolean;
-  pro: string | boolean;
-  plus: string | boolean;
-}> = [
-  { label: "Accounts", free: "1", pro: "Unlimited", plus: "Unlimited" },
-  { label: "Holdings", free: "10", pro: "Unlimited", plus: "Unlimited" },
-  { label: "Ledger, adjusted cost base and returns", free: true, pro: true, plus: true },
-  { label: "Dividends and the ten-year compounder", free: true, pro: true, plus: true },
-  { label: "Benchmarking", free: true, pro: true, plus: true },
-  { label: "Retirement plan and withdrawal schedule", free: true, pro: true, plus: true },
-  { label: "All accounts combined vs benchmarks", free: false, pro: true, plus: true },
-  { label: "Upload a statement for AI reading", free: false, pro: true, plus: true },
-  { label: "Change retirement age, CPP and OAS start dates", free: false, pro: true, plus: true },
-  { label: "Change inflation, growth and life expectancy", free: false, pro: true, plus: true },
-  { label: "Couple and household planning", free: false, pro: false, plus: true },
-  { label: "Savings split and what-if balances", free: false, pro: false, plus: true },
-];
-
 function Landing() {
   const { session, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && session) void navigate({ to: "/dashboard" });
+    if (!loading && session) void navigate({ to: postLoginPath() });
   }, [loading, session, navigate]);
 
   return (
@@ -113,6 +93,9 @@ function Landing() {
           <ApisLogo variant="full" size="sm" />
 
           <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/retirement">Retirement planner</Link>
+            </Button>
             <Button asChild variant="ghost" size="sm">
               <Link to="/auth">Sign in</Link>
             </Button>
@@ -142,12 +125,11 @@ function Landing() {
                 <Link to="/auth">Get started free</Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-accent/50">
-                <a href="#pricing">See pricing</a>
+                <Link to="/retirement">Try the free retirement planner</Link>
               </Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              No card needed. The free plan covers one account and ten holdings — Pro removes the
-              limit.
+              No card needed. Everything is free — only PDF and screenshot reading is $10 a year.
             </p>
           </div>
         </section>
@@ -173,22 +155,20 @@ function Landing() {
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
           <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
           <p className="mx-auto mt-3 max-w-xl text-center text-sm text-muted-foreground">
-            Start free and stay free for a single account. Pro removes every limit, and Pro+ adds
-            household planning — all for about the price of a coffee a year.
+            Everything is free. The only paid extra is having PDF statements and screenshots read
+            for you.
           </p>
-
-          <div className="mx-auto mt-10 grid max-w-5xl gap-5 md:grid-cols-3">
+          <div className="mx-auto mt-10 grid max-w-3xl gap-5 md:grid-cols-2">
             <div className="honey-card p-6">
               <h3 className="text-lg font-semibold">Free</h3>
               <p className="num mt-2 text-3xl font-semibold">$0</p>
               <p className="mt-1 text-xs text-muted-foreground">Forever</p>
               <ul className="mt-5 space-y-2 text-sm">
                 {[
-                  "One account",
-                  "Up to ten holdings",
-                  "Ledger, dividends, performance",
-                  "Retirement plan with standard assumptions",
-                  "Type transactions in by hand",
+                  "Unlimited accounts, holdings and transactions",
+                  "Ledger, dividends, performance and benchmarking",
+                  "The full retirement planner",
+                  "CSV imports",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
@@ -197,57 +177,20 @@ function Landing() {
                 ))}
               </ul>
               <Button asChild className="mt-6 w-full border-accent/50" variant="outline">
-                <Link to="/auth">Create an account</Link>
+                <Link to="/auth">Create a free account</Link>
               </Button>
             </div>
-
-            <div className="honey-card relative overflow-hidden border-accent/60 p-6 ring-1 ring-accent/30">
-              <div className="relative flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Pro</h3>
-                <span className="rounded-full bg-accent/25 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-accent/40">
-                  Most useful
-                </span>
-              </div>
-
-              <p className="num relative mt-2 text-3xl font-semibold">
-                $1<span className="text-base font-normal text-muted-foreground">/month</span>
-              </p>
-              <p className="relative mt-1 text-xs text-muted-foreground">
-                or $10 a year · cancel any time
-              </p>
-              <ul className="relative mt-5 space-y-2 text-sm">
-                {[
-                  "Everything in Free",
-                  "Unlimited accounts and holdings",
-                  "Upload statements for AI reading",
-                  "All accounts combined vs benchmarks",
-                  "Your own retirement age, CPP and OAS start",
-                  "Your own inflation, growth and life expectancy",
-                ].map((p) => (
-                  <li key={p} className="flex gap-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                    {p}
-                  </li>
-                ))}
-              </ul>
-              <Button asChild className="honey-fill relative mt-6 w-full">
-                <Link to="/auth">Get Pro</Link>
-              </Button>
-            </div>
-
-            <div className="honey-card p-6">
-              <h3 className="text-lg font-semibold">Pro+</h3>
+            <div className="honey-card border-accent/60 p-6 ring-1 ring-accent/30">
+              <h3 className="text-lg font-semibold">Statement reading</h3>
               <p className="num mt-2 text-3xl font-semibold">
-                $2<span className="text-base font-normal text-muted-foreground">/month</span>
+                $10<span className="text-base font-normal text-muted-foreground">/year</span>
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">or $20 a year · cancel any time</p>
+              <p className="mt-1 text-xs text-muted-foreground">Optional · cancel any time</p>
               <ul className="mt-5 space-y-2 text-sm">
                 {[
-                  "Everything in Pro",
-                  "Couple and household planning",
-                  "Spouse CPP, OAS and balances",
-                  "Pension splitting and clawback control",
-                  "Savings split and what-if balances",
+                  "Everything in Free",
+                  "Upload PDF statements and screenshots",
+                  "Transactions drafted for you to check",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
@@ -255,39 +198,10 @@ function Landing() {
                   </li>
                 ))}
               </ul>
-              <Button asChild className="mt-6 w-full border-accent/50" variant="outline">
-                <Link to="/auth">Get Pro+</Link>
+              <Button asChild className="honey-fill mt-6 w-full">
+                <Link to="/auth">Get started</Link>
               </Button>
             </div>
-          </div>
-
-          <div className="honey-card mt-12 overflow-x-auto">
-            <table className="w-full min-w-[620px] text-sm">
-              <thead>
-                <tr className="border-b border-border/60 text-left">
-                  <th className="px-5 py-3 font-medium">What you get</th>
-                  <th className="px-5 py-3 text-center font-medium">Free</th>
-                  <th className="px-5 py-3 text-center font-medium">Pro</th>
-                  <th className="px-5 py-3 text-center font-medium">Pro+</th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARISON.map((row) => (
-                  <tr key={row.label} className="border-b border-border/40 last:border-0">
-                    <td className="px-5 py-3">{row.label}</td>
-                    <td className="px-5 py-3 text-center">
-                      <Cellv value={row.free} />
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <Cellv value={row.pro} />
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <Cellv value={row.plus} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </section>
 
@@ -315,10 +229,4 @@ function Landing() {
       </footer>
     </div>
   );
-}
-
-function Cellv({ value }: { value: string | boolean }) {
-  if (value === true) return <Check className="mx-auto h-4 w-4 text-accent" />;
-  if (value === false) return <Minus className="mx-auto h-4 w-4 text-muted-foreground" />;
-  return <span className="num">{value}</span>;
 }

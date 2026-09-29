@@ -1,3 +1,4 @@
+import { postLoginPath } from "@/lib/pending-plan";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ApisLogo } from "@/components/brand/ApisLogo";
@@ -52,7 +53,7 @@ function AuthPage() {
 
   useEffect(() => {
     if (loading || !session || mode === "reset") return;
-    void navigate({ to: "/dashboard" });
+    void navigate({ to: postLoginPath() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, session, mode]);
 
@@ -80,11 +81,11 @@ function AuthPage() {
         const { error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
         toast.success("Your password is updated.");
-        void navigate({ to: "/dashboard" });
+        void navigate({ to: postLoginPath() });
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        void navigate({ to: "/dashboard" });
+        void navigate({ to: postLoginPath() });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
@@ -102,7 +103,7 @@ function AuthPage() {
       return;
     }
     if (result.redirected) return;
-    void navigate({ to: "/dashboard" });
+    void navigate({ to: postLoginPath() });
   }
 
   return (

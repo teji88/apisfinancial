@@ -1,4 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useAuth } from "@/hooks/useAuth";
+import { ApisLogo } from "@/components/brand/ApisLogo";
+import { PENDING_PLAN_KEY } from "@/lib/pending-plan";
 import { useMemo, useState, useEffect } from "react";
 import {
   Area,
@@ -64,8 +67,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export const Route = createFileRoute("/_authenticated/retirement")({
-  staticData: { sitemap: false },
+export const Route = createFileRoute("/retirement")({
+  staticData: { sitemap: true },
   head: () => ({
     meta: [
       { title: "Retirement Planner — Apis Financial" },
@@ -100,7 +103,54 @@ function num(v: string, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+const GUEST_PROFILE: Profile = {
+  id: "guest",
+  display_name: null,
+  base_currency: "CAD",
+  province: "ON",
+  current_age: 45,
+  target_retirement_age: 65,
+  inflation_rate: 2.5,
+  growth_rate: 6,
+  life_expectancy: 95,
+  marital_status: "Single",
+  spouse_age: null,
+  spouse_rrsp: 0,
+  spouse_tfsa: 0,
+  spouse_income: 0,
+  desired_income: 60000,
+  cpp_start_age: 65,
+  cpp_pct: 75,
+  oas_start_age: 65,
+  manual_override: true,
+  override_tfsa: 75000,
+  override_rrsp: 150000,
+  override_lira: 0,
+  override_fhsa: 0,
+  override_nonreg: 25000,
+  annual_savings: 12000,
+  save_pct_tfsa: 40,
+  save_pct_rrsp: 40,
+  save_pct_nonreg: 20,
+  cpp_avg_income: 60000,
+  cpp_years_worked: 23,
+  cpp_future_income: 60000,
+  oas_years_in_canada: 40,
+  spouse_retirement_age: null,
+  spouse_cpp_avg_income: 0,
+  spouse_cpp_years_worked: 0,
+  spouse_cpp_future_income: 0,
+  spouse_oas_years_in_canada: 40,
+  spouse_cpp_start_age: 65,
+  spouse_oas_start_age: 65,
+  spouse_lira: 0,
+  spouse_nonreg: 0,
+};
+
 function RetirementPage() {
+  const { session, loading: authLoading } = useAuth();
+  const isGuest = !authLoading && !session;
+  const navigate = useNavigate();
   const { accounts, holdings, transactions, quotes, fxUsdCad, loading } = usePortfolio();
   const profileQuery = useProfile();
   const updateProfile = useUpdateProfile();
@@ -144,8 +194,28 @@ function RetirementPage() {
   });
 
   useEffect(() => {
-    if (profileQuery.data && !form) setForm(profileQuery.data);
-  }, [profileQuery.data, form]);
+    if (authLoading || form) return;
+    if (isGuest) {
+      const stored = window.localStorage.getItem(PENDING_PLAN_KEY);
+      setForm(stored ? { ...GUEST_PROFILE, ...(JSON.parse(stored) as Partial<Profile>) } : GUEST_PROFILE);
+      return;
+    }
+    if (!profileQuery.data) return;
+    const stored = window.localStorage.getItem(PENDING_PLAN_KEY);
+    if (stored) {
+      // A plan built before signing in: write it to the new profile.
+      const pending = JSON.parse(stored) as Partial<Profile>;
+      window.localStorage.removeItem(PENDING_PLAN_KEY);
+      setForm({ ...profileQuery.data, ...pending });
+      updateProfile.mutate(pending, {
+        onSuccess: () => toast.success("Your retirement plan is saved to your account"),
+        onError: (e) => toast.error((e as Error).message),
+      });
+      return;
+    }
+    setForm(profileQuery.data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileQuery.data, form, authLoading, isGuest]);
 
   const byType = useMemo(() => {
     const sums: Record<string, number> = {};
@@ -312,8 +382,8 @@ function RetirementPage() {
   const projection = useMemo(() => (inputs ? projectRetirement(inputs) : null), [inputs]);
   const earliest = useMemo(() => (inputs ? earliestRetirementAge(inputs) : null), [inputs]);
 
-  if (loading || profileQuery.isLoading || !p || !inputs || !projection || !derived) {
-    return <p className="text-sm text-muted-foreground">Loading your plan…</p>;
+  if (authLoading || (!isGuest && (loading || profileQuery.isLoading)) || !p || !inputs || !projection || !derived) {
+    return <p className="p-6 text-sm text-muted-foreground">Loading your plan…</p>;
   }
 
   const set = (patch: Partial<Profile>) => setForm({ ...(form ?? p), ...patch });
@@ -321,6 +391,12 @@ function RetirementPage() {
 
   const save = () => {
     const { id: _id, display_name: _dn, base_currency: _bc, ...rest } = p;
+    if (isGuest) {
+      window.localStorage.setItem(PENDING_PLAN_KEY, JSON.stringify(rest));
+      toast.message("Create a free account or log in to save your retirement plan.");
+      void navigate({ to: "/auth" });
+      return;
+    }
     updateProfile.mutate(rest as Partial<Profile>, {
       onSuccess: () => toast.success("Plan saved"),
       onError: (e) => toast.error((e as Error).message),
@@ -375,7 +451,34 @@ function RetirementPage() {
   const spouseOas = married ? oasAt(p.spouse_oas_start_age ?? 65, derived.spouseOasFraction) : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-6">
+      <div className="flex items-center justify-between border-b border-border/60 pb-4">
+        <Link to="/">
+          <ApisLogo variant="full" size="sm" />
+        </Link>
+        <div className="flex items-center gap-2">
+          {isGuest ? (
+            <>
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/auth">Log in</Link>
+              </Button>
+              <Button size="sm" className="honey-fill" onClick={save}>
+                Save plan (free account)
+              </Button>
+            </>
+          ) : (
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/dashboard">Back to dashboard</Link>
+            </Button>
+          )}
+        </div>
+      </div>
+      {isGuest && (
+        <div className="rounded-lg border border-accent/40 bg-accent/10 p-3 text-sm">
+          Try it free — no account needed. Change any number under Inputs and the plan updates
+          instantly. Create a free account only if you want to save it.
+        </div>
+      )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight">Retirement planner</h1>
