@@ -24,6 +24,16 @@ describe("Canadian investment income taxation", () => {
     expect(result.foreignTaxCredit).toBeLessThanOrEqual(2_000);
   });
 
+  it("limits foreign tax credit to Canadian tax attributable to foreign income", () => {
+    const result = calculateTaxFromIncome({
+      rrspRrif: 80_000,
+      foreignIncome: 20_000,
+      foreignTaxPaid: 20_000,
+    }, "AB", 65);
+    expect(result.foreignTaxCredit).toBeLessThan(20_000);
+    expect(result.foreignTaxCredit).toBeGreaterThan(0);
+  });
+
   it("reduces tax when eligible Canadian dividends receive a dividend credit", () => {
     const withDividend = calculateTaxFromIncome({ eligibleCanadianDividends: 20_000 }, "AB", 65);
     const withoutDividendCreditInput = calculateTaxFromIncome({ rrspRrif: 27_600 }, "AB", 65);
