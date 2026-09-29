@@ -23,6 +23,85 @@ export interface GrossWithdrawalSolveResult {
   iterations: number;
 }
 
+export type WithdrawalBucket = "NON_REGISTERED" | "RRSP_RRIF" | "LIRA_LIF" | "TFSA";
+
+export interface WithdrawalSequenceInput {
+  netNeed: number;
+  taxInputs: Record<PersonRole, TaxIncomeComponents>;
+  owners: Array<{ owner: PersonRole; type: WithdrawalBucket; balance: number; age: number }>;
+  province: ProvinceCode;
+  payerAge: number;
+  spouseAge?: number;
+  pensionSplitPercent?: number;
+  /** Optional ordering override; defaults to a tax-aware V1 sequence. */
+  priority?: WithdrawalBucket[];
+}
+
+export interface WithdrawalSequenceStep {
+  bucket: WithdrawalBucket;
+  owner: PersonRole;
+  grossWithdrawal: number;
+  incrementalTax: number;
+  netCash: number;
+}
+
+export interface WithdrawalSequenceResult {
+  steps: WithdrawalSequenceStep[];
+  totalGrossWithdrawal: number;
+  totalTax: number;
+  totalNetCash: number;
+  remainingNeed: number;
+  fullyFunded: boolean;
+}
+
+/**
+ * V1 cash-flow sequence. Taxable registered assets are solved gross-up withdrawals;
+ * TFSA is dollar-for-dollar. The default deliberately uses non-registered assets
+ * before registered assets and TFSA last, while still allowing an explicit user
+ * priority for future strategy variants.
+ */
+export function planWithdrawalSequence(input: WithdrawalSequenceInput): WithdrawalSequenceResult {
+  const priority = input.priority ?? ["NON_REGISTERED", "RRSP_RRIF", "LIRA_LIF", "TFSA"];
+  let remainingNeed = Math.max(0, input.netNeed);
+  const steps: WithdrawalSequenceStep[] = [];
+
+  for (const bucket of priority) {
+    if (remainingNeed <= 0) break;
+    const candidates = input.owners.filter((x) => x.type === bucket && x.balance > 0);
+    for (const account of candidates) {
+      if (remainingNeed <= 0) break;
+      const taxableRegistered = bucket !== "TFSA" && bucket !== "NON_REGISTERED";
+      const accountType = bucket === "RRSP_RRIF" ? "RRIF" : bucket === "LIRA_LIF" ? "LIRA" : undefined;
+      const solved = solveGrossWithdrawalForNetNeed({
+        netNeed: remainingNeed,
+        payer: input.taxInputs.MAIN_USER ?? {},
+        spouse: input.taxInputs.PARTNER ?? {},
+        owner: account.owner,
+        province: input.province,
+        payerAge: input.payerAge,
+        spouseAge: input.spouseAge,
+        pensionSplitPercent: input.pensionSplitPercent ?? 0,
+        maxGross: account.balance,
+        taxableRegistered,
+        registeredAccountType: accountType,
+      });
+      const netCash = Math.min(remainingNeed, solved.netCash);
+      if (solved.grossWithdrawal <= 0 || netCash <= 0) continue;
+      steps.push({ bucket, owner: account.owner, grossWithdrawal: solved.grossWithdrawal, incrementalTax: solved.incrementalTax, netCash });
+      remainingNeed = Math.max(0, remainingNeed - netCash);
+    }
+  }
+
+  return {
+    steps,
+    totalGrossWithdrawal: steps.reduce((sum, x) => sum + x.grossWithdrawal, 0),
+    totalTax: steps.reduce((sum, x) => sum + x.incrementalTax, 0),
+    totalNetCash: steps.reduce((sum, x) => sum + x.netCash, 0),
+    remainingNeed,
+    fullyFunded: remainingNeed <= 0.005,
+  };
+}
+
 export interface RegisteredWithdrawalOwnerInput {
   owner: PersonRole;
   balance: number;
