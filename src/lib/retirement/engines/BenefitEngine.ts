@@ -13,6 +13,10 @@ export interface BenefitHouseholdContext {
   partnerReceivesOas?: boolean;
   partnerIncomeForBenefits?: Money;
   previousYearIncome?: Money;
+  /** Employment and self-employment income included in previousYearIncome. */
+  previousYearEmploymentIncome?: Money;
+  /** Partner employment/self-employment income included in partnerIncomeForBenefits. */
+  partnerPreviousYearEmploymentIncome?: Money;
   inflationRate?: number;
   calendarYear?: number;
 }
@@ -26,6 +30,13 @@ export interface BenefitHouseholdContext {
  * scenario's inflation assumption. This keeps economic assumptions separate
  * from legal benefit rules while avoiding accidental double-indexing.
  */
+function applyGisEmploymentExemption(nonEmploymentIncome: number, employmentIncome: number): number {
+  const earnings = Math.max(0, employmentIncome);
+  const fullExemption = Math.min(earnings, 5_000);
+  const partialExemption = Math.max(0, Math.min(earnings, 15_000) - 5_000) * 0.5;
+  return Math.max(0, nonEmploymentIncome + earnings - fullExemption - partialExemption);
+}
+
 export function estimateGovernmentBenefits(
   person: PersonScenario,
   age: number,
@@ -71,13 +82,23 @@ export function estimateGovernmentBenefits(
     : 0;
 
   // GIS uses the prior year's income for the July-to-June entitlement period.
-  // OAS itself is excluded from GIS income. The general single-person
-  // reduction is approximately $1 of GIS for every $2 of other income.
+  // OAS itself is excluded from GIS income. Employment/self-employment earnings
+  // receive the statutory $5,000 full + next $10,000 at 50% exemption.
   // Couple calculations use the published marital-status thresholds and the
   // appropriate maximum benefit category.
   const priorYearIncome = Math.max(0, context.previousYearIncome ?? incomeForBenefits);
+  const priorYearEmploymentIncome = Math.max(0, context.previousYearEmploymentIncome ?? 0);
   const partnerIncome = Math.max(0, context.partnerIncomeForBenefits ?? 0);
-  const combinedIncome = priorYearIncome + partnerIncome;
+  const partnerEmploymentIncome = Math.max(0, context.partnerPreviousYearEmploymentIncome ?? 0);
+  const adjustedPriorYearIncome = applyGisEmploymentExemption(
+    Math.max(0, priorYearIncome - priorYearEmploymentIncome),
+    priorYearEmploymentIncome,
+  );
+  const adjustedPartnerIncome = applyGisEmploymentExemption(
+    Math.max(0, partnerIncome - partnerEmploymentIncome),
+    partnerEmploymentIncome,
+  );
+  const combinedIncome = adjustedPriorYearIncome + adjustedPartnerIncome;
   const partnerAge = context.partnerAge ?? 0;
   const partnerReceivesOas = Boolean(context.partnerReceivesOas);
 
@@ -102,7 +123,7 @@ export function estimateGovernmentBenefits(
 
   const gisEligible = age >= 65 && age >= oasStartAge && oasAnnual > 0;
   const gisReductionIncome = (context.householdSize ?? 1) <= 1
-    ? priorYearIncome
+    ? adjustedPriorYearIncome
     : combinedIncome;
 
   const gisAnnual = gisEligible && gisReductionIncome < gisIncomeThreshold
