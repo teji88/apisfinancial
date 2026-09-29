@@ -243,7 +243,7 @@ export function calculateTaxFromIncome(
   const totalTax = Math.max(0, federalTax + provincialTax + oasRecovery - foreignTaxCredit);
   const federalMarginal = marginalBracketRate(ledgers.taxableIncome, federalBrackets);
   const provincialMarginal = marginalBracketRate(ledgers.taxableIncome, provincialBrackets);
-  const recoveryMarginal = ledgers.netIncome >= CANADA_2026_PARAMETERS.oasRecovery.startIncome ? 0.15 : 0;
+  const recoveryMarginal = oasRecovery > 0 ? 0.15 : 0;
 
   return {
     totalIncome: ledgers.totalIncome,
