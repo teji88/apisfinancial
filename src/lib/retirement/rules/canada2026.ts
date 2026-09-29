@@ -35,5 +35,5 @@ export const CANADA_2026_PARAMETERS = {
     federalPensionIncomeCreditRate: 0.14,
     provincialPensionIncomeAmount: { AB: 1753 },
   },
-  oasRecovery: { startIncome: 95323, upperIncomeUnder75: 155109, upperIncome75Plus: 161088 },
+  oasRecovery: { startIncome: 95323, upperIncomeUnder75: 154753, upperIncome75Plus: 160696 },
 } as const;
