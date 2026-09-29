@@ -12,6 +12,8 @@ export interface GrossWithdrawalSolveInput {
   pensionSplitPercent?: number;
   maxGross?: number;
   taxableRegistered?: boolean;
+  /** RRIF withdrawals can qualify as eligible pension income after age 65; RRSP withdrawals do not. */
+  registeredAccountType?: "RRSP" | "RRIF" | "LIRA";
 }
 
 export interface GrossWithdrawalSolveResult {
@@ -101,6 +103,7 @@ export function solveGrossWithdrawalForNetNeed(
   }
 
   const taxableRegistered = input.taxableRegistered ?? true;
+  const registeredAccountType = input.registeredAccountType ?? "RRIF";
   const baseTax = calculateHouseholdTax({
     payer: input.payer,
     spouse: input.spouse,
@@ -113,10 +116,10 @@ export function solveGrossWithdrawalForNetNeed(
   const taxAt = (gross: number) => {
     if (!taxableRegistered) return baseTax;
     const payer = input.owner === "MAIN_USER"
-      ? withRegisteredWithdrawal(input.payer, gross, input.payerAge)
+      ? withRegisteredWithdrawal(input.payer, gross, input.payerAge, registeredAccountType)
       : input.payer;
     const spouse = input.owner === "PARTNER"
-      ? withRegisteredWithdrawal(input.spouse ?? {}, gross, input.spouseAge ?? 65)
+      ? withRegisteredWithdrawal(input.spouse ?? {}, gross, input.spouseAge ?? 65, registeredAccountType)
       : input.spouse;
 
     return calculateHouseholdTax({
@@ -167,12 +170,13 @@ function withRegisteredWithdrawal(
   components: TaxIncomeComponents,
   gross: number,
   age: number,
+  accountType: "RRSP" | "RRIF" | "LIRA",
 ): TaxIncomeComponents {
   const withdrawal = Math.max(0, gross);
   return {
     ...components,
     rrspRrif: (components.rrspRrif ?? 0) + withdrawal,
-    eligiblePensionIncome: age >= 65
+    eligiblePensionIncome: accountType === "RRIF" && age >= 65
       ? (components.eligiblePensionIncome ?? 0) + withdrawal
       : components.eligiblePensionIncome,
     age,
