@@ -129,6 +129,10 @@ export function runRetirementSimulation(
   }
 
   const monthly: MonthlySnapshot[] = [];
+  let deathTax = 0;
+  let estateGross = 0;
+  let survivorTransferredAssets = 0;
+  let deathCapitalGains = 0;
   const monthlyInflation = Math.pow(1 + scenario.assumptions.inflationRate / 100, 1 / 12) - 1;
   let spending = scenario.goals.annualSpending / 12;
   // Household operating cash is separate from portfolio CASH accounts.
@@ -264,10 +268,6 @@ export function runRetirementSimulation(
     }
 
     let survivorBenefits = 0;
-    let deathTax = 0;
-    let estateGross = 0;
-  let survivorTransferredAssets = 0;
-  let deathCapitalGains = 0;
 
     for (const person of alivePeople) {
       const age = ages[person.role] ?? 0;
