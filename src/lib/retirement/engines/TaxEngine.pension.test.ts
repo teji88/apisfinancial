@@ -88,4 +88,19 @@ describe("TaxEngine pension income", () => {
     expect(split.totalIncome).toBe(unsplit.totalIncome);
     expect(split.netIncome).toBeLessThan(unsplit.netIncome);
   });
-});
+  it("uses jurisdiction-specific provincial pension credit amounts", () => {
+    const on = calculateTaxFromIncome({
+      pension: 2_000,
+      eligiblePensionIncome: 2_000,
+      age: 70,
+    }, "ON", 70);
+    const ab = calculateTaxFromIncome({
+      pension: 2_000,
+      eligiblePensionIncome: 2_000,
+      age: 70,
+    }, "AB", 70);
+
+    expect(on.provincialPensionIncomeCredit).toBeCloseTo(1796 * 0.0505, 2);
+    expect(ab.provincialPensionIncomeCredit).toBeCloseTo(1753 * 0.08, 2);
+  });
+\n});
