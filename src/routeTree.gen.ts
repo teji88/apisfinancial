@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as BeatXeqtRouteImport } from './routes/beat-xeqt'
+import { Route as RetirementRouteImport } from './routes/retirement'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -22,7 +23,6 @@ import { Route as AuthenticatedInvitesRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated/ledger'
 import { Route as AuthenticatedPerformanceRouteImport } from './routes/_authenticated/performance'
 import { Route as AuthenticatedPlanRouteImport } from './routes/_authenticated/plan'
-import { Route as AuthenticatedRetirementRouteImport } from './routes/_authenticated/retirement'
 import { Route as ApiPublicRefreshPricesRouteImport } from './routes/api/public/refresh-prices'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 import { Route as LovableEmailAuthPreviewRouteImport } from './routes/lovable/email/auth/preview'
@@ -46,6 +46,11 @@ const AuthRoute = AuthRouteImport.update({
 const BeatXeqtRoute = BeatXeqtRouteImport.update({
   id: '/beat-xeqt',
   path: '/beat-xeqt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetirementRoute = RetirementRouteImport.update({
+  id: '/retirement',
+  path: '/retirement',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -94,11 +99,6 @@ const AuthenticatedPlanRoute = AuthenticatedPlanRouteImport.update({
   path: '/plan',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedRetirementRoute = AuthenticatedRetirementRouteImport.update({
-  id: '/retirement',
-  path: '/retirement',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const ApiPublicRefreshPricesRoute = ApiPublicRefreshPricesRouteImport.update({
   id: '/api/public/refresh-prices',
   path: '/api/public/refresh-prices',
@@ -131,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/beat-xeqt': typeof BeatXeqtRoute
+  '/retirement': typeof RetirementRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -140,7 +141,6 @@ export interface FileRoutesByFullPath {
   '/ledger': typeof AuthenticatedLedgerRoute
   '/performance': typeof AuthenticatedPerformanceRoute
   '/plan': typeof AuthenticatedPlanRoute
-  '/retirement': typeof AuthenticatedRetirementRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
@@ -151,6 +151,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/beat-xeqt': typeof BeatXeqtRoute
+  '/retirement': typeof RetirementRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -160,7 +161,6 @@ export interface FileRoutesByTo {
   '/ledger': typeof AuthenticatedLedgerRoute
   '/performance': typeof AuthenticatedPerformanceRoute
   '/plan': typeof AuthenticatedPlanRoute
-  '/retirement': typeof AuthenticatedRetirementRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
@@ -173,6 +173,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/beat-xeqt': typeof BeatXeqtRoute
+  '/retirement': typeof RetirementRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/accounts': typeof AuthenticatedAccountsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -182,7 +183,6 @@ export interface FileRoutesById {
   '/_authenticated/ledger': typeof AuthenticatedLedgerRoute
   '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
   '/_authenticated/plan': typeof AuthenticatedPlanRoute
-  '/_authenticated/retirement': typeof AuthenticatedRetirementRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
@@ -195,6 +195,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/beat-xeqt'
+    | '/retirement'
     | '/sitemap.xml'
     | '/accounts'
     | '/dashboard'
@@ -204,7 +205,6 @@ export interface FileRouteTypes {
     | '/ledger'
     | '/performance'
     | '/plan'
-    | '/retirement'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
     | '/lovable/email/auth/preview'
@@ -215,6 +215,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/beat-xeqt'
+    | '/retirement'
     | '/sitemap.xml'
     | '/accounts'
     | '/dashboard'
@@ -224,7 +225,6 @@ export interface FileRouteTypes {
     | '/ledger'
     | '/performance'
     | '/plan'
-    | '/retirement'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
     | '/lovable/email/auth/preview'
@@ -236,6 +236,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/beat-xeqt'
+    | '/retirement'
     | '/sitemap.xml'
     | '/_authenticated/accounts'
     | '/_authenticated/dashboard'
@@ -245,7 +246,6 @@ export interface FileRouteTypes {
     | '/_authenticated/ledger'
     | '/_authenticated/performance'
     | '/_authenticated/plan'
-    | '/_authenticated/retirement'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
     | '/lovable/email/auth/preview'
@@ -258,6 +258,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   BeatXeqtRoute: typeof BeatXeqtRoute
+  RetirementRoute: typeof RetirementRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiPublicRefreshPricesRoute: typeof ApiPublicRefreshPricesRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
@@ -294,6 +295,13 @@ declare module '@tanstack/react-router' {
       path: '/beat-xeqt'
       fullPath: '/beat-xeqt'
       preLoaderRoute: typeof BeatXeqtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retirement': {
+      id: '/retirement'
+      path: '/retirement'
+      fullPath: '/retirement'
+      preLoaderRoute: typeof RetirementRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sitemap.xml': {
@@ -359,13 +367,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPlanRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/retirement': {
-      id: '/_authenticated/retirement'
-      path: '/retirement'
-      fullPath: '/retirement'
-      preLoaderRoute: typeof AuthenticatedRetirementRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/api/public/refresh-prices': {
       id: '/api/public/refresh-prices'
       path: '/api/public/refresh-prices'
@@ -413,7 +414,6 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedLedgerRoute: typeof AuthenticatedLedgerRoute
   AuthenticatedPerformanceRoute: typeof AuthenticatedPerformanceRoute
   AuthenticatedPlanRoute: typeof AuthenticatedPlanRoute
-  AuthenticatedRetirementRoute: typeof AuthenticatedRetirementRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -425,7 +425,6 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedLedgerRoute: AuthenticatedLedgerRoute,
   AuthenticatedPerformanceRoute: AuthenticatedPerformanceRoute,
   AuthenticatedPlanRoute: AuthenticatedPlanRoute,
-  AuthenticatedRetirementRoute: AuthenticatedRetirementRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -436,6 +435,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   BeatXeqtRoute: BeatXeqtRoute,
+  RetirementRoute: RetirementRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiPublicRefreshPricesRoute: ApiPublicRefreshPricesRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
