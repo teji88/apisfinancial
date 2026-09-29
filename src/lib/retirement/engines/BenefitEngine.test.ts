@@ -30,6 +30,34 @@ describe("BenefitEngine", () => {
     expect(partial70).toBeCloseTo(751.97 * 12 * 0.5 * 1.36, 6);
   });
 
+  it("excludes OAS and applies the GIS employment earnings exemption", () => {
+    const noEmployment = estimateGovernmentBenefits(person, 65, 10_000, {
+      previousYearIncome: 10_000,
+      inflationRate: 0,
+      calendarYear: 2026,
+    }).gis;
+    const fiveThousandEmployment = estimateGovernmentBenefits(person, 65, 10_000, {
+      previousYearIncome: 10_000,
+      previousYearEmploymentIncome: 5_000,
+      inflationRate: 0,
+      calendarYear: 2026,
+    }).gis;
+    const tenThousandEmployment = estimateGovernmentBenefits(person, 65, 10_000, {
+      previousYearIncome: 10_000,
+      previousYearEmploymentIncome: 10_000,
+      inflationRate: 0,
+      calendarYear: 2026,
+    }).gis;
+    expect(fiveThousandEmployment).toBeGreaterThan(noEmployment);
+    expect(tenThousandEmployment).toBeGreaterThan(fiveThousandEmployment);
+    expect(estimateGovernmentBenefits(person, 65, 10_000, {
+      previousYearIncome: 10_000,
+      previousYearEmploymentIncome: 0,
+      inflationRate: 0,
+      calendarYear: 2026,
+    }).gis).toBe(noEmployment);
+  });
+
   it("uses separate partner income for couple GIS context", () => {
     const benefit = estimateGovernmentBenefits(person, 65, 0, {
       householdSize: 2,
@@ -37,6 +65,7 @@ describe("BenefitEngine", () => {
       partnerReceivesOas: true,
       previousYearIncome: 3000,
       partnerIncomeForBenefits: 3000,
+      partnerPreviousYearEmploymentIncome: 3000,
       inflationRate: 0,
       calendarYear: 2026,
     });
