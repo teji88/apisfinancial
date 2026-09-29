@@ -52,12 +52,24 @@ function sumBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>
 }
 
 function calculatePersonBenefitIncome(input: TaxIncomeComponents): number {
-  return Object.entries(input).reduce((sum, [key, value]) => {
-    // GIS income excludes OAS itself. Other net-income components remain in
-    // the ledger and employment/self-employment earnings are separately
-    // supplied so the BenefitEngine can apply the statutory exemption.
-    if (key === "age" || key === "oas" || typeof value !== "number") return sum;
-    return sum + Math.max(0, value);
+  // Keep this list explicit. TaxIncomeComponents also contains calculation
+  // metadata (for example foreignTaxPaid and pensionSplitPercent) that is not
+  // itself benefit income and must never leak into GIS/OAS calculations.
+  const benefitIncomeKeys: Array<keyof TaxIncomeComponents> = [
+    "employment",
+    "cpp",
+    "rrspRrif",
+    "pension",
+    "interest",
+    "eligibleCanadianDividends",
+    "nonEligibleCanadianDividends",
+    "canadianDividends",
+    "foreignIncome",
+    "capitalGains",
+  ];
+  return benefitIncomeKeys.reduce((sum, key) => {
+    const value = input[key];
+    return sum + (typeof value === "number" ? Math.max(0, value) : 0);
   }, 0);
 }
 
