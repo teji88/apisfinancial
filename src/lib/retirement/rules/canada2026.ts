@@ -34,7 +34,7 @@ export const CANADA_2026_PARAMETERS = {
     eligibleDividendFederalCreditRate: 6 / 11,
     nonEligibleDividendFederalCreditRate: 9 / 13,
     federalPensionIncomeCreditRate: 0.14,
-    provincialPensionIncomeAmount: { AB: 1753, BC: 1000, MB: 1000, NB: 1000, NL: 1000, NS: 1000, ON: 1000, PE: 1000, SK: 1000, YT: 1000 },
+    provincialPensionIncomeAmount: { AB: 1753, BC: 1000, MB: 1000, NB: 1000, NL: 1000, NT: 1000, NS: 1173, NU: 2000, ON: 1796, PE: 1000, SK: 1000, YT: 2000 },
   },
   oasRecovery: { startIncome: 95323, upperIncomeUnder75: 155109, upperIncome75Plus: 161088 },
 } as const;
