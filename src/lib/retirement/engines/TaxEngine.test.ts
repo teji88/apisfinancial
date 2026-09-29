@@ -24,6 +24,20 @@ describe("TaxEngine Canadian retirement ledgers", () => {
     expect(result.taxableIncome).toBe(42_500);
   });
 
+  it("phases down the federal basic personal credit at high income", () => {
+    const mid = calculateTaxFromIncome({ rrspRrif: 181_440 }, "AB", 65);
+    const high = calculateTaxFromIncome({ rrspRrif: 258_482 }, "AB", 65);
+    expect(mid.credits).toBeGreaterThan(high.credits);
+    expect(high.credits).toBeGreaterThan(0);
+  });
+
+  it("applies provincial basic personal credits outside Alberta", () => {
+    const bc = calculateTaxFromIncome({ rrspRrif: 50_000 }, "BC", 65);
+    const on = calculateTaxFromIncome({ rrspRrif: 50_000 }, "ON", 65);
+    expect(bc.provincialTax).toBeLessThan(calculateTaxFromIncome({ rrspRrif: 50_000 }, "BC", 65).provincialTax + 1);
+    expect(on.provincialTax).toBeLessThan(calculateTaxFromIncome({ rrspRrif: 50_000 }, "ON", 65).provincialTax + 1);
+  });
+
   it("applies the 2026 federal and Alberta basic personal credits", () => {
     const result = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 65);
     expect(result.federalTax).toBeCloseTo(4_696.72, 2);
