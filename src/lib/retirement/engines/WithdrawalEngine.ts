@@ -81,8 +81,8 @@ export function planWithdrawalSequence(input: WithdrawalSequenceInput): Withdraw
         spouse: input.taxInputs.PARTNER ?? {},
         owner: account.owner,
         province: input.province,
-        payerAge: input.payerAge,
-        spouseAge: input.spouseAge,
+        payerAge: owner.owner === "MAIN_USER" ? owner.age : input.payerAge,
+        spouseAge: owner.owner === "PARTNER" ? owner.age : input.spouseAge,
         pensionSplitPercent: input.pensionSplitPercent ?? 0,
         maxGross: account.balance,
         taxableRegistered,
@@ -139,7 +139,7 @@ export function chooseRegisteredWithdrawalOwner(
   const taxInputs = input.taxInputs ?? {};
   const candidates = input.owners
     .filter((owner) => owner.balance > 0)
-    .map((owner) => {: PersonRole = owner.owner === "MAIN_USER" ? "PARTNER" : "MAIN_USER";
+    .map((owner) => {
       const solved = solveGrossWithdrawalForNetNeed({
         netNeed: input.netNeed,
         payer: taxInputs.MAIN_USER ?? {},
@@ -199,7 +199,6 @@ export function solveGrossWithdrawalForNetNeed(
   }).householdTax;
 
   const taxAt = (gross: number) => {
-    if (!taxableRegistered) return baseTax;
     const payer = input.owner === "MAIN_USER"
       ? (taxableRegistered
         ? withRegisteredWithdrawal(input.payer, gross, input.payerAge, registeredAccountType)
