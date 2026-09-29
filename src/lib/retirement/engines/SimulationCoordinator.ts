@@ -2,7 +2,7 @@ import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole,
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
 import { calculateBasicTax, calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
-import { solveGrossWithdrawalForNetNeed, chooseRegisteredWithdrawalOwner } from "./WithdrawalEngine";
+import { planWithdrawalSequence } from "./WithdrawalEngine";
 import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, withdrawNonRegistered, estimateNonRegisteredMonthlyIncome, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 import { validateRetirementScenario } from "../validation/RetirementValidation";
 import { createDebtState, accrueDebtMonth, type DebtState } from "./DebtEngine";
@@ -407,91 +407,100 @@ export function runRetirementSimulation(
       }
     }
 
-    for (const bucket of withdrawalOrder(scenario.strategy.withdrawalPolicy)) {
-      if (remainingNeed <= 0) break;
-      let selectedRegisteredOwner: PersonRole | undefined;
-
-      const available = sumBucket(accounts, bucket);
-      if (available <= 0) continue;
-
-      let candidate = Math.min(available, remainingNeed);
-      if (bucket === "registered") {
-        // Evaluate each owner's registered balance against the same household
-        // tax position, rather than always draining the first account found.
-        const allocation = chooseRegisteredWithdrawalOwner({
-          netNeed: remainingNeed,
-          owners: (["MAIN_USER", "PARTNER"] as const)
-            .map((owner) => ({
-              owner,
-              balance: sumBucket(accounts.filter((account) => account.owner === owner), "registered"),
-              age: ages[owner] ?? maxAge,
-              taxInputs: taxBaseByOwner,
-            }))
-            .filter((owner) => owner.balance > 0),
-          province: scenario.household.province,
-          payerAge: ages.MAIN_USER ?? maxAge,
-          spouseAge: ages.PARTNER,
-          pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
-        });
-        selectedRegisteredOwner = allocation?.owner;
-        candidate = Math.min(available, allocation?.solved.grossWithdrawal ?? remainingNeed);
+    // Mandatory registered withdrawals are taxable and must be included in the
+    // current tax position before the discretionary sequence is solved.
+    for (const person of alivePeople) {
+      const role = person.role;
+      if (mandatoryByOwner[role] > 0) {
+        taxBaseByOwner[role].rrspRrif = (taxBaseByOwner[role].rrspRrif ?? 0) + mandatoryByOwner[role];
+        if ((ages[role] ?? 0) >= 65) {
+          taxBaseByOwner[role].eligiblePensionIncome =
+            (taxBaseByOwner[role].eligiblePensionIncome ?? 0) + mandatoryByOwner[role];
+        }
       }
+    }
 
-      const beforeBalances = new Map(accounts.map((account) => [account.id, account.balance]));
+    const sequencePriority = withdrawalOrder(scenario.strategy.withdrawalPolicy).map((bucket) => {
+      if (bucket === "cash") return "CASH" as const;
+      if (bucket === "nonRegistered") return "NON_REGISTERED" as const;
+      if (bucket === "registered") return "RRSP_RRIF" as const;
+      return "TFSA" as const;
+    });
+    const sequence = planWithdrawalSequence({
+      netNeed: remainingNeed,
+      taxInputs: taxBaseByOwner,
+      province: scenario.household.province,
+      payerAge: ages.MAIN_USER ?? maxAge,
+      spouseAge: ages.PARTNER,
+      pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
+      priority: sequencePriority,
+      owners: accounts
+        .filter((account) => account.balance > 0)
+        .map((account) => ({
+          accountId: account.id,
+          owner: account.owner,
+          type: account.type === "CASH"
+            ? "CASH" as const
+            : account.type === "NON_REGISTERED"
+              ? "NON_REGISTERED" as const
+              : account.type === "TFSA"
+                ? "TFSA" as const
+                : ["LIRA", "LIF"].includes(account.type)
+                  ? "LIRA_LIF" as const
+                  : "RRSP_RRIF" as const,
+          balance: account.balance,
+          age: ages[account.owner] ?? maxAge,
+          gainFraction: account.type === "NON_REGISTERED" && account.balance > 0
+            ? Math.min(1, Math.max(0, (account.balance - account.nonRegisteredAcb) / account.balance))
+            : undefined,
+          registeredAccountType: account.type === "RRSP"
+            ? "RRSP" as const
+            : account.type === "LIRA"
+              ? "LIRA" as const
+              : account.type === "LIF"
+                ? "RRIF" as const
+                : account.type === "RRIF"
+                  ? "RRIF" as const
+                  : undefined,
+        })),
+    });
+
+    for (const step of sequence.steps) {
+      if (remainingNeed <= 0) break;
+      const account = step.accountId ? accounts.find((candidate) => candidate.id === step.accountId) : undefined;
+      if (!account || account.balance <= 0) continue;
+      const beforeBalances = new Map(accounts.map((candidate) => [candidate.id, candidate.balance]));
       let taken = 0;
-      if (bucket === "nonRegistered") {
-        // Realize gains proportionally to the account's ACB instead of treating
-        // every dollar withdrawn as tax-free principal.
-        let remaining = candidate;
-        for (const account of accounts.filter((a) => bucketOf(a) === bucket)) {
-          if (remaining <= 0) break;
-          const result = withdrawNonRegistered(account, remaining);
-          taken += result.taken;
-          nonRegisteredCapitalGains += result.realizedCapitalGain;
-          remaining -= result.taken;
-          if (result.realizedCapitalGain > 0) {
-            monthlyTaxInputs[account.owner].capitalGains =
-              (monthlyTaxInputs[account.owner].capitalGains ?? 0) + result.realizedCapitalGain;
-          }
+      if (step.bucket === "NON_REGISTERED") {
+        const result = withdrawNonRegistered(account, Math.min(step.grossWithdrawal, remainingNeed));
+        taken = result.taken;
+        nonRegisteredCapitalGains += result.realizedCapitalGain;
+        if (result.realizedCapitalGain > 0) {
+          monthlyTaxInputs[account.owner].capitalGains =
+            (monthlyTaxInputs[account.owner].capitalGains ?? 0) + result.realizedCapitalGain;
         }
       } else {
-        taken = withdrawFromBucket(accounts, bucket, candidate, selectedRegisteredOwner);
+        taken = withdraw(account, Math.min(step.grossWithdrawal, account.balance));
       }
       if (taken <= 0) continue;
       withdrawals += taken;
-      if (bucket === "registered") withdrawalSources.registered += taken;
-      else if (bucket === "tfsa") withdrawalSources.tfsa += taken;
-      else if (bucket === "nonRegistered") withdrawalSources.nonRegistered += taken;
-      else if (bucket === "cash") withdrawalSources.cash += taken;
-
-      if (bucket === "registered") {
+      if (step.bucket === "RRSP_RRIF" || step.bucket === "LIRA_LIF") {
+        withdrawalSources.registered += taken;
         taxableWithdrawals += taken;
-        for (const account of accounts) {
-          const before = beforeBalances.get(account.id) ?? account.balance;
-          const actual = Math.max(0, before - account.balance);
-          if (actual > 0) registeredWithdrawalsByOwner[account.owner] += actual;
-        }
-
-        // Convert the gross registered withdrawal into after-tax cash using
-        // the same household tax model used for the annual tax ledger.
-        const owner = selectedRegisteredOwner ?? accounts.find((account) => bucketOf(account) === "registered" && (beforeBalances.get(account.id) ?? 0) > account.balance)?.owner ?? "MAIN_USER";
-        const ownerAge = ages[owner] ?? maxAge;
-        const solved = solveGrossWithdrawalForNetNeed({
-          netNeed: Math.min(remainingNeed, taken),
-          payer: taxBaseByOwner.MAIN_USER,
-          spouse: alivePeople.some((person) => person.role === "PARTNER") ? taxBaseByOwner.PARTNER : undefined,
-          owner,
-          province: scenario.household.province,
-          payerAge: ages.MAIN_USER ?? maxAge,
-          spouseAge: ages.PARTNER,
-          pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
-          maxGross: taken,
-        });
-        remainingNeed -= Math.min(remainingNeed, Math.max(0, solved.netCash));
+        registeredWithdrawalsByOwner[account.owner] += taken;
+      } else if (step.bucket === "TFSA") {
+        withdrawalSources.tfsa += taken;
+      } else if (step.bucket === "NON_REGISTERED") {
+        withdrawalSources.nonRegistered += taken;
+      } else if (step.bucket === "CASH") {
+        withdrawalSources.cash += taken;
+      }
+      if (step.bucket === "RRSP_RRIF" || step.bucket === "LIRA_LIF") {
+        const actual = Math.max(0, (beforeBalances.get(account.id) ?? account.balance) - account.balance);
+        if (actual > 0) registeredWithdrawalsByOwner[account.owner] += actual - taken;
+        remainingNeed -= Math.min(remainingNeed, Math.max(0, step.netCash * (taken / Math.max(step.grossWithdrawal, 0.000001))));
       } else {
-        // Investment income is already counted as cash available for spending.
-        // A non-registered withdrawal may also realize a taxable capital gain.
-        remainingNeed -= taken;
+        remainingNeed -= Math.min(remainingNeed, taken);
       }
     }
 
