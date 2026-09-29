@@ -302,7 +302,7 @@ describe("retirement financial invariants", () => {
     const scenario = makeScenario();
     const stress = runStressTests(scenario, 100000, { TFSA: 100000 });
     expect(stress.base.kind).toBe("BASE");
-    expect(stress.scenarios).toHaveLength(6);
+    expect(stress.scenarios).toHaveLength(14);
     expect(stress.scenarios.every(s => s.kind !== "BASE")).toBe(true);
     expect(stress.warnings.some(w => w.includes("not probabilities"))).toBe(true);
   });
