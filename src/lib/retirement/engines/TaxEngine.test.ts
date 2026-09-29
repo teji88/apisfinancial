@@ -4,10 +4,24 @@ import { buildTaxIncome, calculateTaxFromIncome } from "./TaxEngine";
 describe("TaxEngine Canadian retirement ledgers", () => {
   it("keeps total income, net income, and taxable income distinct for capital gains", () => {
     const result = buildTaxIncome({ capitalGains: 20_000 });
-    expect(result.totalIncome).toBe(20_000);
+    expect(result.totalIncome).toBe(10_000);
     expect(result.capitalGainInclusion).toBe(10_000);
     expect(result.netIncome).toBe(10_000);
     expect(result.taxableIncome).toBe(10_000);
+  });
+
+  it("excludes foreign tax paid from income ledgers", () => {
+    const result = buildTaxIncome({ foreignIncome: 12_000, foreignTaxPaid: 2_000 });
+    expect(result.totalIncome).toBe(12_000);
+    expect(result.netIncome).toBe(12_000);
+    expect(result.taxableIncome).toBe(12_000);
+  });
+
+  it("applies deductions after income adjustments", () => {
+    const result = buildTaxIncome({ rrspRrif: 50_000, deductions: 7_500 });
+    expect(result.totalIncome).toBe(50_000);
+    expect(result.netIncome).toBe(42_500);
+    expect(result.taxableIncome).toBe(42_500);
   });
 
   it("applies the 2026 federal and Alberta basic personal credits", () => {
