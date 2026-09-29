@@ -129,4 +129,45 @@ describe("retirement simulation validation boundary", () => {
     expect(result.metrics.lifetimeTax).toBeGreaterThanOrEqual(0);
   });
 
+  it("applies the V1 withdrawal sequence to real account balances", () => {
+    const scenario = {
+      ...base,
+      household: {
+        ...base.household,
+        people: [{
+          ...base.household.people[0],
+          birthYear: 1960,
+          retirementAge: 65,
+          cppStartAge: 70 as const,
+          oasStartAge: 70 as const,
+        }],
+      },
+      goals: { ...base.goals, annualSpending: 12_000, planningAge: 66 },
+      accounts: [
+        {
+          id: "cash",
+          owner: "MAIN_USER" as const,
+          type: "CASH" as const,
+          valuation: { mode: "MANUAL" as const, value: 5_000 },
+        },
+        {
+          id: "tfsa",
+          owner: "MAIN_USER" as const,
+          type: "TFSA" as const,
+          valuation: { mode: "MANUAL" as const, value: 20_000 },
+        },
+      ],
+      strategy: { ...base.strategy, withdrawalPolicy: "TFSA_FIRST" as const },
+    } satisfies RetirementScenario;
+
+    const result = runRetirementSimulation(scenario, 25_000, 2026);
+    expect(result.status).toBe("COMPLETE");
+    const firstRetirementMonth = result.monthly.find((month) => month.ages.MAIN_USER === 66);
+    expect(firstRetirementMonth).toBeDefined();
+    expect(firstRetirementMonth!.withdrawalSources?.cash).toBeGreaterThan(0);
+    expect(firstRetirementMonth!.withdrawalSources?.tfsa).toBeGreaterThan(0);
+    expect(firstRetirementMonth!.withdrawals).toBeGreaterThan(0);
+    expect(firstRetirementMonth!.portfolio).toBeLessThanOrEqual(firstRetirementMonth!.cash + firstRetirementMonth!.tfsa + firstRetirementMonth!.registered + firstRetirementMonth!.nonRegistered);
+  });
+
 });
