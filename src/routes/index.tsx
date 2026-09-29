@@ -1,3 +1,4 @@
+import { postLoginPath } from "@/lib/pending-plan";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import {
@@ -101,7 +102,7 @@ function Landing() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && session) void navigate({ to: "/dashboard" });
+    if (!loading && session) void navigate({ to: postLoginPath() });
   }, [loading, session, navigate]);
 
   return (

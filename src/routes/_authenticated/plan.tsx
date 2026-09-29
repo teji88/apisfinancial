@@ -58,8 +58,8 @@ function PlanPage() {
   const isOwner = entitlement.plan === "owner";
   const isPaid = (entitlement.tier === "pro" || entitlement.tier === "pro_plus") && !isOwner;
   const isInvite = entitlement.tier === "invite";
-  const isTrial = entitlement.tier === "trial";
-  const isReferral = entitlement.tier === "referral";
+  const isTrial = false;
+  const isReferral = false;
 
   async function refreshFromProvider(quiet = false) {
     const result = await sync({ data: { environment: getStripeEnvironment() } });

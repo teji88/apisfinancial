@@ -65,7 +65,7 @@ import {
 } from "@/components/ui/table";
 
 export const Route = createFileRoute("/retirement")({
-  staticData: { sitemap: false },
+  staticData: { sitemap: true },
   head: () => ({
     meta: [
       { title: "Retirement Planner — Apis Financial" },
