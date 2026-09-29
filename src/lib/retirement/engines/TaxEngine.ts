@@ -223,9 +223,23 @@ export function calculateTaxFromIncome(
   const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province) - provincialPensionIncomeCredit);
   const oasRecovery = oasRecoveryForIncome(ledgers.netIncome, age, ledgers.oas);
   const foreignIncome = Math.max(0, ledgers.foreignIncome);
-  const foreignTaxCredit = foreignIncome > 0
-    ? Math.min(ledgers.foreignTaxPaid, Math.max(0, (federalTax + provincialTax) * foreignIncome / Math.max(1, ledgers.taxableIncome)))
+  // V1 FTC model: the federal and provincial credits are each limited by
+  // the Canadian tax otherwise attributable to the foreign income. CRA's
+  // individual FTC uses the lesser of foreign tax paid and Canadian tax
+  // otherwise payable on the net foreign income; detailed country-by-country
+  // T2209/T2036 calculations remain a later refinement.
+  const foreignIncomeShare = foreignIncome > 0
+    ? Math.min(1, foreignIncome / Math.max(1, ledgers.taxableIncome))
     : 0;
+  const federalForeignTaxCredit = Math.min(
+    ledgers.foreignTaxPaid,
+    Math.max(0, federalTax * foreignIncomeShare),
+  );
+  const provincialForeignTaxCredit = Math.min(
+    Math.max(0, ledgers.foreignTaxPaid - federalForeignTaxCredit),
+    Math.max(0, provincialTax * foreignIncomeShare),
+  );
+  const foreignTaxCredit = federalForeignTaxCredit + provincialForeignTaxCredit;
   const totalTax = Math.max(0, federalTax + provincialTax + oasRecovery - foreignTaxCredit);
   const federalMarginal = marginalBracketRate(ledgers.taxableIncome, federalBrackets);
   const provincialMarginal = marginalBracketRate(ledgers.taxableIncome, provincialBrackets);
