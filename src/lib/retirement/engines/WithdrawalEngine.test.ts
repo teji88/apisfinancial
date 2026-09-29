@@ -66,4 +66,26 @@ describe("tax-aware gross withdrawal solver", () => {
     expect(aboveRecovery.grossWithdrawal).toBeGreaterThan(belowRecovery.grossWithdrawal);
     expect(aboveRecovery.incrementalTax).toBeGreaterThan(belowRecovery.incrementalTax);
   });
+  it("does not treat an RRSP withdrawal as eligible pension income after age 65", () => {
+    const result = solveGrossWithdrawalForNetNeed({
+      ...base,
+      netNeed: 10_000,
+      maxGross: 20_000,
+      registeredAccountType: "RRSP",
+      payer: { age: 70, rrspRrif: 40_000, eligiblePensionIncome: 0 },
+    });
+    expect(result.grossWithdrawal).toBeGreaterThan(10_000);
+  });
+
+  it("treats an RRIF withdrawal as eligible pension income after age 65", () => {
+    const result = solveGrossWithdrawalForNetNeed({
+      ...base,
+      netNeed: 10_000,
+      maxGross: 20_000,
+      registeredAccountType: "RRIF",
+      payer: { age: 70, rrspRrif: 40_000, eligiblePensionIncome: 40_000 },
+    });
+    expect(result.grossWithdrawal).toBeGreaterThan(10_000);
+  });
+
 });
