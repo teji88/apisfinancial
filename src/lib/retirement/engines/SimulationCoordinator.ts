@@ -49,7 +49,9 @@ function bucketOf(state: AccountState) {
 
 function sumBucket(accounts: AccountState[], bucket: ReturnType<typeof bucketOf>) {
   return accounts.filter((a) => bucketOf(a) === bucket).reduce((sum, a) => sum + a.balance, 0);
-}\n\nfunction calculatePersonBenefitIncome(input: TaxIncomeComponents): number {
+}
+
+function calculatePersonBenefitIncome(input: TaxIncomeComponents): number {
   return Object.entries(input).reduce((sum, [key, value]) => {
     if (key === "age" || typeof value !== "number") return sum;
     return sum + Math.max(0, value);
