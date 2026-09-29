@@ -88,4 +88,29 @@ describe("tax-aware gross withdrawal solver", () => {
     expect(result.grossWithdrawal).toBeGreaterThan(10_000);
   });
 
+  it("taxes only the realized gain portion of a non-registered withdrawal", () => {
+    const taxFree = solveGrossWithdrawalForNetNeed({ ...base, netNeed: 10_000, maxGross: 20_000, taxableRegistered: false, nonRegisteredGainFraction: 0 });
+    const halfGain = solveGrossWithdrawalForNetNeed({ ...base, netNeed: 10_000, maxGross: 20_000, taxableRegistered: false, nonRegisteredGainFraction: 0.5 });
+    expect(taxFree.grossWithdrawal).toBe(10_000);
+    expect(halfGain.grossWithdrawal).toBeGreaterThan(10_000);
+    expect(halfGain.incrementalTax).toBeGreaterThan(0);
+  });
+
+  it("accepts an explicit registered account type for owner selection", () => {
+    const result = chooseRegisteredWithdrawalOwner({
+      netNeed: 10_000,
+      owners: [{ owner: "MAIN_USER", balance: 20_000, age: 70 }],
+      province: "AB",
+      payerAge: 70,
+      spouseAge: 70,
+      registeredAccountType: "RRSP",
+      taxInputs: {
+        MAIN_USER: { age: 70, rrspRrif: 40_000, eligiblePensionIncome: 0 },
+        PARTNER: { age: 70, rrspRrif: 0, eligiblePensionIncome: 0 },
+      },
+    });
+    expect(result).toBeDefined();
+    expect(result!.solved.grossWithdrawal).toBeGreaterThan(10_000);
+  });
+
 });
