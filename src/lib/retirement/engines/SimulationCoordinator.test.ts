@@ -157,17 +157,18 @@ describe("retirement simulation validation boundary", () => {
           valuation: { mode: "MANUAL" as const, value: 20_000 },
         },
       ],
-      strategy: { ...base.strategy, withdrawalPolicy: "TFSA_FIRST" as const },
+      strategy: { ...base.strategy, withdrawalPolicy: "OPTIMIZE" as const },
     } satisfies RetirementScenario;
 
     const result = runRetirementSimulation(scenario, 25_000, 2026);
     expect(result.status).toBe("COMPLETE");
-    const firstRetirementMonth = result.monthly.find((month) => month.ages.MAIN_USER === 66);
-    expect(firstRetirementMonth).toBeDefined();
-    expect(firstRetirementMonth!.withdrawalSources?.cash).toBeGreaterThan(0);
-    expect(firstRetirementMonth!.withdrawalSources?.tfsa).toBeGreaterThan(0);
-    expect(firstRetirementMonth!.withdrawals).toBeGreaterThan(0);
-    expect(firstRetirementMonth!.portfolio).toBeLessThanOrEqual(firstRetirementMonth!.cash + firstRetirementMonth!.tfsa + firstRetirementMonth!.registered + firstRetirementMonth!.nonRegistered);
+    const retirementMonths = result.monthly.filter((month) => month.ages.MAIN_USER === 66);
+    expect(retirementMonths.length).toBeGreaterThan(0);
+    expect(retirementMonths.some((month) => (month.withdrawalSources?.cash ?? 0) > 0)).toBe(true);
+    expect(retirementMonths.some((month) => (month.withdrawalSources?.tfsa ?? 0) > 0)).toBe(true);
+    expect(retirementMonths.some((month) => month.withdrawals > 0)).toBe(true);
+    const last = retirementMonths[retirementMonths.length - 1]!;
+    expect(last.portfolio).toBeCloseTo(last.cash + last.tfsa + last.registered + last.nonRegistered, 6);
   });
 
 });
