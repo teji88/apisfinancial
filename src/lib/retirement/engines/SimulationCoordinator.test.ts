@@ -104,4 +104,29 @@ describe("retirement simulation validation boundary", () => {
     expect(result.metrics.estateTax).toBeGreaterThan(0);
   });
 
+
+  it("keeps non-income tax metadata out of GIS income during simulation", () => {
+    const scenario = {
+      ...base,
+      household: {
+        ...base.household,
+        people: [{
+          ...base.household.people[0],
+          otherIncome: 12_000,
+          employmentIncome: 10_000,
+          selfEmploymentIncome: 0,
+          oasStartAge: 65 as const,
+          cppStartAge: 65 as const,
+        }],
+      },
+      goals: { ...base.goals, annualSpending: 0, planningAge: 66 },
+      accounts: [],
+    } satisfies RetirementScenario;
+
+    const result = runRetirementSimulation(scenario, 0, 2026);
+    expect(result.status).toBe("COMPLETE");
+    expect(result.monthly).toHaveLength(12);
+    expect(result.metrics.lifetimeTax).toBeGreaterThanOrEqual(0);
+  });
+
 });
