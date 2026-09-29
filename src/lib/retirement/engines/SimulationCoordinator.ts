@@ -469,19 +469,33 @@ export function runRetirementSimulation(
       if (remainingNeed <= 0) break;
       const account = step.accountId ? accounts.find((candidate) => candidate.id === step.accountId) : undefined;
       if (!account || account.balance <= 0) continue;
-      const beforeBalances = new Map(accounts.map((candidate) => [candidate.id, candidate.balance]));
+
+      // The sequence solver works in gross dollars for taxable withdrawals and
+      // net dollars for the household need. Apply the solved gross amount to
+      // the actual account, then reduce the need by the corresponding net cash.
+      const grossTaken = Math.min(step.grossWithdrawal, account.balance);
+      if (grossTaken <= 0) continue;
+
       let taken = 0;
+      let netCashTaken = grossTaken;
       if (step.bucket === "NON_REGISTERED") {
-        const result = withdrawNonRegistered(account, Math.min(step.grossWithdrawal, remainingNeed));
+        const result = withdrawNonRegistered(account, grossTaken);
         taken = result.taken;
+        netCashTaken = step.grossWithdrawal > 0
+          ? step.netCash * (taken / step.grossWithdrawal)
+          : 0;
         nonRegisteredCapitalGains += result.realizedCapitalGain;
         if (result.realizedCapitalGain > 0) {
           monthlyTaxInputs[account.owner].capitalGains =
             (monthlyTaxInputs[account.owner].capitalGains ?? 0) + result.realizedCapitalGain;
         }
       } else {
-        taken = withdraw(account, Math.min(step.grossWithdrawal, account.balance));
+        taken = withdraw(account, grossTaken);
+        netCashTaken = step.grossWithdrawal > 0
+          ? step.netCash * (taken / step.grossWithdrawal)
+          : 0;
       }
+
       if (taken <= 0) continue;
       withdrawals += taken;
       if (step.bucket === "RRSP_RRIF" || step.bucket === "LIRA_LIF") {
@@ -495,13 +509,7 @@ export function runRetirementSimulation(
       } else if (step.bucket === "CASH") {
         withdrawalSources.cash += taken;
       }
-      if (step.bucket === "RRSP_RRIF" || step.bucket === "LIRA_LIF") {
-        const actual = Math.max(0, (beforeBalances.get(account.id) ?? account.balance) - account.balance);
-        if (actual > 0) registeredWithdrawalsByOwner[account.owner] += actual - taken;
-        remainingNeed -= Math.min(remainingNeed, Math.max(0, step.netCash * (taken / Math.max(step.grossWithdrawal, 0.000001))));
-      } else {
-        remainingNeed -= Math.min(remainingNeed, taken);
-      }
+      remainingNeed -= Math.min(remainingNeed, Math.max(0, netCashTaken));
     }
 
     for (const person of alivePeople) {
