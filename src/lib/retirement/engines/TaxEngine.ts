@@ -132,8 +132,9 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
   const taxableCanadianDividends =
     eligibleDividends * (1 + CANADA_2026_PARAMETERS.tax.eligibleDividendGrossUp) +
     nonEligibleDividends * (1 + CANADA_2026_PARAMETERS.tax.nonEligibleDividendGrossUp);
-  const totalIncome = ordinaryIncome + taxableCanadianDividends + income.capitalGains;
   const capitalGainInclusion = income.capitalGains * 0.5;
+  // Canadian total income uses the taxable portion of capital gains, not the gross disposition gain.
+  const totalIncome = ordinaryIncome + taxableCanadianDividends + capitalGainInclusion;
   const netIncomeBeforeDeductions = Math.max(0, ordinaryIncome + taxableCanadianDividends + capitalGainInclusion - pensionSplit);
   const netIncome = Math.max(0, netIncomeBeforeDeductions - income.deductions);
   const taxableIncome = netIncome;
