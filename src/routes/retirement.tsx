@@ -37,9 +37,14 @@ import {
   oasFractionFromResidence,
   oasAt,
   CPP_MAX_MONTHLY_65,
+  compareWithdrawalStrategies,
+  WITHDRAWAL_POLICIES,
+  type WithdrawalPolicy,
+  type StrategyObjective,
   type PersonSpec,
   type PlannerInputs,
 } from "@/lib/retirement";
+
 import { PROVINCES, PROVINCE_CODES, type ProvinceCode } from "@/lib/tax";
 import { projectResp, projectRdsp } from "@/lib/family-accounts";
 import { Button } from "@/components/ui/button";
