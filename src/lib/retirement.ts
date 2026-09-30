@@ -762,3 +762,60 @@ export function earliestRetirementAge(input: PlannerInputs): number | null {
   }
   return null;
 }
+
+export type StrategyObjective = "MIN_TAX" | "MAX_ESTATE" | "MAX_SUSTAINABLE_SPENDING";
+
+export type StrategyComparison = {
+  policy: WithdrawalPolicy;
+  label: string;
+  blurb: string;
+  totalTaxes: number;
+  totalClawback: number;
+  endingBalance: number;
+  estateTax: number;
+  estateAfterTax: number;
+  depletionAge: number | null;
+  success: boolean;
+  totalShortfall: number;
+};
+
+/** Runs every withdrawal policy on the same inputs and ranks them. */
+export function compareWithdrawalStrategies(
+  input: PlannerInputs,
+  objective: StrategyObjective = "MIN_TAX",
+): { results: StrategyComparison[]; best: WithdrawalPolicy } {
+  const results = WITHDRAWAL_POLICIES.map((meta) => {
+    const p = projectRetirement({ ...input, withdrawalPolicy: meta.key });
+    return {
+      policy: meta.key,
+      label: meta.label,
+      blurb: meta.blurb,
+      totalTaxes: p.totalTaxes,
+      totalClawback: p.totalClawback,
+      endingBalance: p.endingBalance,
+      estateTax: p.estateTax,
+      estateAfterTax: Math.max(0, p.endingBalance - p.estateTax),
+      depletionAge: p.depletionAge,
+      success: p.success,
+      totalShortfall: p.rows.reduce((s, r) => s + r.shortfall, 0),
+    };
+  });
+
+  const score = (r: StrategyComparison) => {
+    switch (objective) {
+      case "MAX_ESTATE":
+        return r.estateAfterTax;
+      case "MAX_SUSTAINABLE_SPENDING":
+        return -r.totalShortfall;
+      default:
+        return -(r.totalTaxes + r.totalClawback + r.estateTax);
+    }
+  };
+
+  const ranked = [...results].sort((a, b) => {
+    if (a.success !== b.success) return a.success ? -1 : 1;
+    return score(b) - score(a);
+  });
+
+  return { results, best: ranked[0]!.policy };
+}
