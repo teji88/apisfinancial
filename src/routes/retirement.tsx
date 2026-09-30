@@ -425,13 +425,19 @@ function RetirementPage() {
         nonreg: p.save_pct_nonreg ?? 20,
       },
       clawbackTolerance,
+      withdrawalPolicy: policy,
       self,
       spouse,
     };
-  }, [p, derived, balances, clawbackTolerance]);
+  }, [p, derived, balances, clawbackTolerance, policy]);
 
   const projection = useMemo(() => (inputs ? projectRetirement(inputs) : null), [inputs]);
   const earliest = useMemo(() => (inputs ? earliestRetirementAge(inputs) : null), [inputs]);
+  const comparison = useMemo(
+    () => (inputs ? compareWithdrawalStrategies(inputs, objective) : null),
+    [inputs, objective],
+  );
+
 
   if (authLoading || (!isGuest && (loading || profileQuery.isLoading)) || !p || !inputs || !projection || !derived) {
     return <p className="p-6 text-sm text-muted-foreground">Loading your plan…</p>;
