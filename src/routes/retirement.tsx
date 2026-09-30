@@ -974,27 +974,20 @@ function RetirementPage() {
                 />
               </Field>
               <Field label="Spouse CPP start age">
-                <Input
-                  type="number"
+                <AgeSelect
                   value={p.spouse_cpp_start_age ?? 65}
-                  onChange={(e) =>
-                    set({
-                      spouse_cpp_start_age: Math.min(70, Math.max(60, num(e.target.value, 65))),
-                    })
-                  }
+                  options={CPP_AGE_OPTIONS}
+                  onChange={(age) => set({ spouse_cpp_start_age: age })}
                 />
               </Field>
               <Field label="Spouse OAS start age">
-                <Input
-                  type="number"
+                <AgeSelect
                   value={p.spouse_oas_start_age ?? 65}
-                  onChange={(e) =>
-                    set({
-                      spouse_oas_start_age: Math.min(70, Math.max(65, num(e.target.value, 65))),
-                    })
-                  }
+                  options={OAS_AGE_OPTIONS}
+                  onChange={(age) => set({ spouse_oas_start_age: age })}
                 />
               </Field>
+
               <Field label="Spouse RRSP">
                 <Input
                   type="number"
