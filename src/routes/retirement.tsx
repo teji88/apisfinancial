@@ -640,6 +640,129 @@ function RetirementPage() {
 
         {/* --------------------------------- PLAN --------------------------------- */}
         <TabsContent value="plan" className="space-y-6 pt-4">
+          {comparison ? (
+            <div className="rounded-xl border bg-card p-4 space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold">Withdrawal strategy optimizer</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Compare how the order you spend your accounts changes tax, clawback and what is
+                    left at the end.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Goal</Label>
+                  <Select
+                    value={objective}
+                    onValueChange={(v) => setObjective(v as StrategyObjective)}
+                  >
+                    <SelectTrigger className="w-56">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MIN_TAX">Pay the least tax</SelectItem>
+                      <SelectItem value="MAX_ESTATE">Leave the most behind</SelectItem>
+                      <SelectItem value="MAX_SUSTAINABLE_SPENDING">
+                        Keep the income going longest
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {comparison.results.map((r) => {
+                  const selected = r.policy === policy;
+                  return (
+                    <button
+                      key={r.policy}
+                      type="button"
+                      onClick={() => setPolicy(r.policy)}
+                      className={`rounded-lg border p-3 text-left transition ${
+                        selected ? "border-primary ring-2 ring-primary/30" : "hover:border-primary/50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium">{r.label}</span>
+                        {r.policy === comparison.best ? (
+                          <Badge variant="secondary">Recommended</Badge>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{r.blurb}</p>
+                      <dl className="mt-3 space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <dt className="text-muted-foreground">Lifetime tax</dt>
+                          <dd>{formatCad(r.totalTaxes)}</dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="text-muted-foreground">OAS clawback</dt>
+                          <dd>{formatCad(r.totalClawback)}</dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="text-muted-foreground">Left after tax</dt>
+                          <dd>{formatCad(r.estateAfterTax)}</dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="text-muted-foreground">Money lasts</dt>
+                          <dd>{r.depletionAge == null ? "To plan end" : `To age ${r.depletionAge}`}</dd>
+                        </div>
+                      </dl>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="max-h-[22rem] overflow-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Strategy</TableHead>
+                      <TableHead className="text-right">Lifetime tax</TableHead>
+                      <TableHead className="text-right">OAS clawback</TableHead>
+                      <TableHead className="text-right">Ending balance</TableHead>
+                      <TableHead className="text-right">Tax at death</TableHead>
+                      <TableHead className="text-right">Left after tax</TableHead>
+                      <TableHead className="text-right">Money lasts</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {comparison.results.map((r) => (
+                      <TableRow key={r.policy} className={r.policy === policy ? "bg-muted/50" : ""}>
+                        <TableCell className="font-medium">
+                          {r.label}
+                          {r.policy === comparison.best ? " ★" : ""}
+                        </TableCell>
+                        <TableCell className="text-right">{formatCad(r.totalTaxes)}</TableCell>
+                        <TableCell className="text-right">{formatCad(r.totalClawback)}</TableCell>
+                        <TableCell className="text-right">{formatCad(r.endingBalance)}</TableCell>
+                        <TableCell className="text-right">{formatCad(r.estateTax)}</TableCell>
+                        <TableCell className="text-right">{formatCad(r.estateAfterTax)}</TableCell>
+                        <TableCell className="text-right">
+                          {r.depletionAge == null ? "To plan end" : `Age ${r.depletionAge}`}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-xs text-muted-foreground">
+                  Showing:{" "}
+                  <span className="font-medium text-foreground">
+                    {WITHDRAWAL_POLICIES.find((w) => w.key === policy)?.label}
+                  </span>{" "}
+                  — the charts and year-by-year table below use this order.
+                </p>
+                {policy !== comparison.best ? (
+                  <Button size="sm" variant="outline" onClick={() => setPolicy(comparison.best)}>
+                    Use the recommended strategy
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid gap-4 lg:grid-cols-3">
             <BenefitCard
               title="Your government benefits"
