@@ -495,23 +495,26 @@ export function projectRetirement(input: PlannerInputs): Projection {
 
     let res = evaluate(draws);
 
-    // Step 4 — fill the income gap from registered money, stopping at the
-    // effective ceiling (age-amount clawback, then OAS clawback), widened by the
-    // tolerance when the lookahead flagged a melt-down. LIF room is
-    // use-it-or-lose-it, so locked-in money comes first.
-    const regRoom = people.map((p, i) => {
-      const baseOrdinary = cpp[i]! + oasGross[i]! + other[i]!;
-      const ceiling = Math.max(0, ceilings[i]! - baseOrdinary);
-      const lifCap = Math.max(0, Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - draws[i]!.lif);
-      const regCap = Math.max(0, p.rrsp - draws[i]!.reg);
-      const headroom = Math.max(0, ceiling - draws[i]!.reg - draws[i]!.lif);
-      return {
-        lif: Math.min(lifCap, headroom),
-        reg: Math.min(regCap, Math.max(0, headroom - Math.min(lifCap, headroom))),
-      };
-    });
-    const regTotal = regRoom.reduce((s, r) => s + r.lif + r.reg, 0);
-    if (res.net < need && regTotal > 0) {
+    // Registered money up to the effective ceiling (age-amount clawback, then
+    // OAS clawback), widened by the tolerance when the lookahead flagged a
+    // melt-down. LIF room is use-it-or-lose-it, so locked-in money comes first.
+    const drawRegisteredToCeiling = () => {
+      const regRoom = people.map((p, i) => {
+        const baseOrdinary = cpp[i]! + oasGross[i]! + other[i]!;
+        const ceiling = Math.max(0, ceilings[i]! - baseOrdinary);
+        const lifCap = Math.max(
+          0,
+          Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - draws[i]!.lif,
+        );
+        const regCap = Math.max(0, p.rrsp - draws[i]!.reg);
+        const headroom = Math.max(0, ceiling - draws[i]!.reg - draws[i]!.lif);
+        return {
+          lif: Math.min(lifCap, headroom),
+          reg: Math.min(regCap, Math.max(0, headroom - Math.min(lifCap, headroom))),
+        };
+      });
+      const regTotal = regRoom.reduce((s, r) => s + r.lif + r.reg, 0);
+      if (regTotal <= 0) return;
       const baseline = people.map((_, i) => ({ ...draws[i]! }));
       const apply = (x: number) => {
         const f = x / regTotal;
@@ -530,44 +533,11 @@ export function projectRetirement(input: PlannerInputs): Projection {
       );
       apply(solved);
       res = evaluate(draws);
-    }
+    };
 
-    // Step 3 — still short? non-registered next.
-    if (res.net < need) {
-      const pool = people.reduce((s, p) => s + p.nonreg, 0);
-      if (pool > 0) {
-        const apply = (x: number) => {
-          people.forEach((p, i) => {
-            draws[i]!.nonreg = pool > 0 ? (x * p.nonreg) / pool : 0;
-          });
-        };
-        const solved = bisect(
-          (x) => {
-            apply(x);
-            return evaluate(draws).net - need;
-          },
-          0,
-          pool,
-        );
-        apply(solved);
-        res = evaluate(draws);
-      }
-    }
-
-    // Step 4 — top up with TFSA (tax-free, invisible to the clawback).
-    if (res.net < need) {
-      const pool = people.reduce((s, p) => s + p.tfsa, 0);
-      if (pool > 0) {
-        const want = Math.min(pool, need - res.net);
-        people.forEach((p, i) => {
-          draws[i]!.tfsa = (want * p.tfsa) / pool;
-        });
-        res = evaluate(draws);
-      }
-    }
-
-    // Step 5 — last resort: registered money above the bracket ceiling.
-    if (res.net < need) {
+    // Registered money with no bracket ceiling (last resort, or the first stop
+    // under a registered-first policy).
+    const drawRegisteredUncapped = () => {
       const room = people.reduce(
         (s, p, i) =>
           s +
@@ -575,32 +545,77 @@ export function projectRetirement(input: PlannerInputs): Projection {
           Math.max(0, Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - draws[i]!.lif),
         0,
       );
-      if (room > 0) {
-        const baseline = people.map((_, i) => ({ ...draws[i]! }));
-        const apply = (x: number) => {
-          const f = room > 0 ? x / room : 0;
-          people.forEach((p, i) => {
-            const rReg = Math.max(0, p.rrsp - baseline[i]!.reg);
-            const rLif = Math.max(
-              0,
-              Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - baseline[i]!.lif,
-            );
-            draws[i]!.reg = baseline[i]!.reg + rReg * f;
-            draws[i]!.lif = baseline[i]!.lif + rLif * f;
-          });
-        };
-        const solved = bisect(
-          (x) => {
-            apply(x);
-            return evaluate(draws).net - need;
-          },
-          0,
-          room,
-        );
-        apply(solved);
-        res = evaluate(draws);
-      }
+      if (room <= 0) return;
+      const baseline = people.map((_, i) => ({ ...draws[i]! }));
+      const apply = (x: number) => {
+        const f = room > 0 ? x / room : 0;
+        people.forEach((p, i) => {
+          const rReg = Math.max(0, p.rrsp - baseline[i]!.reg);
+          const rLif = Math.max(
+            0,
+            Math.min(p.lira, p.lira * lifMaxFactor(ages[i]!)) - baseline[i]!.lif,
+          );
+          draws[i]!.reg = baseline[i]!.reg + rReg * f;
+          draws[i]!.lif = baseline[i]!.lif + rLif * f;
+        });
+      };
+      const solved = bisect(
+        (x) => {
+          apply(x);
+          return evaluate(draws).net - need;
+        },
+        0,
+        room,
+      );
+      apply(solved);
+      res = evaluate(draws);
+    };
+
+    // Non-registered (taxable) savings.
+    const drawNonRegistered = () => {
+      const pool = people.reduce((s, p) => s + p.nonreg, 0);
+      if (pool <= 0) return;
+      const apply = (x: number) => {
+        people.forEach((p, i) => {
+          draws[i]!.nonreg = (x * p.nonreg) / pool;
+        });
+      };
+      const solved = bisect(
+        (x) => {
+          apply(x);
+          return evaluate(draws).net - need;
+        },
+        0,
+        pool,
+      );
+      apply(solved);
+      res = evaluate(draws);
+    };
+
+    // TFSA (tax-free, invisible to the clawback).
+    const drawTfsa = () => {
+      const pool = people.reduce((s, p) => s + p.tfsa, 0);
+      if (pool <= 0) return;
+      const want = Math.min(pool, need - res.net);
+      if (want <= 0) return;
+      people.forEach((p, i) => {
+        draws[i]!.tfsa = (want * p.tfsa) / pool;
+      });
+      res = evaluate(draws);
+    };
+
+    const steps: Record<DrawStep, () => void> = {
+      regCeiling: drawRegisteredToCeiling,
+      regUncapped: drawRegisteredUncapped,
+      nonreg: drawNonRegistered,
+      tfsa: drawTfsa,
+    };
+
+    for (const step of POLICY_ORDER[input.withdrawalPolicy ?? "TAX_TARGETED"]) {
+      if (res.net >= need) break;
+      steps[step]!();
     }
+
 
     const shortfall = Math.max(0, need - res.net);
 
