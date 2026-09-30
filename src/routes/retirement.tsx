@@ -226,6 +226,9 @@ function RetirementPage() {
   const [form, setForm] = useState<Profile | null>(null);
   /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
   const [clawbackTolerance, setClawbackTolerance] = useState(0);
+  const [policy, setPolicy] = useState<WithdrawalPolicy>("TAX_TARGETED");
+  const [objective, setObjective] = useState<StrategyObjective>("MIN_TAX");
+
   /** RESP/RDSP money counted as retirement savings only when switched on. */
   // Education and disability plans are drawn by the child, not by you, so they
   // get their own what-if settings rather than joining your retirement pots.
