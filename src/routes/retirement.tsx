@@ -99,9 +99,60 @@ const RESP_TYPES = ["RESP"];
 const RDSP_TYPES = ["RDSP"];
 
 function num(v: string, fallback = 0) {
-  const n = Number(v.replace(/[^0-9.-]/g, ""));
+  const cleaned = v.replace(/[^0-9.-]/g, "");
+  if (!cleaned) return fallback;
+  const n = Number(cleaned);
   return Number.isFinite(n) ? n : fallback;
 }
+
+const CPP_AGE_OPTIONS = [
+  { age: 60, note: "-36%" },
+  { age: 61, note: "-28.8%" },
+  { age: 62, note: "-21.6%" },
+  { age: 63, note: "-14.4%" },
+  { age: 64, note: "-7.2%" },
+  { age: 65, note: "standard" },
+  { age: 66, note: "+8.4%" },
+  { age: 67, note: "+16.8%" },
+  { age: 68, note: "+25.2%" },
+  { age: 69, note: "+33.6%" },
+  { age: 70, note: "+42%" },
+];
+
+const OAS_AGE_OPTIONS = [
+  { age: 65, note: "standard" },
+  { age: 66, note: "+7.2%" },
+  { age: 67, note: "+14.4%" },
+  { age: 68, note: "+21.6%" },
+  { age: 69, note: "+28.8%" },
+  { age: 70, note: "+36%" },
+];
+
+function AgeSelect({
+  value,
+  options,
+  onChange,
+}: {
+  value: number;
+  options: { age: number; note: string }[];
+  onChange: (age: number) => void;
+}) {
+  return (
+    <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
+      <SelectTrigger>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.age} value={String(o.age)}>
+            {`Age ${o.age} (${o.note})`}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 
 const GUEST_PROFILE: Profile = {
   id: "guest",
@@ -813,12 +864,10 @@ function RetirementPage() {
               />
             </Field>
             <Field label="CPP start age (60–70)" {...lockProps}>
-              <Input
-                type="number"
+              <AgeSelect
                 value={p.cpp_start_age ?? 65}
-                onChange={(e) =>
-                  set({ cpp_start_age: Math.min(70, Math.max(60, num(e.target.value, 65))) })
-                }
+                options={CPP_AGE_OPTIONS}
+                onChange={(age) => set({ cpp_start_age: age })}
               />
             </Field>
             <Field label="Years living in Canada after age 18 (sets OAS)">
@@ -829,14 +878,13 @@ function RetirementPage() {
               />
             </Field>
             <Field label="OAS start age (65–70)" {...lockProps}>
-              <Input
-                type="number"
+              <AgeSelect
                 value={p.oas_start_age ?? 65}
-                onChange={(e) =>
-                  set({ oas_start_age: Math.min(70, Math.max(65, num(e.target.value, 65))) })
-                }
+                options={OAS_AGE_OPTIONS}
+                onChange={(age) => set({ oas_start_age: age })}
               />
             </Field>
+
           </Section>
 
           <Section
@@ -926,27 +974,20 @@ function RetirementPage() {
                 />
               </Field>
               <Field label="Spouse CPP start age">
-                <Input
-                  type="number"
+                <AgeSelect
                   value={p.spouse_cpp_start_age ?? 65}
-                  onChange={(e) =>
-                    set({
-                      spouse_cpp_start_age: Math.min(70, Math.max(60, num(e.target.value, 65))),
-                    })
-                  }
+                  options={CPP_AGE_OPTIONS}
+                  onChange={(age) => set({ spouse_cpp_start_age: age })}
                 />
               </Field>
               <Field label="Spouse OAS start age">
-                <Input
-                  type="number"
+                <AgeSelect
                   value={p.spouse_oas_start_age ?? 65}
-                  onChange={(e) =>
-                    set({
-                      spouse_oas_start_age: Math.min(70, Math.max(65, num(e.target.value, 65))),
-                    })
-                  }
+                  options={OAS_AGE_OPTIONS}
+                  onChange={(age) => set({ spouse_oas_start_age: age })}
                 />
               </Field>
+
               <Field label="Spouse RRSP">
                 <Input
                   type="number"
