@@ -864,12 +864,10 @@ function RetirementPage() {
               />
             </Field>
             <Field label="CPP start age (60–70)" {...lockProps}>
-              <Input
-                type="number"
+              <AgeSelect
                 value={p.cpp_start_age ?? 65}
-                onChange={(e) =>
-                  set({ cpp_start_age: Math.min(70, Math.max(60, num(e.target.value, 65))) })
-                }
+                options={CPP_AGE_OPTIONS}
+                onChange={(age) => set({ cpp_start_age: age })}
               />
             </Field>
             <Field label="Years living in Canada after age 18 (sets OAS)">
@@ -880,14 +878,13 @@ function RetirementPage() {
               />
             </Field>
             <Field label="OAS start age (65–70)" {...lockProps}>
-              <Input
-                type="number"
+              <AgeSelect
                 value={p.oas_start_age ?? 65}
-                onChange={(e) =>
-                  set({ oas_start_age: Math.min(70, Math.max(65, num(e.target.value, 65))) })
-                }
+                options={OAS_AGE_OPTIONS}
+                onChange={(age) => set({ oas_start_age: age })}
               />
             </Field>
+
           </Section>
 
           <Section
