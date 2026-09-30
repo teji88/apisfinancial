@@ -188,9 +188,54 @@ export type PlannerInputs = {
   /** Bounded income overshoot above the effective ceiling allowed when a
    *  melt-down lookahead shows deferring only relocates the tax bill. */
   clawbackTolerance?: number;
+  /** Order in which accounts are drawn down. Defaults to TAX_TARGETED. */
+  withdrawalPolicy?: WithdrawalPolicy;
   self: PersonSpec;
   spouse: PersonSpec | null;
 };
+
+export type WithdrawalPolicy =
+  | "TAX_TARGETED"
+  | "REGISTERED_FIRST"
+  | "NON_REGISTERED_FIRST"
+  | "TFSA_FIRST";
+
+type DrawStep = "regCeiling" | "regUncapped" | "nonreg" | "tfsa";
+
+const POLICY_ORDER: Record<WithdrawalPolicy, DrawStep[]> = {
+  TAX_TARGETED: ["regCeiling", "nonreg", "tfsa", "regUncapped"],
+  REGISTERED_FIRST: ["regUncapped", "nonreg", "tfsa"],
+  NON_REGISTERED_FIRST: ["nonreg", "regCeiling", "tfsa", "regUncapped"],
+  TFSA_FIRST: ["tfsa", "nonreg", "regCeiling", "regUncapped"],
+};
+
+export const WITHDRAWAL_POLICIES: {
+  key: WithdrawalPolicy;
+  label: string;
+  blurb: string;
+}[] = [
+  {
+    key: "TAX_TARGETED",
+    label: "Tax-targeted meltdown",
+    blurb: "Draws registered money each year up to the clawback/bracket ceiling, then taxable, then TFSA.",
+  },
+  {
+    key: "REGISTERED_FIRST",
+    label: "Registered first",
+    blurb: "Empties RRSP/RRIF and LIRA/LIF as fast as needed, leaving the TFSA to compound.",
+  },
+  {
+    key: "NON_REGISTERED_FIRST",
+    label: "Taxable first",
+    blurb: "Spends non-registered savings first, sheltering registered and TFSA money longer.",
+  },
+  {
+    key: "TFSA_FIRST",
+    label: "TFSA first",
+    blurb: "Uses tax-free savings first for the lowest possible taxable income early on.",
+  },
+];
+
 
 export type PersonYear = {
   label: string;
