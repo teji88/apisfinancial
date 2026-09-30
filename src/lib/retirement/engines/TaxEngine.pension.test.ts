@@ -102,5 +102,5 @@ describe("TaxEngine pension income", () => {
 
     expect(on.provincialPensionIncomeCredit).toBeCloseTo(1796 * 0.0505, 2);
     expect(ab.provincialPensionIncomeCredit).toBeCloseTo(1753 * 0.08, 2);
-  });
-\n});
+  }); 
+});
