@@ -99,9 +99,60 @@ const RESP_TYPES = ["RESP"];
 const RDSP_TYPES = ["RDSP"];
 
 function num(v: string, fallback = 0) {
-  const n = Number(v.replace(/[^0-9.-]/g, ""));
+  const cleaned = v.replace(/[^0-9.-]/g, "");
+  if (!cleaned) return fallback;
+  const n = Number(cleaned);
   return Number.isFinite(n) ? n : fallback;
 }
+
+const CPP_AGE_OPTIONS = [
+  { age: 60, note: "-36%" },
+  { age: 61, note: "-28.8%" },
+  { age: 62, note: "-21.6%" },
+  { age: 63, note: "-14.4%" },
+  { age: 64, note: "-7.2%" },
+  { age: 65, note: "standard" },
+  { age: 66, note: "+8.4%" },
+  { age: 67, note: "+16.8%" },
+  { age: 68, note: "+25.2%" },
+  { age: 69, note: "+33.6%" },
+  { age: 70, note: "+42%" },
+];
+
+const OAS_AGE_OPTIONS = [
+  { age: 65, note: "standard" },
+  { age: 66, note: "+7.2%" },
+  { age: 67, note: "+14.4%" },
+  { age: 68, note: "+21.6%" },
+  { age: 69, note: "+28.8%" },
+  { age: 70, note: "+36%" },
+];
+
+function AgeSelect({
+  value,
+  options,
+  onChange,
+}: {
+  value: number;
+  options: { age: number; note: string }[];
+  onChange: (age: number) => void;
+}) {
+  return (
+    <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
+      <SelectTrigger>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.age} value={String(o.age)}>
+            {`Age ${o.age} (${o.note})`}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 
 const GUEST_PROFILE: Profile = {
   id: "guest",
