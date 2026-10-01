@@ -242,15 +242,14 @@ function PerformancePage() {
     queryFn: async () => fetchHistory({ data: { symbols, start: historyStart, end } }),
   });
   const benchmarkHistoryStart = useMemo(() => {
-    if (periodStart <= start) return start;
-    const d = new Date(`${periodStart}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - 45);
-    const paddedStart = d.toISOString().slice(0, 10);
-    return paddedStart > start ? paddedStart : start;
-  }, [periodStart, start]);
+    const base = period === "ALL" ? start : periodStart;
+    const d = new Date(`${base}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 30);
+    return d.toISOString().slice(0, 10);
+  }, [period, periodStart, start]);
   const benchmarkHistory = useQuery({
     queryKey: ["benchmark-chart-history", benchSymbols, benchmarkHistoryStart, end],
-    enabled: transactions.length > 0 && mode === "TWR" && period === "ALL",
+    enabled: transactions.length > 0 && period === "ALL",
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
     queryFn: async () =>
@@ -288,6 +287,13 @@ function PerformancePage() {
       anchors,
       monthEnds,
       hashes,
+      benchmarkHistory: new Map(
+        (benchmarkHistory.data?.series ?? []).map((s) => [
+          s.symbol.toUpperCase(),
+          { currency: s.currency, points: s.points },
+        ]),
+      ),
+      benchmarkFx: benchmarkHistory.data?.fx ?? [],
     });
   }, [
     history.data,
@@ -301,6 +307,7 @@ function PerformancePage() {
     anchors,
     monthEnds,
     hashes,
+    benchmarkHistory.data,
   ]);
   const comparison = anchored?.comparison ?? null;
   const costBasis = positions.reduce((sum, position) => sum + position.acb, 0);
@@ -771,7 +778,7 @@ function PerformancePage() {
 
         {loading ||
         history.isLoading ||
-        (mode === "TWR" && period === "ALL" && benchmarkHistory.isLoading) ||
+        (period === "ALL" && benchmarkHistory.isLoading) ||
         (period !== "ALL" && chartHistory.isLoading) ? (
           <p className="mt-4 text-sm text-muted-foreground">Loading market history…</p>
         ) : transactions.length === 0 ? (
@@ -780,9 +787,7 @@ function PerformancePage() {
           </p>
         ) : history.isError ||
           !history.data ||
-          (mode === "TWR" &&
-            period === "ALL" &&
-            (benchmarkHistory.isError || !benchmarkHistory.data)) ||
+          (period === "ALL" && (benchmarkHistory.isError || !benchmarkHistory.data)) ||
           (period !== "ALL" && (chartHistory.isError || !chartHistory.data)) ? (
           <div className="mt-4 space-y-2">
             <p className="text-sm text-destructive">
@@ -799,7 +804,7 @@ function PerformancePage() {
               variant="secondary"
               onClick={() => {
                 void history.refetch();
-                if (mode === "TWR" && period === "ALL") void benchmarkHistory.refetch();
+                if (period === "ALL") void benchmarkHistory.refetch();
                 if (period !== "ALL") void chartHistory.refetch();
               }}
             >
