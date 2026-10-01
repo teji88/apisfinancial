@@ -11,15 +11,11 @@ import { computeTax, FED_AGE_CLAWBACK_END, type ProvinceCode } from "./tax";
 /** Annual TFSA contribution room (2026), used when sweeping surplus cash. */
 export const TFSA_ANNUAL_ROOM = 7_000;
 
-/**
- * The lowest income cliff worth respecting in a given year: the OAS clawback
- * threshold, and — from 65 — the age-amount credit clawback ceiling, which
- * bites first. `tolerance` allows a deliberate, bounded overshoot.
- */
-export function effectiveCeiling(age: number, tolerance = 0): number {
+/** Lowest taxable-income threshold to respect: the OAS recovery-tax line or age-credit phase-out. */
+export function effectiveCeiling(age: number): number {
   const caps = [OAS_CLAWBACK_THRESHOLD];
   if (age >= 65) caps.push(FED_AGE_CLAWBACK_END);
-  return Math.min(...caps) + Math.max(0, tolerance);
+  return Math.min(...caps);
 }
 
 /* ---------------------------------- CPP / OAS --------------------------------- */
@@ -185,9 +181,6 @@ export type PlannerInputs = {
   desiredIncome: number; // household after-tax, today's CAD
   annualSavings: number; // today's CAD per year until retirement
   savingsSplit: SavingsSplit; // percentages, normalised internally
-  /** Bounded income overshoot above the effective ceiling allowed when a
-   *  melt-down lookahead shows deferring only relocates the tax bill. */
-  clawbackTolerance?: number;
   /** Order in which accounts are drawn down. Defaults to TAX_TARGETED. */
   withdrawalPolicy?: WithdrawalPolicy;
   self: PersonSpec;
@@ -195,10 +188,7 @@ export type PlannerInputs = {
 };
 
 export type WithdrawalPolicy =
-  | "TAX_TARGETED"
-  | "REGISTERED_FIRST"
-  | "NON_REGISTERED_FIRST"
-  | "TFSA_FIRST";
+  "TAX_TARGETED" | "REGISTERED_FIRST" | "NON_REGISTERED_FIRST" | "TFSA_FIRST";
 
 type DrawStep = "regCeiling" | "regUncapped" | "nonreg" | "tfsa";
 
@@ -217,7 +207,8 @@ export const WITHDRAWAL_POLICIES: {
   {
     key: "TAX_TARGETED",
     label: "Tax-targeted meltdown",
-    blurb: "Draws registered money each year up to the clawback/bracket ceiling, then taxable, then TFSA.",
+    blurb:
+      "Draws registered money each year up to the clawback/bracket ceiling, then taxable, then TFSA.",
   },
   {
     key: "REGISTERED_FIRST",
@@ -235,7 +226,6 @@ export const WITHDRAWAL_POLICIES: {
     blurb: "Uses tax-free savings first for the lowest possible taxable income early on.",
   },
 ];
-
 
 export type PersonYear = {
   label: string;
@@ -268,10 +258,6 @@ export type YearRow = {
   spending: number;
   shortfall: number;
   pensionSplit: number;
-  /** Lowest income cliff respected this year (household lowest). */
-  effectiveCeiling: number;
-  /** True when future forced RRIF/LIF minimums will breach the ceiling anyway. */
-  meltdownFlag: boolean;
   people: PersonYear[];
   balances: { tfsa: number; rrsp: number; lira: number; nonreg: number; total: number };
 };
@@ -386,29 +372,7 @@ export function projectRetirement(input: PlannerInputs): Projection {
     );
     const other = people.map((p, i) => (ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome : 0));
 
-    // Step 4a — melt-down lookahead. Roll each person's registered money forward
-    // at the real growth rate with only the mandatory minimums coming out. If a
-    // future year's forced income breaches the ceiling regardless, the tax bill is
-    // merely being relocated: flag it and allow the bounded tolerance overshoot.
-    const tolerance = Math.max(0, input.clawbackTolerance ?? 0);
-    const meltdown = people.map((p, i) => {
-      let rrsp = p.rrsp;
-      let lira = p.lira;
-      const baseFixed = cpp[i]! + oasGross[i]! + other[i]!;
-      for (let a = ages[i]!; a <= input.lifeExpectancy; a += 1) {
-        const forced = a >= 71 ? (rrsp + lira) * rrifMinFactor(a) : 0;
-        if (baseFixed + forced > effectiveCeiling(a)) return true;
-        if (a >= 71) {
-          const f = rrifMinFactor(a);
-          rrsp -= rrsp * f;
-          lira -= lira * f;
-        }
-        rrsp *= 1 + growth;
-        lira *= 1 + growth;
-      }
-      return false;
-    });
-    const ceilings = people.map((_, i) => effectiveCeiling(ages[i]!, meltdown[i] ? tolerance : 0));
+    const ceilings = people.map((_, i) => effectiveCeiling(ages[i]!));
 
     /** Household tax for a set of draws, choosing the best pension split. */
     const evaluate = (draws: Draw[]) => {
@@ -422,8 +386,7 @@ export function projectRetirement(input: PlannerInputs): Projection {
 
       let bestSplit = 0;
       let best: ReturnType<typeof scoreSplit> | null = null;
-      const canSplit =
-        people.length === 2 && eligiblePension.some((x) => x > 0);
+      const canSplit = people.length === 2 && eligiblePension.some((x) => x > 0);
       const options = canSplit ? [0, 0.1, 0.2, 0.3, 0.4, 0.5] : [0];
 
       function scoreSplit(fraction: number, transferor: number | null) {
@@ -623,7 +586,6 @@ export function projectRetirement(input: PlannerInputs): Projection {
       steps[step]!();
     }
 
-
     const shortfall = Math.max(0, need - res.net);
 
     // Apply withdrawals, reinvest surplus, then grow.
@@ -701,8 +663,6 @@ export function projectRetirement(input: PlannerInputs): Projection {
       spending: need,
       shortfall,
       pensionSplit: res.split,
-      effectiveCeiling: Math.min(...ceilings),
-      meltdownFlag: meltdown.some(Boolean),
       people: perPerson,
       balances: {
         tfsa: sum((x) => x.balances.tfsa),
@@ -754,8 +714,7 @@ export function projectRetirement(input: PlannerInputs): Projection {
 function adjustedCpp(spec: PersonSpec): number {
   const base = spec.cppAt65;
   if (spec.cppStartAge < 65) return base * (1 - 0.006 * (65 - spec.cppStartAge) * 12);
-  if (spec.cppStartAge > 65)
-    return base * (1 + 0.007 * Math.min(60, (spec.cppStartAge - 65) * 12));
+  if (spec.cppStartAge > 65) return base * (1 + 0.007 * Math.min(60, (spec.cppStartAge - 65) * 12));
   return base;
 }
 

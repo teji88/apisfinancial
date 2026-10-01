@@ -251,11 +251,7 @@ function RetirementPage() {
   void PLUS_REASON;
   void openPrompt;
 
-
-
   const [form, setForm] = useState<Profile | null>(null);
-  /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
-  const [clawbackTolerance, setClawbackTolerance] = useState(0);
   const [policy, setPolicy] = useState<WithdrawalPolicy>("TAX_TARGETED");
   const [objective, setObjective] = useState<StrategyObjective>("MIN_TAX");
 
@@ -281,7 +277,9 @@ function RetirementPage() {
     if (authLoading || form) return;
     if (isGuest) {
       const stored = window.localStorage.getItem(PENDING_PLAN_KEY);
-      setForm(stored ? { ...GUEST_PROFILE, ...(JSON.parse(stored) as Partial<Profile>) } : GUEST_PROFILE);
+      setForm(
+        stored ? { ...GUEST_PROFILE, ...(JSON.parse(stored) as Partial<Profile>) } : GUEST_PROFILE,
+      );
       return;
     }
     if (!profileQuery.data) return;
@@ -457,12 +455,11 @@ function RetirementPage() {
         rrsp: p.save_pct_rrsp ?? 40,
         nonreg: p.save_pct_nonreg ?? 20,
       },
-      clawbackTolerance,
       withdrawalPolicy: policy,
       self,
       spouse,
     };
-  }, [p, derived, balances, clawbackTolerance, policy]);
+  }, [p, derived, balances, policy]);
 
   const projection = useMemo(() => (inputs ? projectRetirement(inputs) : null), [inputs]);
   const earliest = useMemo(() => (inputs ? earliestRetirementAge(inputs) : null), [inputs]);
@@ -471,8 +468,14 @@ function RetirementPage() {
     [inputs, objective],
   );
 
-
-  if (authLoading || (!isGuest && (loading || profileQuery.isLoading)) || !p || !inputs || !projection || !derived) {
+  if (
+    authLoading ||
+    (!isGuest && (loading || profileQuery.isLoading)) ||
+    !p ||
+    !inputs ||
+    !projection ||
+    !derived
+  ) {
     return <p className="p-6 text-sm text-muted-foreground">Loading your plan…</p>;
   }
 
@@ -585,74 +588,50 @@ function RetirementPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          icon={<CalendarClock className="h-4 w-4" />}
-          label="Earliest sustainable retirement"
-          value={earliest ? `Age ${earliest}` : "Not before 80"}
-          hint={
-            earliest && earliest <= inputs.retirementAge
-              ? `Your target of ${inputs.retirementAge} works`
-              : `Your target of ${inputs.retirementAge} runs short`
-          }
-          tone={earliest && earliest <= inputs.retirementAge ? "good" : "warn"}
-        />
-        <StatCard
-          icon={<PiggyBank className="h-4 w-4" />}
-          label="Savings at retirement"
-          value={formatCad(startBalance)}
-          hint={`Today: ${formatCad(todayTotal)} · ${moneyNote}`}
-        />
-        <StatCard
-          icon={<ShieldCheck className="h-4 w-4" />}
-          label="Plan outcome"
-          value={projection.success ? "Fully funded" : `Runs short at ${projection.depletionAge}`}
-          hint={`Ending balance ${formatCad(endingBalance)} ${moneyNote}`}
-          tone={projection.success ? "good" : "warn"}
-        />
-        <StatCard
-          icon={<TriangleAlert className="h-4 w-4" />}
-          label="Lifetime tax & clawback"
-          value={formatCad(totalTaxes)}
-          hint={
-            totalClawback > 1
-              ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
-              : "No OAS clawback in this plan"
-          }
-          tone={totalClawback > 1 ? "warn" : "good"}
-        />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <StatCard
-          icon={<Landmark className="h-4 w-4" />}
-          label="Tax owed by your estate"
-          value={formatCad(projection.estateTax)}
-          hint={`${formatCad(projection.estateRegistered)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`}
-          tone={projection.estateTax > 1 ? "warn" : "good"}
-        />
-        <div className="panel space-y-2 p-4">
-          <Label className="text-xs text-muted-foreground">
-            Income cliff and acceptable overshoot
-          </Label>
-          <p className="text-sm text-muted-foreground">
-            Withdrawals stop at {formatCad(firstRow?.effectiveCeiling ?? 0)} of taxable income — the
-            lower of the OAS clawback line and the age-credit clawback ceiling.{" "}
-            {rows.some((r) => r.meltdownFlag)
-              ? "Forced withdrawals after 71 will breach that line anyway, so an early melt-down is worth it."
-              : "Forced withdrawals after 71 stay under that line."}
-          </p>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              className="max-w-[10rem]"
-              value={clawbackTolerance}
-              onChange={(e) => setClawbackTolerance(Math.max(0, Number(e.target.value) || 0))}
-            />
-            <span className="text-xs text-muted-foreground">
-              extra taxable income allowed above the cliff in melt-down years
-            </span>
-          </div>
+      <div className="sticky top-0 z-40 -mx-4 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:-mx-6 md:px-6">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+          <StatCard
+            icon={<CalendarClock className="h-4 w-4" />}
+            label="Earliest sustainable retirement"
+            value={earliest ? `Age ${earliest}` : "Not before 80"}
+            hint={
+              earliest && earliest <= inputs.retirementAge
+                ? `Your target of ${inputs.retirementAge} works`
+                : `Your target of ${inputs.retirementAge} runs short`
+            }
+            tone={earliest && earliest <= inputs.retirementAge ? "good" : "warn"}
+          />
+          <StatCard
+            icon={<PiggyBank className="h-4 w-4" />}
+            label="Savings at retirement"
+            value={formatCad(startBalance)}
+            hint={`Today: ${formatCad(todayTotal)} · ${moneyNote}`}
+          />
+          <StatCard
+            icon={<ShieldCheck className="h-4 w-4" />}
+            label="Plan outcome"
+            value={projection.success ? "Fully funded" : `Runs short at ${projection.depletionAge}`}
+            hint={`Ending balance ${formatCad(endingBalance)} ${moneyNote}`}
+            tone={projection.success ? "good" : "warn"}
+          />
+          <StatCard
+            icon={<TriangleAlert className="h-4 w-4" />}
+            label="Lifetime tax & clawback"
+            value={formatCad(totalTaxes)}
+            hint={
+              totalClawback > 1
+                ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
+                : "No OAS clawback in this plan"
+            }
+            tone={totalClawback > 1 ? "warn" : "good"}
+          />
+          <StatCard
+            icon={<Landmark className="h-4 w-4" />}
+            label="Tax owed by your estate"
+            value={formatCad(projection.estateTax)}
+            hint={`${formatCad(projection.estateRegistered)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`}
+            tone={projection.estateTax > 1 ? "warn" : "good"}
+          />
         </div>
       </div>
 
@@ -704,7 +683,9 @@ function RetirementPage() {
                       type="button"
                       onClick={() => setPolicy(r.policy)}
                       className={`rounded-lg border p-3 text-left transition ${
-                        selected ? "border-primary ring-2 ring-primary/30" : "hover:border-primary/50"
+                        selected
+                          ? "border-primary ring-2 ring-primary/30"
+                          : "hover:border-primary/50"
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -729,7 +710,9 @@ function RetirementPage() {
                         </div>
                         <div className="flex justify-between">
                           <dt className="text-muted-foreground">Money lasts</dt>
-                          <dd>{r.depletionAge == null ? "To plan end" : `To age ${r.depletionAge}`}</dd>
+                          <dd>
+                            {r.depletionAge == null ? "To plan end" : `To age ${r.depletionAge}`}
+                          </dd>
                         </div>
                       </dl>
                     </button>
@@ -1661,19 +1644,19 @@ function StatCard({
   tone?: "good" | "warn";
 }) {
   return (
-    <div className="panel p-4">
+    <div className="panel min-w-0 p-2.5 sm:p-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {icon}
-        {label}
+        <span className="truncate">{label}</span>
       </div>
       <p
-        className={`num mt-2 text-xl font-semibold ${
+        className={`num mt-1 truncate text-base font-semibold sm:text-lg ${
           tone === "warn" ? "text-destructive" : tone === "good" ? "text-emerald-600" : ""
         }`}
       >
         {value}
       </p>
-      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+      <p className="mt-1 hidden truncate text-xs text-muted-foreground sm:block">{hint}</p>
     </div>
   );
 }

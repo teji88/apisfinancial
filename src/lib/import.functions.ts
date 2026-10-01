@@ -170,6 +170,22 @@ export const parseStatement = createServerFn({ method: "POST" })
       if (message.includes("429")) {
         throw new Error("AI is busy right now. Wait a moment and try again.");
       }
+      if (/\b(401|403)\b/.test(message)) {
+        throw new Error("The statement reader is not authorized. Please contact support.");
+      }
+      if (/\b413\b/.test(message)) {
+        throw new Error(
+          "That file is too large for the statement reader. Try a smaller PDF or image.",
+        );
+      }
+      if (/\b415\b|unsupported media/i.test(message)) {
+        throw new Error("That file format could not be read. Use a PDF, PNG, or JPEG statement.");
+      }
+      if (/\b5\d\d\b/.test(message)) {
+        throw new Error(
+          "The statement reader is temporarily unavailable. Please try again shortly.",
+        );
+      }
       throw new Error("Reading that statement failed. Please try again.");
     }
   });

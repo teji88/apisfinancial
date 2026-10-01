@@ -81,14 +81,24 @@ type Mapping = {
   memberName: string;
 };
 
-const ACCEPT = ".csv,.txt,.pdf,.png,.jpg,.jpeg";
+const ACCEPT = ".csv,.tsv,.txt,.pdf,.png,.jpg,.jpeg";
 const PAGE_SIZE = 50;
 const SAVE_BATCH = 250;
+
+function fileMimeType(file: File): string {
+  if (file.type && file.type !== "application/octet-stream") return file.type;
+  const ext = file.name.toLowerCase().split(".").pop();
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "png") return "image/png";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  return file.type || "application/octet-stream";
+}
 
 function readFile(file: File): Promise<{ dataUrl: string | null; text: string | null }> {
   const isText =
     file.type.startsWith("text/") ||
     file.name.toLowerCase().endsWith(".csv") ||
+    file.name.toLowerCase().endsWith(".tsv") ||
     file.name.toLowerCase().endsWith(".txt");
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -280,7 +290,7 @@ function ImportPage() {
       const result = await parse({
         data: {
           fileName: file.name,
-          mimeType: file.type || "application/octet-stream",
+          mimeType: fileMimeType(file),
           dataUrl,
           text,
         },

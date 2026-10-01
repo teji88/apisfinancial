@@ -39,37 +39,85 @@ export type CsvParseResult = {
 
 /* ------------------------------- primitives -------------------------------- */
 
-function splitCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let cur = "";
+function parseDelimited(text: string, delimiter: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
   let quoted = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
+  const input = text.replace(/^\uFEFF/, "");
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i]!;
     if (quoted) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') {
-          cur += '"';
-          i += 1;
-        } else quoted = false;
-      } else cur += ch;
-    } else if (ch === '"') {
-      quoted = true;
-    } else if (ch === "," || ch === ";" || ch === "\t") {
-      out.push(cur.trim());
-      cur = "";
-    } else cur += ch;
+      if (ch === '"' && input[i + 1] === '"') {
+        cell += '"';
+        i += 1;
+      } else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"' && cell.trim() === "") quoted = true;
+    else if (ch === delimiter) {
+      row.push(cell.trim());
+      cell = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && input[i + 1] === "\n") i += 1;
+      row.push(cell.trim());
+      if (row.some((value) => value !== "")) rows.push(row);
+      row = [];
+      cell = "";
+    } else cell += ch;
   }
-  out.push(cur.trim());
-  return out;
+  row.push(cell.trim());
+  if (row.some((value) => value !== "")) rows.push(row);
+  return rows;
+}
+
+function splitCsvLine(line: string): string[] {
+  return parseDelimited(line, ",")[0] ?? [];
+}
+
+function detectDelimiter(text: string): string {
+  const candidates = [",", "\t", ";", "|"];
+  let best = ",";
+  let bestScore = -1;
+  for (const delimiter of candidates) {
+    // Sniff the preamble and headers without repeatedly parsing a large history export.
+    const rows = parseDelimited(text.slice(0, 128_000), delimiter).slice(0, 30);
+    const widths = rows.map((row) => row.length).filter((width) => width > 1);
+    if (widths.length === 0) continue;
+    const commonWidth = widths.sort(
+      (a, b) =>
+        widths.filter((width) => width === b).length - widths.filter((width) => width === a).length,
+    )[0]!;
+    const consistency = widths.filter((width) => width === commonWidth).length / widths.length;
+    const score = consistency * commonWidth + Math.min(widths.length, 10) / 100;
+    if (score > bestScore) {
+      best = delimiter;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 function toNumber(raw: string | undefined): number | null {
   if (raw == null) return null;
-  let s = raw.replace(/[$\s,]/g, "").replace(/[()]/g, (m) => (m === "(" ? "-" : ""));
-  if (raw.trim().startsWith("(") && raw.trim().endsWith(")")) s = `-${s.replace("-", "")}`;
+  const trimmed = raw.trim();
+  const negative = /^\(.*\)$/.test(trimmed) || trimmed.endsWith("-");
+  let s = trimmed
+    .replace(/[()]/g, "")
+    .replace(/\s|\u00a0|\u202f/g, "")
+    .replace(/[A-Za-z$€£¥]/g, "");
+  const comma = s.lastIndexOf(",");
+  const dot = s.lastIndexOf(".");
+  if (comma >= 0 && dot >= 0) {
+    // The rightmost punctuation is the decimal separator (1,234.56 or 1.234,56).
+    s = comma > dot ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  } else if (comma >= 0) {
+    const digitsAfter = s.length - comma - 1;
+    s = digitsAfter > 0 && digitsAfter <= 2 ? s.replace(",", ".") : s.replace(/,/g, "");
+  }
+  s = s.replace(/-/g, "");
   if (!s || s === "-") return null;
   const n = Number(s);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) ? (negative ? -n : n) : null;
 }
 
 const MONTHS: Record<string, string> = {
@@ -89,24 +137,36 @@ const MONTHS: Record<string, string> = {
 
 /** Normalises the common brokerage date spellings to YYYY-MM-DD. */
 export function normaliseDate(raw: string): string | null {
-  const s = raw.trim().replace(/['"]/g, "").split(/[ T]/)[0] ?? "";
+  const s = raw.trim().replace(/[']/g, "").replace(/"/g, "").split(/[ T]/)[0] ?? "";
+  let year: number;
+  let month: number;
+  let day: number;
   let m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(s);
-  if (m) return `${m[1]}-${m[2]!.padStart(2, "0")}-${m[3]!.padStart(2, "0")}`;
-  m = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(s);
   if (m) {
-    // Day-first when the first field cannot be a month.
+    year = Number(m[1]);
+    month = Number(m[2]);
+    day = Number(m[3]);
+  } else if ((m = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(s))) {
+    // Day-first when the first field cannot be a month; otherwise use common North American order.
     const a = Number(m[1]);
     const b = Number(m[2]);
-    const [dd, mm] = a > 12 ? [a, b] : [b, a];
-    return `${m[3]}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
-  }
-  m = /^(\d{1,2})[-\s]([A-Za-z]{3})[A-Za-z]*[-\s](\d{2,4})$/.exec(s);
-  if (m) {
+    [day, month] = a > 12 ? [a, b] : [b, a];
+    year = Number(m[3]);
+  } else if ((m = /^(\d{1,2})[-\s]([A-Za-z]{3})[A-Za-z]*[-\s](\d{2,4})$/.exec(s))) {
     const mo = MONTHS[m[2]!.toLowerCase()];
-    const yr = m[3]!.length === 2 ? `20${m[3]}` : m[3];
-    if (mo) return `${yr}-${mo}-${m[1]!.padStart(2, "0")}`;
-  }
-  return null;
+    if (!mo) return null;
+    month = Number(mo);
+    day = Number(m[1]);
+    year = Number(m[3]!.length === 2 ? `20${m[3]}` : m[3]);
+  } else return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  )
+    return null;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 /** Best-guess Apis account type for a portfolio label from another app. */
@@ -156,11 +216,18 @@ const TYPE_MAP: Record<string, string> = {
 };
 
 export function normaliseType(raw: string): string | null {
-  const key = raw.trim().toLowerCase();
+  const key = raw.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
   if (TYPE_MAP[key]) return TYPE_MAP[key]!;
   for (const [k, v] of Object.entries(TYPE_MAP)) {
     if (key.startsWith(k)) return v;
   }
+  if (/\b(buy|bought|purchase|purchased)\b/.test(key)) return "BUY";
+  if (/\b(sell|sold|sale)\b/.test(key)) return "SELL";
+  if (/\b(reinvest|reinvestment|drip)\b/.test(key)) return "DRIP";
+  if (/\b(dividend|distribution|interest)\b/.test(key)) return "DIVIDEND";
+  if (/\b(deposit|contribution|transfer in)\b/.test(key)) return "DEPOSIT";
+  if (/\b(withdrawal|withdraw|transfer out)\b/.test(key)) return "WITHDRAWAL";
+  if (/\b(fee|commission|service charge)\b/.test(key)) return "FEE";
   return null;
 }
 
@@ -265,37 +332,60 @@ function parsePortfolioTracker(text: string): CsvParseResult {
 /* ----------------------------- Generic matcher ----------------------------- */
 
 const FIELDS: Record<string, RegExp> = {
-  date: /^(trade|transaction|settlement|activity|process)?\s*date$|^date$/i,
-  type: /^(transaction\s*)?(type|action|activity|description)$/i,
-  symbol: /^(symbol|ticker|holding|instrument|security|stock)$/i,
-  quantity: /^(quantity|qty|shares|units|no\.? of shares)$/i,
-  price: /^(price|unit price|price per (unit|share)|avg(erage)? price)$/i,
-  amount: /^(amount|net amount|gross amount|value|total|proceeds)$/i,
-  fee: /^(fee|fees|commission|commissions)$/i,
-  currency: /^(currency|ccy|cur)$/i,
-  account: /^(account|portfolio|account name|account type)$/i,
-  fx: /^(fx|fx rate|exchange rate|rate)$/i,
+  date: /^(trade|transaction|settlement|activity|process|posting|payment|execution)?\s*date(?:\s*\/\s*time)?$|^date$/i,
+  type: /^(transaction\s*)?(type|action|activity|description|details|transaction description|transaction type|action type)$/i,
+  symbol:
+    /^(symbol|ticker|holding|instrument|security|stock|investment|security symbol|ticker symbol)$/i,
+  quantity: /^(quantity|qty|shares|units|no\.? of shares|share quantity|quantity of shares)$/i,
+  price: /^(price|unit price|price per (unit|share)|avg(erage)? price|trade price|share price)$/i,
+  amount:
+    /^(amount|net amount|gross amount|value|total|proceeds|net|cash amount|transaction amount)(\s+(cad|usd|currency))?$/i,
+  debit: /^(debit|debit amount|withdrawal amount)$/i,
+  credit: /^(credit|credit amount|deposit amount)$/i,
+  fee: /^(fee|fees|commission|commissions|commission and fees|transaction fee)$/i,
+  currency: /^(currency|ccy|cur|currency code)$/i,
+  account: /^(account|portfolio|account name|account type|account number|account nickname)$/i,
+  fx: /^(fx|fx rate|exchange rate|conversion rate|rate)$/i,
 };
+
+function normaliseHeader(raw: string): string {
+  return raw
+    .replace(/^\uFEFF/, "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[_#]/g, " ")
+    .replace(/[()[\].]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
 
 function matchHeader(cols: string[]): Record<string, number> | null {
   const map: Record<string, number> = {};
   cols.forEach((raw, i) => {
-    const col = raw.replace(/^#\s*/, "").trim();
+    const col = normaliseHeader(raw);
     for (const [field, re] of Object.entries(FIELDS)) {
       if (map[field] === undefined && re.test(col)) map[field] = i;
     }
   });
   if (map["date"] === undefined) return null;
-  if (map["type"] === undefined && map["amount"] === undefined) return null;
+  if (
+    map["type"] === undefined &&
+    map["amount"] === undefined &&
+    map["debit"] === undefined &&
+    map["credit"] === undefined
+  )
+    return null;
   return map;
 }
 
 function parseGeneric(text: string, fileName: string): CsvParseResult {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  const delimiter = detectDelimiter(text);
+  const records = parseDelimited(text, delimiter);
   let header: Record<string, number> | null = null;
   let start = 0;
-  for (let i = 0; i < Math.min(lines.length, 25); i += 1) {
-    const found = matchHeader(splitCsvLine(lines[i]!));
+  for (let i = 0; i < Math.min(records.length, 40); i += 1) {
+    const found = matchHeader(records[i]!);
     if (found) {
       header = found;
       start = i + 1;
@@ -315,24 +405,42 @@ function parseGeneric(text: string, fileName: string): CsvParseResult {
 
   const trades: CsvTransaction[] = [];
   let skipped = 0;
-  for (let i = start; i < lines.length; i += 1) {
-    const cols = splitCsvLine(lines[i]!);
+  for (let i = start; i < records.length; i += 1) {
+    const cols = records[i]!;
     const date = normaliseDate(at(cols, "date") ?? "");
     if (!date) {
       skipped += 1;
       continue;
     }
     const rawType = at(cols, "type") ?? "";
-    const type = normaliseType(rawType) ?? (toNumber(at(cols, "quantity")) ? "BUY" : null);
+    const qty = toNumber(at(cols, "quantity"));
+    const price = toNumber(at(cols, "price"));
+    const debit = toNumber(at(cols, "debit"));
+    const credit = toNumber(at(cols, "credit"));
+    const amount =
+      toNumber(at(cols, "amount")) ??
+      (credit != null ? Math.abs(credit) : debit != null ? -Math.abs(debit) : null);
+    const symbol = cleanSymbol(at(cols, "symbol"));
+    const explicitType = normaliseType(rawType);
+    // Use clear signed cash-flow columns only when the row has no action label.
+    const type =
+      explicitType ??
+      (symbol && qty != null && amount != null
+        ? amount < 0
+          ? "BUY"
+          : "SELL"
+        : !symbol && amount != null
+          ? amount < 0
+            ? "WITHDRAWAL"
+            : "DEPOSIT"
+          : null);
     if (!type) {
       skipped += 1;
       continue;
     }
-    const qty = toNumber(at(cols, "quantity"));
-    const price = toNumber(at(cols, "price"));
-    const amount = toNumber(at(cols, "amount"));
     const fx = toNumber(at(cols, "fx")) ?? 1;
-    const currency = (at(cols, "currency") || (fx !== 1 ? "USD" : "CAD")).toUpperCase().slice(0, 3);
+    const currencyRaw = (at(cols, "currency") || (fx !== 1 ? "USD" : "CAD")).trim().toUpperCase();
+    const currency = /^(USD|US\$|\$US|US DOLLAR)/.test(currencyRaw) ? "USD" : "CAD";
     const portfolio = (at(cols, "account") || "Imported").trim() || "Imported";
     const unitType = type === "BUY" || type === "SELL" || type === "DRIP" || type === "SPLIT";
 
@@ -340,7 +448,7 @@ function parseGeneric(text: string, fileName: string): CsvParseResult {
       portfolio,
       date,
       type,
-      symbol: cleanSymbol(at(cols, "symbol")),
+      symbol,
       quantity: unitType ? Math.abs(qty ?? 0) : null,
       price: unitType ? (price ?? (qty && amount ? Math.abs(amount / qty) : 0)) : null,
       amount: unitType ? null : Math.abs(amount ?? (qty ?? 0) * (price ?? 1)),
@@ -376,6 +484,7 @@ function parseGeneric(text: string, fileName: string): CsvParseResult {
 /* ---------------------------------- entry ---------------------------------- */
 
 export function parseCsvText(text: string, fileName: string): CsvParseResult {
-  if (/^\s*\[TRADES\]/m.test(text)) return parsePortfolioTracker(text);
-  return parseGeneric(text, fileName);
+  const cleanText = text.replace(/^\uFEFF/, "");
+  if (/^\s*\[TRADES\]/m.test(cleanText)) return parsePortfolioTracker(cleanText);
+  return parseGeneric(cleanText, fileName);
 }
