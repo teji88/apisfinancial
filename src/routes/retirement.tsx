@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { ApisLogo } from "@/components/brand/ApisLogo";
+import { AppHeader } from "@/routes/_authenticated/route";
 import { PENDING_PLAN_KEY } from "@/lib/pending-plan";
 import { useMemo, useState, useEffect, useRef } from "react";
 import {
@@ -193,6 +194,8 @@ const GUEST_PROFILE: Profile = {
   target_retirement_age: 65,
   inflation_rate: 2.5,
   growth_rate: 6,
+  working_growth_rate: 6,
+  retirement_growth_rate: 4.5,
   life_expectancy: 95,
   marital_status: "Single",
   spouse_age: null,
@@ -449,7 +452,8 @@ function RetirementPage() {
       lifeExpectancy: p.life_expectancy ?? 95,
       province,
       inflation: p.inflation_rate ?? 2.5,
-      growth: p.growth_rate ?? 6,
+      workingGrowth: p.working_growth_rate ?? p.growth_rate ?? 6,
+      retirementGrowth: p.retirement_growth_rate ?? 4.5,
       desiredIncome: p.desired_income ?? 60000,
       annualSavings: p.annual_savings ?? 0,
       savingsSplit: {
@@ -556,8 +560,10 @@ function RetirementPage() {
   const spouseOas = married ? oasAt(p.spouse_oas_start_age ?? 65, derived.spouseOasFraction) : 0;
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-6">
-      <div className="flex items-center justify-between border-b border-border/60 pb-4">
+    <div className={isGuest ? "mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-6" : "min-h-screen bg-surface"}>
+      {!isGuest && <AppHeader />}
+      <main className={isGuest ? undefined : "mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8"}>
+      {isGuest && <div className="flex items-center justify-between border-b border-border/60 pb-4">
         <Link to="/">
           <ApisLogo variant="full" size="sm" />
         </Link>
@@ -577,7 +583,7 @@ function RetirementPage() {
             </Button>
           )}
         </div>
-      </div>
+      </div>}
       {isGuest && (
         <div className="rounded-lg border border-accent/40 bg-accent/10 p-3 text-sm">
           Try it free — no account needed. Change any number under Inputs and the plan updates
@@ -614,9 +620,10 @@ function RetirementPage() {
         />
         <StatCard
           icon={<PiggyBank className="h-4 w-4" />}
-          label="Savings at retirement"
+          label={`Projected at retirement (age ${inputs.retirementAge})`}
           value={formatCad(startBalance)}
-          hint={`Today: ${formatCad(todayTotal)} · ${moneyNote}`}
+          hint={`Current savings today: ${formatCad(todayTotal)}`}
+          subhint="All figures in today’s purchasing power (adjusted for inflation)."
         />
         <StatCard
           icon={<ShieldCheck className="h-4 w-4" />}
@@ -895,8 +902,7 @@ function RetirementPage() {
               <p className="text-sm text-muted-foreground">
                 Balances by account type from age {inputs.retirementAge} to {inputs.lifeExpectancy},
                 using a real return of{" "}
-                {(((1 + inputs.growth / 100) / (1 + inputs.inflation / 100) - 1) * 100).toFixed(2)}%
-                ({inputs.growth}% growth less {inputs.inflation}% inflation). Amounts {moneyNote}.
+                {(((1 + inputs.workingGrowth / 100) / (1 + inputs.inflation / 100) - 1) * 100).toFixed(2)}% working-years real return and {(((1 + inputs.retirementGrowth / 100) / (1 + inputs.inflation / 100) - 1) * 100).toFixed(2)}% retirement-years real return. Amounts {moneyNote}.
               </p>
             </div>
             <div className="h-80 w-full">
@@ -983,12 +989,20 @@ function RetirementPage() {
                 onChange={(e) => set({ inflation_rate: num(e.target.value, 2.5) })}
               />
             </Field>
-            <Field label="Growth %" {...lockProps}>
+            <Field label="Working years growth rate (%)" {...lockProps}>
               <Input
                 type="number"
                 step="0.1"
-                value={p.growth_rate ?? 6}
-                onChange={(e) => set({ growth_rate: num(e.target.value, 6) })}
+                value={p.working_growth_rate ?? 6}
+                onChange={(e) => set({ working_growth_rate: num(e.target.value, 6) })}
+              />
+            </Field>
+            <Field label="Retirement years growth rate (%)" {...lockProps}>
+              <Input
+                type="number"
+                step="0.1"
+                value={p.retirement_growth_rate ?? 4.5}
+                onChange={(e) => set({ retirement_growth_rate: num(e.target.value, 4.5) })}
               />
             </Field>
             <Field label="Life expectancy" {...lockProps}>
@@ -1550,6 +1564,7 @@ function RetirementPage() {
           )}
         </TabsContent>
       </Tabs>
+      </main>
 
       <UpgradeDialog
         open={proPromptOpen}
@@ -1667,17 +1682,19 @@ function StatCard({
   label,
   value,
   hint,
+  subhint,
   tone,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   hint: string;
+  subhint?: string;
   tone?: "good" | "warn";
 }) {
   return (
-    <div className="panel p-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+    <div className="panel min-h-[6.5rem] p-5">
+      <div className="flex flex-wrap items-center gap-2 text-xs leading-snug break-words text-muted-foreground">
         {icon}
         {label}
       </div>
@@ -1688,7 +1705,8 @@ function StatCard({
       >
         {value}
       </p>
-      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+      <p className="mt-1 text-xs leading-snug break-words text-muted-foreground">{hint}</p>
+      {subhint ? <p className="mt-1 text-[11px] leading-snug break-words text-muted-foreground">{subhint}</p> : null}
     </div>
   );
 }
