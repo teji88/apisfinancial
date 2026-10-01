@@ -10,6 +10,8 @@ export type Profile = {
   target_retirement_age: number | null;
   inflation_rate: number;
   growth_rate: number;
+  working_growth_rate: number;
+  retirement_growth_rate: number;
   life_expectancy: number;
   marital_status: string;
   spouse_age: number | null;
@@ -46,7 +48,7 @@ export type Profile = {
 };
 
 const COLUMNS =
-  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg";
+  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg";
 
 function toNumbers(row: Record<string, unknown>): Profile {
   const num = (v: unknown, fallback = 0) => (v == null ? fallback : Number(v));
@@ -54,6 +56,8 @@ function toNumbers(row: Record<string, unknown>): Profile {
     ...(row as unknown as Profile),
     inflation_rate: num(row["inflation_rate"], 2.5),
     growth_rate: num(row["growth_rate"], 6),
+    working_growth_rate: num(row["working_growth_rate"], 6),
+    retirement_growth_rate: num(row["retirement_growth_rate"], 4.5),
     life_expectancy: num(row["life_expectancy"], 95),
     spouse_rrsp: num(row["spouse_rrsp"]),
     spouse_tfsa: num(row["spouse_tfsa"]),
