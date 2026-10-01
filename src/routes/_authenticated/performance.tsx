@@ -199,6 +199,33 @@ function PerformancePage() {
     },
   });
   const benchSymbols = useMemo(() => selection.map((b) => b.symbol), [selection]);
+  const [period, setPeriod] = useState<string>("ALL");
+  const [mode, setMode] = useState<"TWR" | "MWR">("TWR");
+  const periodStart = useMemo(() => {
+    if (period === "ALL") return start;
+    const now = new Date();
+    if (period === "YTD") return `${now.getFullYear()}-01-01`;
+    const months =
+      period === "1M"
+        ? 1
+        : period === "3M"
+          ? 3
+          : period === "6M"
+            ? 6
+            : period === "1Y"
+              ? 12
+              : period === "3Y"
+                ? 36
+                : 60; // 5Y
+    const day = now.getDate();
+    const target = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+    target.setUTCMonth(target.getUTCMonth() - months);
+    const lastDay = new Date(
+      Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+    ).getUTCDate();
+    target.setUTCDate(Math.min(day, lastDay));
+    return target.toISOString().slice(0, 10);
+  }, [period, start]);
   const anchors = useMemo(
     () => (stored.data ? validPrefix(monthEnds, hashes, stored.data, benchSymbols) : []),
     [stored.data, monthEnds, hashes, benchSymbols],
@@ -212,34 +239,26 @@ function PerformancePage() {
     retry: 1,
     queryFn: async () => fetchHistory({ data: { symbols, start: historyStart, end } }),
   });
+  const benchmarkHistoryStart = useMemo(() => {
+    if (periodStart <= start) return start;
+    const d = new Date(`${periodStart}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 45);
+    const paddedStart = d.toISOString().slice(0, 10);
+    return paddedStart > start ? paddedStart : start;
+  }, [periodStart, start]);
+  const benchmarkHistory = useQuery({
+    queryKey: ["benchmark-chart-history", benchSymbols, benchmarkHistoryStart, end],
+    enabled: transactions.length > 0 && mode === "TWR",
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: 1,
+    queryFn: async () =>
+      fetchHistory({ data: { symbols: benchSymbols, start: benchmarkHistoryStart, end } }),
+  });
   // Cash is floored at zero: a buy recorded without a matching deposit is
   // treated as an implied contribution rather than a negative cash balance.
   const portfolioValue =
     positions.reduce((s, p) => s + p.marketValue, 0) +
     Math.max(0, cashBalance(transactions, cashAccounts));
-
-  const [period, setPeriod] = useState<string>("ALL");
-  const [mode, setMode] = useState<"TWR" | "MWR">("TWR");
-
-  const periodStart = useMemo(() => {
-    if (period === "ALL") return start;
-    const d = new Date();
-    if (period === "YTD") return `${d.getFullYear()}-01-01`;
-    const months =
-      period === "1M"
-        ? 1
-        : period === "3M"
-          ? 3
-          : period === "6M"
-            ? 6
-            : period === "1Y"
-              ? 12
-              : period === "3Y"
-                ? 36
-                : 60; // 5Y
-    d.setMonth(d.getMonth() - months);
-    return d.toISOString().slice(0, 10);
-  }, [period, start]);
 
   const anchored = useMemo(() => {
     if (!history.data) return null;
@@ -337,16 +356,16 @@ function PerformancePage() {
           const initial = values[base] ?? 0;
           const rawFlows = contributionFlows(transactions, cashAccounts)
             .filter((f) => f.date > grid[base]! && f.date <= grid[i]!)
-            .map((f) => ({ date: new Date(`${f.date}T00:00:00`), amount: -f.amount }));
+            .map((f) => ({ date: new Date(`${f.date}T00:00:00Z`), amount: -f.amount }));
           const rate =
             initial > 0
               ? xirr([
-                  { date: new Date(`${grid[base]}T00:00:00`), amount: -initial },
+                  { date: new Date(`${grid[base]}T00:00:00Z`), amount: -initial },
                   ...rawFlows,
-                  { date: new Date(`${grid[i]}T00:00:00`), amount: cur },
+                  { date: new Date(`${grid[i]}T00:00:00Z`), amount: cur },
                 ])
               : null;
-          out.push(rate == null ? null : Math.round(rate * 10000) / 100);
+          out.push(rate == null ? null : Math.round(rate * 100) / 100);
         }
       }
       return out;
@@ -359,14 +378,14 @@ function PerformancePage() {
      * the index line the way it would the portfolio's own value series.
      */
     const histMap: SeriesMap = new Map();
-    for (const s of history.data?.series ?? []) {
+    for (const s of benchmarkHistory.data?.series ?? []) {
       histMap.set(s.symbol.toUpperCase(), { currency: s.currency, points: s.points });
     }
     const benchTwr = (symbol: string, annualYield: number): (number | null)[] => {
       const hist = histMap.get(symbol.toUpperCase());
       const empty = grid.slice(base).map(() => null);
       if (!hist || hist.points.length === 0) return empty;
-      const fx = history.data?.fx ?? [];
+      const fx = benchmarkHistory.data?.fx ?? [];
       const priceCad = (date: string): number | null => {
         const close = closeOn(hist.points, date);
         if (close == null) return null;
@@ -408,7 +427,7 @@ function PerformancePage() {
       rows.push(row);
     }
     return rows;
-  }, [comparison, periodStart, mode, history.data, fxUsdCad, transactions, cashAccounts]);
+  }, [comparison, periodStart, mode, benchmarkHistory.data, fxUsdCad, transactions, cashAccounts]);
 
   const allTimeReturns = useMemo(() => {
     if (!comparison || comparison.portfolio.length < 2) return { total: null, annual: null };
@@ -421,11 +440,14 @@ function PerformancePage() {
       if (prev > 0) chain *= (cur - flow) / prev;
       else if (cur > 0 && flow > 0) chain *= cur / flow;
     }
-    const total = chain - 1;
+    const total = (chain - 1) * 100;
     const years =
       (Date.parse(comparison.grid.at(-1)!) - Date.parse(comparison.grid[0]!)) /
       (365.25 * 86_400_000);
-    return { total, annual: years > 0 ? Math.pow(Math.max(0, chain), 1 / years) - 1 : null };
+    return {
+      total,
+      annual: years >= 1 && chain > 0 ? (Math.pow(chain, 1 / years) - 1) * 100 : null,
+    };
   }, [comparison]);
 
   /** Y-axis always includes the zero baseline, with a little breathing room. */
@@ -439,9 +461,9 @@ function PerformancePage() {
         if (v > max) max = v;
       }
     }
-    const span = Math.max(max - min, mode === "TWR" ? 1 : 100);
+    const span = Math.max(max - min, 1);
     return [min - span * 0.08, max + span * 0.08];
-  }, [chartData, mode]);
+  }, [chartData]);
 
   const spanDays =
     chartData.length > 1
@@ -457,8 +479,7 @@ function PerformancePage() {
   const twrTick = (v: number) =>
     Math.abs(yDomain[1] - yDomain[0]) < 10 ? `${v.toFixed(1)}%` : `${v.toFixed(0)}%`;
 
-  const formatValue = (v: number) =>
-    mode === "TWR" ? `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}%` : formatCad(v);
+  const formatValue = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}%`;
 
   const tooltipStyle = {
     background: "var(--popover)",
@@ -610,20 +631,31 @@ function PerformancePage() {
           ))}
         </div>
 
-        {loading || history.isLoading ? (
+        {loading || history.isLoading || (mode === "TWR" && benchmarkHistory.isLoading) ? (
           <p className="mt-4 text-sm text-muted-foreground">Loading market history…</p>
         ) : transactions.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">
             Add some transactions and this chart will compare them against the index.
           </p>
-        ) : history.isError || !history.data ? (
+        ) : history.isError ||
+          !history.data ||
+          (mode === "TWR" && (benchmarkHistory.isError || !benchmarkHistory.data)) ? (
           <div className="mt-4 space-y-2">
             <p className="text-sm text-destructive">
               {history.error instanceof Error && history.error.message
                 ? history.error.message
-                : "Market history could not be loaded right now."}
+                : benchmarkHistory.error instanceof Error && benchmarkHistory.error.message
+                  ? benchmarkHistory.error.message
+                  : "Market history could not be loaded right now."}
             </p>
-            <Button size="sm" variant="secondary" onClick={() => history.refetch()}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                void history.refetch();
+                if (mode === "TWR") void benchmarkHistory.refetch();
+              }}
+            >
               Try again
             </Button>
           </div>
@@ -691,7 +723,7 @@ function PerformancePage() {
 
       <div className="panel p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Head-to-head
+          Head-to-head (all-time)
         </h2>
         <Table className="mt-3">
           <TableHeader>
