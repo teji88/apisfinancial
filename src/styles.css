@@ -350,3 +350,23 @@
 @media (prefers-reduced-motion: reduce) {
   .honey-bee { animation: none; transform: translate(8.6rem, 0.95rem); }
 }
+
+
+/* Hand-built honeycomb cells used for the brand story. */
+.honey-story-cell {
+  display: block;
+  aspect-ratio: 1 / 1;
+  clip-path: polygon(25% 6.7%, 75% 6.7%, 100% 50%, 75% 93.3%, 25% 93.3%, 0 50%);
+  background: rgba(245, 158, 11, 0.07);
+  border: 1px solid rgba(180, 83, 9, 0.2);
+  transition: transform 220ms ease, background-color 220ms ease;
+}
+.honey-story-cell-full {
+  background: radial-gradient(circle at 50% 55%, rgba(245, 158, 11, 0.65) 0 24%, rgba(245, 158, 11, 0.15) 25% 100%);
+}
+.honey-card:hover .honey-story-cell-full {
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .honey-story-cell { transition: none; }
+}
