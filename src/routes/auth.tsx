@@ -110,7 +110,7 @@ function AuthPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-2">
-          <ApisLogo variant="stacked" size="lg" />
+          <ApisLogo variant="full" size="lg" />
           <p className="text-xs text-muted-foreground">Canadian portfolio tracking</p>
         </div>
 
