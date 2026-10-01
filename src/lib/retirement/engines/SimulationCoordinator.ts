@@ -736,9 +736,9 @@ export function runRetirementSimulation(
     "Simulation is deterministic and monthly; investment returns are smoothed rather than sequence-of-returns simulated.",
     "2026 federal and provincial tax brackets are loaded from the versioned rules dataset. Detailed credits, Quebec taxation and advanced tax rules remain incomplete.",
     "Non-registered withdrawals currently do not model security lots or superficial-loss rules; account-level ACB, investment income and realized capital gains are modeled.",
-    "Debt is modeled monthly with interest, scheduled principal and optional extra payments; tax deductibility of interest is not assumed in V1.",
+    "Debt interest deductions use only the user-entered eligible share; CRA deductibility depends on the facts and traceable use of the borrowed funds.",
     "Death ages now transition the household through BOTH_ALIVE → SURVIVOR → ESTATE; CPP survivor and account death treatment are modelled at a planning level, while final-return tax, beneficiary paperwork, ACB and detailed provincial estate rules remain simplified.",
-    "GIS uses the prior-year household income ledger and published 2026 marital-status thresholds; detailed GIS table interpolation and earnings exemptions remain to be added.",
+    "GIS and Allowance use the official July-September 2026 income-band schedules with prior-year income and the earnings exemption; quarterly updates and current-year income reassessments are not modeled.",
     "OAS recovery is modelled as an income-based estimate and is not yet tied to the actual OAS amount paid in each recovery period.",
   ];
 
