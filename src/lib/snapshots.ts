@@ -171,6 +171,9 @@ export function buildAnchoredComparison(args: {
   portfolioEndValue: number;
   selection: BenchmarkChoice[];
   cashAccounts?: Set<string>;
+  /** Optional longer benchmark history used only for the true inception point. */
+  benchmarkHistory?: SeriesMap;
+  benchmarkFx?: HistoryPoint[];
   windowStart: string;
   anchors: Snapshot[];
   monthEnds: string[];
@@ -186,6 +189,8 @@ export function buildAnchoredComparison(args: {
     selection,
     cashAccounts,
     anchors,
+    benchmarkHistory,
+    benchmarkFx,
   } = args;
   if (transactions.length === 0) return { comparison: null, fresh: [] };
   const flows = contributionFlows(transactions, cashAccounts);
