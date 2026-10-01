@@ -147,6 +147,46 @@ function Landing() {
         </section>
 
         <section className="border-y border-border/60 bg-background/40">
+          <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 py-16 md:grid-cols-[1.05fr_0.95fr] md:px-6 md:py-20">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">The idea behind Apis</p>
+              <h2 className="mt-3 max-w-xl font-display text-3xl font-semibold leading-tight md:text-4xl">
+                Build your reserve while the days are good.
+              </h2>
+              <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">
+                Bees spend their days gathering and building. The honey they store is what gives the hive
+                a reserve when it is needed. Apis Financial follows the same simple idea: keep track of what
+                you have built, understand how it can grow, and make a plan for the years when you will live
+                from it.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5">Work &amp; build</span>
+                <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5">Grow &amp; protect</span>
+                <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5">Use when needed</span>
+              </div>
+            </div>
+            <div className="honey-card relative overflow-hidden p-7">
+              <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-accent/10 blur-3xl" />
+              <div className="relative">
+                <p className="text-sm font-medium text-primary">Your financial hive</p>
+                <div className="mt-6 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                  {Array.from({ length: 15 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={`honey-story-cell ${i === 7 || i === 11 ? "honey-story-cell-full" : ""}`}
+                    />
+                  ))}
+                </div>
+                <p className="mt-6 text-sm leading-6 text-muted-foreground">
+                  Your accounts are the cells. Your investments are the reserve. The plan is what helps
+                  you decide how and when to draw from it.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-y border-border/60 bg-background/40">
           <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-16 md:grid-cols-3 md:px-6">
             {FEATURES.map((f) => (
               <div key={f.title} className="honey-card p-5">
