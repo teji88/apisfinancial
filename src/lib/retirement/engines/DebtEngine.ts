@@ -15,11 +15,15 @@ export interface DebtScenario {
   startDate?: string;
   endDate?: string;
   extraPayment?: Money;
+  owner?: "MAIN_USER" | "PARTNER";
+  deductibleInterestPercent?: number;
 }
 
 export interface DebtState {
   id: string;
   type: DebtType;
+  owner: "MAIN_USER" | "PARTNER";
+  deductibleInterestPercent: number;
   balance: Money;
   annualInterestRate: number;
   scheduledMonthlyPayment: Money;
@@ -59,6 +63,8 @@ export function createDebtState(debt: DebtScenario): DebtState {
   return {
     id: debt.id,
     type: debt.type,
+    owner: debt.owner ?? "MAIN_USER",
+    deductibleInterestPercent: Math.min(100, Math.max(0, debt.deductibleInterestPercent ?? 0)),
     balance,
     annualInterestRate: Math.max(0, debt.annualInterestRate),
     scheduledMonthlyPayment: payment,

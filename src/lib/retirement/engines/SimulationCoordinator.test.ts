@@ -79,6 +79,24 @@ describe("retirement simulation validation boundary", () => {
     expect(result.metrics.lifetimeTax).toBeCloseTo(expectedAnnualTax, 6);
   });
 
+  it("deducts only the explicitly traced eligible share of debt interest", () => {
+    const scenario = {
+      ...base,
+      household: {
+        ...base.household,
+        people: [{ ...base.household.people[0], otherIncome: 60_000, cppStartAge: 70 as const, oasStartAge: 70 as const }],
+      },
+      goals: { ...base.goals, annualSpending: 0, planningAge: 66 },
+      debts: [{ id: "investment-loan", owner: "MAIN_USER" as const, type: "LINE_OF_CREDIT" as const, startingBalance: 100_000, annualInterestRate: 12, paymentAmount: 0 }],
+    } satisfies RetirementScenario;
+    const personalUse = runRetirementSimulation(scenario, 0, 2026);
+    const verifiedIncomeEarningUse = runRetirementSimulation({
+      ...scenario,
+      debts: [{ ...scenario.debts[0], deductibleInterestPercent: 100 }],
+    }, 0, 2026);
+    expect(verifiedIncomeEarningUse.metrics.lifetimeTax).toBeLessThan(personalUse.metrics.lifetimeTax);
+  });
+
   it("tracks survivor transfers and final estate tax outcomes", () => {
     const survivorScenario = {
       ...base,

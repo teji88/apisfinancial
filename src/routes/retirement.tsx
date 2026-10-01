@@ -520,7 +520,7 @@ function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
         <Field label="Estate target"><Input type="number" min="0" value={scenario.strategy.estateTarget ?? ""} onChange={(e) => onChange({ strategy: { ...scenario.strategy, estateTarget: e.target.value ? Math.max(0, Number(e.target.value)) : undefined } })} /></Field>
       </Section>
 
-      <Section title="Debt" subtitle="Debt payments reduce available retirement cash flow and balances remain part of net worth.">
+      <Section title="Debt" subtitle="Debt payments reduce available retirement cash flow and balances remain part of net worth. Interest deductions apply only to the verified eligible share.">
         {(scenario.debts ?? []).map((debt, index) => (
           <div key={debt.id} className="rounded-lg border p-4 sm:col-span-2">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -530,7 +530,10 @@ function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
               <Field label="Balance"><Input type="number" min="0" value={debt.startingBalance} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,startingBalance:Math.max(0,Number(e.target.value)||0)};onChange({debts}); }} /></Field>
               <Field label="Interest rate %"><Input type="number" min="0" step="0.1" value={debt.annualInterestRate} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,annualInterestRate:Math.max(0,Number(e.target.value)||0)};onChange({debts}); }} /></Field>
               <Field label="Monthly payment"><Input type="number" min="0" value={debt.paymentAmount ?? ""} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,paymentAmount:e.target.value?Math.max(0,Number(e.target.value)):undefined};onChange({debts}); }} /></Field>
+              <Field label="Owner"><Select value={debt.owner ?? "MAIN_USER"} onValueChange={(v) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,owner:v as "MAIN_USER"|"PARTNER"};onChange({debts}); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{scenario.household.people.map((person) => <SelectItem key={person.role} value={person.role}>{person.role === "MAIN_USER" ? "You" : "Partner"}</SelectItem>)}</SelectContent></Select></Field>
+              <Field label="Eligible interest %"><Input type="number" min="0" max="100" step="1" value={debt.deductibleInterestPercent ?? 0} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,deductibleInterestPercent:Math.min(100,Math.max(0,Number(e.target.value)||0))};onChange({debts}); }} /></Field>
             </div>
+            <p className="mt-2 text-xs text-muted-foreground">Use only the share you can trace to borrowing for eligible income-earning property. Personal use, registered-account contributions, and borrowing where the only expected return is a capital gain generally do not qualify. <a className="underline" href="https://www.canada.ca/en/revenue-agency/services/tax/technical-information/income-tax/income-tax-folios-index/series-3-property-investments-savings-plans/series-3-property-investments-savings-plan-folio-6-interest/income-tax-folio-s3-f6-c1-interest-deductibility.html" target="_blank" rel="noreferrer">CRA guidance</a>.</p>
           </div>
         ))}
         <Button variant="outline" onClick={() => onChange({ debts: [...(scenario.debts ?? []), { id: crypto.randomUUID(), type: "MORTGAGE", startingBalance: 0, annualInterestRate: 0, paymentAmount: 0 }] })}>

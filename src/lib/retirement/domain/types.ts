@@ -22,6 +22,8 @@ export interface DebtScenario {
   startDate?: string;
   endDate?: string;
   extraPayment?: Money;
+  /** Portion of interest the user has verified is traceable to eligible income-earning use (0-100). */
+  deductibleInterestPercent?: number;
 }
 
 export interface PersonScenario {

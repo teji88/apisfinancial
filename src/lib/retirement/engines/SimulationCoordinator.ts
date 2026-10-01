@@ -67,10 +67,11 @@ function calculatePersonBenefitIncome(input: TaxIncomeComponents): number {
     "foreignIncome",
     "capitalGains",
   ];
-  return benefitIncomeKeys.reduce((sum, key) => {
+  const grossBenefitIncome = benefitIncomeKeys.reduce((sum, key) => {
     const value = input[key];
     return sum + (typeof value === "number" ? Math.max(0, value) : 0);
   }, 0);
+  return Math.max(0, grossBenefitIncome - Math.max(0, input.deductions ?? 0));
 }
 
 function calculatePersonEmploymentIncome(input: TaxIncomeComponents): number {
@@ -221,12 +222,14 @@ export function runRetirementSimulation(
     let debtInterest = 0;
     let debtPayments = 0;
     let debtPrincipal = 0;
+    const deductibleInterestByOwner: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
     if (stage !== "ESTATE") {
       for (const debt of debtStates) {
         if (debt.startDate && date.toISOString().slice(0, 10) < debt.startDate) continue;
         if (debt.endDate && date.toISOString().slice(0, 10) > debt.endDate) continue;
         const result = accrueDebtMonth(debt.state);
         debtInterest += result.interest;
+        deductibleInterestByOwner[debt.state.owner] += result.interest * debt.state.deductibleInterestPercent / 100;
         debtPayments += result.totalPayment;
         debtPrincipal += result.scheduledPrincipal + result.extraPrincipal;
       }
@@ -243,6 +246,7 @@ export function runRetirementSimulation(
     const monthlyTaxInputs: Record<PersonRole, TaxIncomeComponents> = {};
     for (const person of alivePeople) {
       monthlyTaxInputs[person.role] = { age: ages[person.role] ?? 0 };
+      monthlyTaxInputs[person.role].deductions = deductibleInterestByOwner[person.role];
       yearTaxInputs[person.role].age = ages[person.role] ?? 0;
       const annualEmploymentIncome = Math.max(0, person.employmentIncome ?? 0);
       const annualSelfEmploymentIncome = Math.max(0, person.selfEmploymentIncome ?? 0);
