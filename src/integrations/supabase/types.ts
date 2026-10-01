@@ -337,6 +337,8 @@ export type Database = {
           growth_rate: number
           working_growth_rate: number
           retirement_growth_rate: number
+          working_growth_rate: number
+          retirement_growth_rate: number
           id: string
           inflation_rate: number
           life_expectancy: number
