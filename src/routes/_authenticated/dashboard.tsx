@@ -123,10 +123,10 @@ function Dashboard() {
     const realized = summaries.reduce((s, x) => s + x.realizedGain, 0);
     const dividends = summaries.reduce((s, x) => s + x.dividends, 0);
     const dayChange = summaries.reduce((s, x) => s + x.dayChange, 0);
-    const netDeposits = summaries.reduce((s, x) => s + x.netDeposits, 0);
-
     const cashAccounts = cashTrackingIds(accounts);
     const flows = externalFlows(transactions, cashAccounts);
+    const cashAdded = flows.reduce((sum, flow) => sum + Math.max(0, -flow.amount), 0);
+    const cashWithdrawn = flows.reduce((sum, flow) => sum + Math.max(0, flow.amount), 0);
     const mwrr =
       flows.length > 0 && totalValue !== 0
         ? xirr([...flows, { date: new Date(), amount: totalValue }])
@@ -144,7 +144,8 @@ function Dashboard() {
       realized,
       dividends,
       dayChange,
-      netDeposits,
+      cashAdded,
+      cashWithdrawn,
       mwrr,
       twrrTotal,
       twrrAnnual,
@@ -241,9 +242,9 @@ function Dashboard() {
               }
             />
             <ReturnStat
-              label="Net deposits"
-              value={formatCad(totals.netDeposits)}
-              note="Contributions less withdrawals"
+              label="Cash added / withdrawn"
+              value={`${formatCad(totals.cashAdded)} added`}
+              note={`${formatCad(totals.cashWithdrawn)} withdrawn`}
             />
           </div>
           <p className="mt-4 text-xs text-muted-foreground">

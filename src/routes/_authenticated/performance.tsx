@@ -31,6 +31,7 @@ import {
   BENCHMARK_GROUPS,
   DEFAULT_BENCHMARKS,
   closeOn,
+  contributionFlows,
   fxOn,
   type BenchmarkChoice,
   type SeriesMap,
@@ -50,7 +51,7 @@ import {
   computePositions,
   formatCad,
   formatPct,
-  twrr,
+  xirr,
 } from "@/lib/finance";
 import {
   Table,
@@ -96,13 +97,6 @@ const PERIODS: { id: string; label: string }[] = [
   { id: "5Y", label: "5Y" },
   { id: "ALL", label: "Since inception" },
 ];
-
-/** Net contributions between two grid indices, inclusive. */
-function sumFlows(flows: number[], from: number, to: number): number {
-  let sum = 0;
-  for (let i = from; i <= to; i++) sum += flows[i] ?? 0;
-  return sum;
-}
 
 function PerformancePage() {
   const {
@@ -224,13 +218,6 @@ function PerformancePage() {
     positions.reduce((s, p) => s + p.marketValue, 0) +
     Math.max(0, cashBalance(transactions, cashAccounts));
 
-  const valuation = useMemo(
-    () => buildValuationSeries(transactions, holdings, quotes, fxUsdCad, cashAccounts),
-    [transactions, holdings, quotes, fxUsdCad, cashAccounts],
-  );
-  const twrrTotal = twrr(valuation);
-  const twrrAnnual = twrrTotal == null ? null : annualise(twrrTotal, valuation);
-
   const [period, setPeriod] = useState<string>("ALL");
   const [mode, setMode] = useState<"TWR" | "MWR">("TWR");
 
@@ -288,6 +275,13 @@ function PerformancePage() {
     hashes,
   ]);
   const comparison = anchored?.comparison ?? null;
+  const contributionSummary = useMemo(() => {
+    const flows = contributionFlows(transactions, cashAccounts);
+    return {
+      added: flows.reduce((sum, f) => sum + Math.max(0, f.amount), 0),
+      withdrawn: flows.reduce((sum, f) => sum + Math.max(0, -f.amount), 0),
+    };
+  }, [transactions, cashAccounts]);
 
   // Save newly completed months so the next visit starts from them.
   useEffect(() => {
@@ -315,11 +309,7 @@ function PerformancePage() {
     })();
   }, [anchored, user, accountFilter, stored.data]);
 
-  /**
-   * Both views are rebased to the start of the selected window: time-weighted
-   * return starts at 0% and money-weighted growth starts at $0, so the chart
-   * answers "how did I do against the index over this window".
-   */
+  /** Both return charts use the same historical-close portfolio series. */
   const chartData = useMemo(() => {
     if (!comparison) return [];
     const grid = comparison.grid;
@@ -344,8 +334,19 @@ function PerformancePage() {
           else if (cur > 0 && flow > 0) chain *= cur / flow;
           out.push(Math.round((chain - 1) * 10000) / 100);
         } else {
-          const gain = cur - (values[base] ?? 0) - sumFlows(flows, base + 1, i);
-          out.push(Math.round(gain * 100) / 100);
+          const initial = values[base] ?? 0;
+          const rawFlows = contributionFlows(transactions, cashAccounts)
+            .filter((f) => f.date > grid[base]! && f.date <= grid[i]!)
+            .map((f) => ({ date: new Date(`${f.date}T00:00:00`), amount: -f.amount }));
+          const rate =
+            initial > 0
+              ? xirr([
+                  { date: new Date(`${grid[base]}T00:00:00`), amount: -initial },
+                  ...rawFlows,
+                  { date: new Date(`${grid[i]}T00:00:00`), amount: cur },
+                ])
+              : null;
+          out.push(rate == null ? null : Math.round(rate * 10000) / 100);
         }
       }
       return out;
@@ -407,7 +408,25 @@ function PerformancePage() {
       rows.push(row);
     }
     return rows;
-  }, [comparison, periodStart, mode, history.data, fxUsdCad]);
+  }, [comparison, periodStart, mode, history.data, fxUsdCad, transactions, cashAccounts]);
+
+  const allTimeReturns = useMemo(() => {
+    if (!comparison || comparison.portfolio.length < 2) return { total: null, annual: null };
+    const values = comparison.portfolio;
+    let chain = 1;
+    for (let i = 1; i < values.length; i++) {
+      const prev = values[i - 1] ?? 0;
+      const cur = values[i] ?? 0;
+      const flow = comparison.stepFlows[i] ?? 0;
+      if (prev > 0) chain *= (cur - flow) / prev;
+      else if (cur > 0 && flow > 0) chain *= cur / flow;
+    }
+    const total = chain - 1;
+    const years =
+      (Date.parse(comparison.grid.at(-1)!) - Date.parse(comparison.grid[0]!)) /
+      (365.25 * 86_400_000);
+    return { total, annual: years > 0 ? Math.pow(Math.max(0, chain), 1 / years) - 1 : null };
+  }, [comparison]);
 
   /** Y-axis always includes the zero baseline, with a little breathing room. */
   const yDomain = useMemo((): [number, number] => {
@@ -449,10 +468,7 @@ function PerformancePage() {
     fontSize: 12,
   };
 
-  const gainPct =
-    comparison && comparison.invested > 0
-      ? ((comparison.portfolioEnd - comparison.invested) / comparison.invested) * 100
-      : null;
+  const netGain = comparison ? comparison.portfolioEnd - comparison.invested : null;
 
   return (
     <div className="space-y-6">
@@ -487,7 +503,11 @@ function PerformancePage() {
           icon={<Wallet className="h-4 w-4" />}
           label="Portfolio value"
           value={formatCad(portfolioValue)}
-          hint={comparison ? `${formatCad(comparison.invested)} contributed` : undefined}
+          hint={
+            comparison
+              ? `${formatCad(contributionSummary.added)} added · ${formatCad(contributionSummary.withdrawn)} withdrawn`
+              : undefined
+          }
         />
         <StatCard
           icon={<TrendingUp className="h-4 w-4" />}
@@ -498,14 +518,18 @@ function PerformancePage() {
         <StatCard
           icon={<Activity className="h-4 w-4" />}
           label="Time-weighted return"
-          value={formatPct(twrrAnnual ?? twrrTotal)}
-          hint={twrrAnnual == null ? "Total since first trade" : "Annualised"}
+          value={formatPct(allTimeReturns.annual ?? allTimeReturns.total)}
+          hint={
+            allTimeReturns.annual == null
+              ? "Total since first transaction"
+              : "Annualised, using historical closes"
+          }
         />
         <StatCard
           icon={<Landmark className="h-4 w-4" />}
-          label="Gain on contributions"
-          value={formatPct(gainPct)}
-          hint={comparison ? formatCad(comparison.portfolioEnd - comparison.invested) : undefined}
+          label="Net investment gain"
+          value={netGain == null ? "—" : formatCad(netGain)}
+          hint="Portfolio value less net cash added"
         />
       </div>
 
@@ -540,7 +564,7 @@ function PerformancePage() {
           {(
             [
               { id: "TWR", label: "Time-weighted (%)" },
-              { id: "MWR", label: "Money-weighted ($)" },
+              { id: "MWR", label: "Money-weighted (%)" },
             ] as const
           ).map((m) => (
             <button
@@ -559,7 +583,7 @@ function PerformancePage() {
           <span className="text-xs text-muted-foreground">
             {mode === "TWR"
               ? "Pure market performance, starting at 0% for this window."
-              : "Growth on your money after contributions, starting at $0 for this window."}
+              : "Annualised return using cash-flow timing within this window."}
           </span>
         </div>
 
@@ -623,9 +647,7 @@ function PerformancePage() {
                   stroke="var(--muted-foreground)"
                   width={72}
                   domain={yDomain}
-                  tickFormatter={(v: number) =>
-                    mode === "TWR" ? twrTick(v) : formatCad(Math.round(v)).replace(".00", "")
-                  }
+                  tickFormatter={(v: number) => twrTick(v)}
                 />
                 <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="3 3" />
                 <Tooltip
@@ -642,7 +664,7 @@ function PerformancePage() {
 
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey="Portfolio"
                   stroke="var(--primary)"
                   strokeWidth={2.5}
@@ -653,7 +675,7 @@ function PerformancePage() {
                   .map((b, i) => (
                     <Line
                       key={b.id}
-                      type="monotone"
+                      type="linear"
                       dataKey={b.label}
                       stroke={CHART_COLORS[i % CHART_COLORS.length]}
                       strokeWidth={1.75}
@@ -726,11 +748,11 @@ function PerformancePage() {
         </Table>
         <p className="mt-3 text-xs text-muted-foreground">
           Simulation assumes every deposit bought the benchmark ETF at that day's closing price, in
-          Canadian dollars. Benchmarks are shown on a total-return basis: each fund's distributions
-          accrue over time and are reinvested, so dividends are included in the comparison. Your own
-          side counts the dividends recorded in your ledger. Holdings are valued at the actual
-          market close on each date, so an early point can differ from the price you typed in the
-          ledger. Canadian-listed prices go back 25 years; US-listed prices go back 10.
+          Canadian dollars. Benchmarks estimate total return by accruing the fund's indicative
+          distribution yield; actual historical distribution payments may differ. Your own side
+          counts the dividends recorded in your ledger. Holdings are valued at the actual market
+          close on each date, so an early point can differ from the price you typed in the ledger.
+          Canadian-listed prices go back 25 years; US-listed prices go back 10.
           {history.data?.missing?.length
             ? ` No price history found for ${history.data.missing.join(", ")} — those holdings are valued at your last recorded price.`
             : ""}

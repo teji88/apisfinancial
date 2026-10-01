@@ -162,7 +162,11 @@ export function buildAnchoredComparison(args: {
     end,
     args.windowStart > tailStart ? args.windowStart : tailStart,
   );
-  const tailSet = new Set([...fine, ...pendingMonths]);
+  const tailSet = new Set([
+    ...fine,
+    ...pendingMonths,
+    ...flows.filter((f) => f.date > tailStart && f.date <= end).map((f) => f.date),
+  ]);
   if (anchor) tailSet.delete(anchor.month_end);
   const tailGrid = [...tailSet].filter((d) => d >= start).sort();
 
@@ -224,7 +228,6 @@ export function buildAnchoredComparison(args: {
 
   const grid = [...anchors.map((a) => a.month_end), ...tailGrid];
   const portfolio = [...anchors.map((a) => Number(a.portfolio_value)), ...tailPortfolio];
-  if (portfolio.length > 0) portfolio[portfolio.length - 1] = portfolioEndValue;
 
   const invested = flows.reduce((s, f) => s + f.amount, 0);
   const xirrFlows = flows.map((f) => ({ date: new Date(f.date), amount: -f.amount }));

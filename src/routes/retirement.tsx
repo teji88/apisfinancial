@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { ApisLogo } from "@/components/brand/ApisLogo";
 import { PENDING_PLAN_KEY } from "@/lib/pending-plan";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import {
   Area,
   AreaChart,
@@ -110,28 +110,9 @@ function num(v: string, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-const CPP_AGE_OPTIONS = [
-  { age: 60, note: "-36%" },
-  { age: 61, note: "-28.8%" },
-  { age: 62, note: "-21.6%" },
-  { age: 63, note: "-14.4%" },
-  { age: 64, note: "-7.2%" },
-  { age: 65, note: "standard" },
-  { age: 66, note: "+8.4%" },
-  { age: 67, note: "+16.8%" },
-  { age: 68, note: "+25.2%" },
-  { age: 69, note: "+33.6%" },
-  { age: 70, note: "+42%" },
-];
+const CPP_AGE_OPTIONS = [...Array.from({ length: 11 }, (_, index) => ({ age: 60 + index }))];
 
-const OAS_AGE_OPTIONS = [
-  { age: 65, note: "standard" },
-  { age: 66, note: "+7.2%" },
-  { age: 67, note: "+14.4%" },
-  { age: 68, note: "+21.6%" },
-  { age: 69, note: "+28.8%" },
-  { age: 70, note: "+36%" },
-];
+const OAS_AGE_OPTIONS = [...Array.from({ length: 6 }, (_, index) => ({ age: 65 + index }))];
 
 function AgeSelect({
   value,
@@ -139,7 +120,7 @@ function AgeSelect({
   onChange,
 }: {
   value: number;
-  options: { age: number; note: string }[];
+  options: { age: number }[];
   onChange: (age: number) => void;
 }) {
   return (
@@ -150,7 +131,7 @@ function AgeSelect({
       <SelectContent>
         {options.map((o) => (
           <SelectItem key={o.age} value={String(o.age)}>
-            {`Age ${o.age} (${o.note})`}
+            {`Age ${o.age}`}
           </SelectItem>
         ))}
       </SelectContent>
@@ -158,6 +139,50 @@ function AgeSelect({
   );
 }
 
+/** Keep intermediate keystrokes local so clearing/replacing a multi-digit age works. */
+function RetirementAgeInput({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (age: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setDraft(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const entered = draft.trim();
+    if (!entered) {
+      setDraft(String(value));
+      return;
+    }
+    const age = Math.round(Number(entered));
+    if (!Number.isFinite(age)) {
+      setDraft(String(value));
+      return;
+    }
+    onChange(age);
+    setDraft(String(age));
+  };
+
+  return (
+    <Input
+      ref={inputRef}
+      type="number"
+      step="1"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+    />
+  );
+}
 
 const GUEST_PROFILE: Profile = {
   id: "guest",
@@ -909,10 +934,9 @@ function RetirementPage() {
               />
             </Field>
             <Field label="Target retirement age" {...lockProps}>
-              <Input
-                type="number"
-                value={p.target_retirement_age ?? ""}
-                onChange={(e) => set({ target_retirement_age: num(e.target.value, 65) })}
+              <RetirementAgeInput
+                value={p.target_retirement_age ?? 65}
+                onChange={(age) => set({ target_retirement_age: age })}
               />
             </Field>
             <Field label="Desired after-tax household income (today's $)">
@@ -1021,7 +1045,6 @@ function RetirementPage() {
                 onChange={(age) => set({ oas_start_age: age })}
               />
             </Field>
-
           </Section>
 
           <Section
@@ -1076,10 +1099,9 @@ function RetirementPage() {
                 />
               </Field>
               <Field label="Spouse retirement age">
-                <Input
-                  type="number"
-                  value={p.spouse_retirement_age ?? ""}
-                  onChange={(e) => set({ spouse_retirement_age: num(e.target.value, 65) })}
+                <RetirementAgeInput
+                  value={p.spouse_retirement_age ?? 65}
+                  onChange={(age) => set({ spouse_retirement_age: age })}
                 />
               </Field>
               <Field label="Spouse typical past income (today's $)">

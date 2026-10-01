@@ -340,12 +340,19 @@ export function benchmarkValueSeries(
 export function stepFlowSeries(grid: string[], flows: FlowPoint[]): number[] {
   const sorted = flows.slice().sort((a, b) => a.date.localeCompare(b.date));
   let idx = 0;
+  let previous = "";
   return grid.map((date) => {
     let sum = 0;
-    while (idx < sorted.length && sorted[idx]!.date <= date) {
+    while (
+      idx < sorted.length &&
+      (previous
+        ? sorted[idx]!.date > previous && sorted[idx]!.date <= date
+        : sorted[idx]!.date <= date)
+    ) {
       sum += sorted[idx]!.amount;
       idx++;
     }
+    previous = date;
     return sum;
   });
 }
@@ -400,8 +407,6 @@ export function buildComparison(
     fxNow,
     cashAccounts,
   );
-  if (portfolio.length > 0) portfolio[portfolio.length - 1] = portfolioEndValue;
-
   const invested = flows.reduce((s, f) => s + f.amount, 0);
   const xirrFlows = flows.map((f) => ({ date: new Date(f.date), amount: -f.amount }));
   const portfolioMwrr =
