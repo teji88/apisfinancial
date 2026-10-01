@@ -84,14 +84,38 @@ function toNumbers(row: Record<string, unknown>): Profile {
   };
 }
 
+async function getOrCreateProfile(): Promise<Profile | null> {
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+
+  const user = auth.user;
+  if (!user) return null;
+
+  const { data, error } = await supabase.from("profiles").select(COLUMNS).maybeSingle();
+  if (error) throw error;
+  if (data) return toNumbers(data as unknown as Record<string, unknown>);
+
+  // A trigger should normally create this row at signup. If it did not,
+  // repair the profile here and let the database defaults populate all fields.
+  const displayName =
+    (user.user_metadata?.display_name as string | undefined) ??
+    user.email?.split("@")[0] ??
+    null;
+
+  const { data: repaired, error: repairError } = await supabase
+    .from("profiles")
+    .upsert({ id: user.id, display_name: displayName }, { onConflict: "id" })
+    .select(COLUMNS)
+    .single();
+
+  if (repairError) throw repairError;
+  return toNumbers(repaired as unknown as Record<string, unknown>);
+}
+
 export function useProfile() {
   return useQuery({
     queryKey: ["profile"],
-    queryFn: async (): Promise<Profile | null> => {
-      const { data, error } = await supabase.from("profiles").select(COLUMNS).maybeSingle();
-      if (error) throw error;
-      return data ? toNumbers(data as unknown as Record<string, unknown>) : null;
-    },
+    queryFn: getOrCreateProfile,
   });
 }
 
@@ -102,7 +126,11 @@ export function useUpdateProfile() {
       const { data: auth } = await supabase.auth.getUser();
       const id = auth.user?.id;
       if (!id) throw new Error("Not signed in");
-      const { error } = await supabase.from("profiles").update(patch).eq("id", id);
+
+      const { error } = await supabase
+        .from("profiles")
+        .upsert({ id, ...patch }, { onConflict: "id" });
+
       if (error) throw error;
     },
     onSuccess: () => {
