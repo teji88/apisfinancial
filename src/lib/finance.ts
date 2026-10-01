@@ -306,22 +306,57 @@ export type CashFlow = { date: Date; amount: number };
  */
 export function externalFlows(transactions: Transaction[], cashAccounts?: Set<string>): CashFlow[] {
   const flows: CashFlow[] = [];
-  for (const t of transactions) {
-    const date = new Date(t.transaction_date);
-    if (tracksCash(t, cashAccounts)) {
-      if (t.transaction_type === "DEPOSIT") {
-        flows.push({ date, amount: -grossCad(t) });
-      } else if (t.transaction_type === "WITHDRAWAL") {
+  let trackedCash = 0;
+  const ordered = transactions.slice().sort(sortByDate);
+  for (let i = 0; i < ordered.length;) {
+    const dateKey = ordered[i]!.transaction_date;
+    const date = new Date(`${dateKey}T00:00:00Z`);
+    let cashDeltaForDay = 0;
+    let externalFlowForDay = 0;
+    let hasTrackedCashTransactions = false;
+    while (i < ordered.length && ordered[i]!.transaction_date === dateKey) {
+      const t = ordered[i++]!;
+      if (tracksCash(t, cashAccounts)) {
+        hasTrackedCashTransactions = true;
+        const gross = grossCad(t);
+        const fee = feeCad(t);
+        switch (t.transaction_type) {
+          case "DEPOSIT":
+            cashDeltaForDay += gross;
+            externalFlowForDay -= gross;
+            break;
+          case "WITHDRAWAL":
+            cashDeltaForDay -= gross;
+            externalFlowForDay += gross;
+            break;
+          case "BUY":
+          case "FEE":
+            cashDeltaForDay -= gross + fee;
+            break;
+          case "SELL":
+            cashDeltaForDay += gross - fee;
+            break;
+          case "DIVIDEND":
+            cashDeltaForDay += gross;
+            break;
+        }
+      } else if (t.transaction_type === "BUY") {
+        flows.push({ date, amount: -(grossCad(t) + feeCad(t)) });
+      } else if (t.transaction_type === "SELL") {
+        flows.push({ date, amount: grossCad(t) - feeCad(t) });
+      } else if (t.transaction_type === "DIVIDEND") {
         flows.push({ date, amount: grossCad(t) });
       }
-      continue;
     }
-    if (t.transaction_type === "BUY") {
-      flows.push({ date, amount: -(grossCad(t) + feeCad(t)) });
-    } else if (t.transaction_type === "SELL") {
-      flows.push({ date, amount: grossCad(t) - feeCad(t) });
-    } else if (t.transaction_type === "DIVIDEND") {
-      flows.push({ date, amount: grossCad(t) });
+    if (hasTrackedCashTransactions) {
+      trackedCash += cashDeltaForDay;
+      if (trackedCash < 0) {
+        // Valuation floors unrecorded negative cash at zero. Include the
+        // funding shortfall as a contribution to keep XIRR consistent.
+        externalFlowForDay += trackedCash;
+        trackedCash = 0;
+      }
+      if (externalFlowForDay !== 0) flows.push({ date, amount: externalFlowForDay });
     }
   }
   return flows.sort((a, b) => a.date.getTime() - b.date.getTime());

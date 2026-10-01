@@ -68,7 +68,7 @@ export type BenchmarkId = string;
 
 export type SeriesMap = Map<string, { currency: string; points: HistoryPoint[] }>;
 
-/** Most recent close at or before `date`. */
+/** Most recent close at or before `date`; never substitute a future close. */
 export function closeOn(points: HistoryPoint[], date: string): number | null {
   let lo = 0;
   let hi = points.length - 1;
@@ -83,7 +83,7 @@ export function closeOn(points: HistoryPoint[], date: string): number | null {
       hi = mid - 1;
     }
   }
-  return best ?? points[0]?.close ?? null;
+  return best;
 }
 
 export function fxOn(fx: HistoryPoint[], date: string, fallback: number): number {
@@ -175,18 +175,43 @@ export function contributionFlows(
   cashAccounts?: Set<string>,
 ): FlowPoint[] {
   const flows: FlowPoint[] = [];
-  for (const t of transactions) {
-    const date = t.transaction_date;
-    const gross = grossOf(t);
-    const fee = (t.fee || 0) * (t.fx_rate || 1);
-    if (tracksCash(t, cashAccounts)) {
-      if (t.transaction_type === "DEPOSIT") flows.push({ date, amount: gross });
-      else if (t.transaction_type === "WITHDRAWAL") flows.push({ date, amount: -gross });
-      continue;
+  let trackedCash = 0;
+  const ordered = transactions
+    .slice()
+    .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
+  for (let i = 0; i < ordered.length;) {
+    const date = ordered[i]!.transaction_date;
+    let cashDeltaForDay = 0;
+    let flowForDay = 0;
+    let hasTrackedCashTransactions = false;
+    while (i < ordered.length && ordered[i]!.transaction_date === date) {
+      const t = ordered[i++]!;
+      const gross = grossOf(t);
+      const fee = (t.fee || 0) * (t.fx_rate || 1);
+      if (tracksCash(t, cashAccounts)) {
+        hasTrackedCashTransactions = true;
+        cashDeltaForDay += cashDelta(t, cashAccounts);
+        if (t.transaction_type === "DEPOSIT") flowForDay += gross;
+        else if (t.transaction_type === "WITHDRAWAL") flowForDay -= gross;
+      } else if (t.transaction_type === "BUY") {
+        flows.push({ date, amount: gross + fee });
+      } else if (t.transaction_type === "SELL") {
+        flows.push({ date, amount: -(gross - fee) });
+      } else if (t.transaction_type === "DIVIDEND") {
+        flows.push({ date, amount: -gross });
+      }
     }
-    if (t.transaction_type === "BUY") flows.push({ date, amount: gross + fee });
-    else if (t.transaction_type === "SELL") flows.push({ date, amount: -(gross - fee) });
-    else if (t.transaction_type === "DIVIDEND") flows.push({ date, amount: -gross });
+    if (hasTrackedCashTransactions) {
+      trackedCash += cashDeltaForDay;
+      if (trackedCash < 0) {
+        // The valuation series floors negative cash at zero. Record the
+        // funding shortfall as an implied contribution so it cannot appear as
+        // investment return; grouping by date avoids depending on row order.
+        flowForDay -= trackedCash;
+        trackedCash = 0;
+      }
+      if (flowForDay !== 0) flows.push({ date, amount: flowForDay });
+    }
   }
   return flows.sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -260,22 +285,27 @@ export function portfolioValueSeries(
 
   return grid.map((date) => {
     while (idx < txns.length && txns[idx]!.transaction_date <= date) {
-      const t = txns[idx]!;
-      cash += cashDelta(t, cashAccounts);
-      if (cash < 0) cash = 0; // implied contribution covers the shortfall
-      if (t.holding_id && (t.transaction_type === "BUY" || t.transaction_type === "DRIP")) {
-        units.set(t.holding_id, (units.get(t.holding_id) ?? 0) + (t.units || 0));
+      const transactionDate = txns[idx]!.transaction_date;
+      while (idx < txns.length && txns[idx]!.transaction_date === transactionDate) {
+        const t = txns[idx]!;
+        cash += cashDelta(t, cashAccounts);
+        if (t.holding_id && (t.transaction_type === "BUY" || t.transaction_type === "DRIP")) {
+          units.set(t.holding_id, (units.get(t.holding_id) ?? 0) + (t.units || 0));
+        }
+        if (t.holding_id && t.transaction_type === "SELL") {
+          units.set(t.holding_id, (units.get(t.holding_id) ?? 0) - (t.units || 0));
+        }
+        // A split moves no money: it only rescales the units and the ledger
+        // price, leaving both portfolio value and external flows unchanged.
+        if (t.holding_id && t.transaction_type === "SPLIT") {
+          const ratio = (t.units || 0) > 0 ? t.units! : 1;
+          units.set(t.holding_id, (units.get(t.holding_id) ?? 0) * ratio);
+        }
+        idx++;
       }
-      if (t.holding_id && t.transaction_type === "SELL") {
-        units.set(t.holding_id, (units.get(t.holding_id) ?? 0) - (t.units || 0));
-      }
-      // A split moves no money; it only rescales units, so contributions and
-      // benchmarks are untouched.
-      if (t.holding_id && t.transaction_type === "SPLIT") {
-        const ratio = (t.units || 0) > 0 ? t.units! : 1;
-        units.set(t.holding_id, (units.get(t.holding_id) ?? 0) * ratio);
-      }
-      idx++;
+      // Match the flow calculation's daily cash floor after all same-day
+      // transactions have been netted, regardless of database row order.
+      if (cash < 0) cash = 0;
     }
 
     let value = cash;

@@ -32,7 +32,9 @@ import {
   DEFAULT_BENCHMARKS,
   closeOn,
   contributionFlows,
+  dateGrid,
   fxOn,
+  portfolioValueSeries,
   type BenchmarkChoice,
   type SeriesMap,
 } from "@/lib/benchmark";
@@ -248,11 +250,18 @@ function PerformancePage() {
   }, [periodStart, start]);
   const benchmarkHistory = useQuery({
     queryKey: ["benchmark-chart-history", benchSymbols, benchmarkHistoryStart, end],
-    enabled: transactions.length > 0 && mode === "TWR",
+    enabled: transactions.length > 0 && mode === "TWR" && period === "ALL",
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
     queryFn: async () =>
       fetchHistory({ data: { symbols: benchSymbols, start: benchmarkHistoryStart, end } }),
+  });
+  const chartHistory = useQuery({
+    queryKey: ["performance-chart-history", symbols, benchmarkHistoryStart, end],
+    enabled: transactions.length > 0 && period !== "ALL",
+    staleTime: 6 * 60 * 60 * 1000,
+    retry: 1,
+    queryFn: async () => fetchHistory({ data: { symbols, start: benchmarkHistoryStart, end } }),
   });
   // Cash is floored at zero: a buy recorded without a matching deposit is
   // treated as an implied contribution rather than a negative cash balance.
@@ -294,13 +303,7 @@ function PerformancePage() {
     hashes,
   ]);
   const comparison = anchored?.comparison ?? null;
-  const contributionSummary = useMemo(() => {
-    const flows = contributionFlows(transactions, cashAccounts);
-    return {
-      added: flows.reduce((sum, f) => sum + Math.max(0, f.amount), 0),
-      withdrawn: flows.reduce((sum, f) => sum + Math.max(0, -f.amount), 0),
-    };
-  }, [transactions, cashAccounts]);
+  const costBasis = positions.reduce((sum, position) => sum + position.acb, 0);
 
   // Save newly completed months so the next visit starts from them.
   useEffect(() => {
@@ -331,11 +334,172 @@ function PerformancePage() {
   /** Both return charts use the same historical-close portfolio series. */
   const chartData = useMemo(() => {
     if (!comparison) return [];
+
+    // Period views get their own valuation grid and history window. The
+    // snapshot-backed comparison is intentionally coarse before its live tail;
+    // using that grid here can pull the first chart point weeks before the
+    // selected period and can include cash flows outside the requested range.
+    if (period !== "ALL" && chartHistory.data) {
+      const chartStart = periodStart > start ? new Date(`${periodStart}T00:00:00Z`) : null;
+      chartStart?.setUTCDate(chartStart.getUTCDate() - 1);
+      const baseDate = chartStart ? chartStart.toISOString().slice(0, 10) : start;
+      const historyMap: SeriesMap = new Map(
+        chartHistory.data.series.map((s) => [
+          s.symbol.toUpperCase(),
+          { currency: s.currency, points: s.points },
+        ]),
+      );
+      const flows = contributionFlows(transactions, cashAccounts);
+      const dates = new Set(dateGrid(baseDate, end, 100));
+      dates.add(baseDate);
+      dates.add(periodStart);
+      for (const flow of flows) {
+        if (flow.date >= baseDate && flow.date <= end) dates.add(flow.date);
+      }
+      const grid = [...dates].sort();
+      const values = portfolioValueSeries(
+        grid,
+        transactions,
+        holdings,
+        historyMap,
+        chartHistory.data.fx,
+        fxUsdCad,
+        cashAccounts,
+      );
+      const selected = grid.findIndex((date) => date >= periodStart);
+      const base = Math.max(0, selected - 1);
+      const rebase = (series: number[]): (number | null)[] => {
+        const out: (number | null)[] = [];
+        let chain = 1;
+        for (let i = base; i < grid.length; i++) {
+          if (i === base) {
+            out.push(0);
+            continue;
+          }
+          const previous = series[i - 1] ?? 0;
+          const current = series[i] ?? 0;
+          const periodReturn = twrSubperiodReturn(previous, current, flows, grid[i - 1]!, grid[i]!);
+          if (periodReturn != null) chain *= 1 + periodReturn;
+          out.push(Math.round((chain - 1) * 10000) / 100);
+        }
+        return out;
+      };
+      const portfolioSeries =
+        mode === "TWR"
+          ? rebase(values)
+          : values.slice(base).map((current, offset) => {
+              const index = base + offset;
+              if (index === base) return 0;
+              const initial = values[base] ?? 0;
+              if (initial <= 0) return null;
+              const rawFlows = flows
+                .filter((flow) => flow.date > grid[base]! && flow.date <= grid[index]!)
+                .map((flow) => ({
+                  date: new Date(`${flow.date}T00:00:00Z`),
+                  amount: -flow.amount,
+                }));
+              const rate = xirr([
+                { date: new Date(`${grid[base]}T00:00:00Z`), amount: -initial },
+                ...rawFlows,
+                { date: new Date(`${grid[index]}T00:00:00Z`), amount: current },
+              ]);
+              return rate == null
+                ? null
+                : Math.round(chartMoneyWeightedReturn(rate, grid[base]!, grid[index]!) * 100) / 100;
+            });
+      const benchmarkSeries = selection.flatMap((benchmark) => {
+        const hist = historyMap.get(benchmark.symbol.toUpperCase());
+        if (!hist?.points.length) return [];
+        const priceCad = (date: string): number | null => {
+          const close = closeOn(hist.points, date);
+          if (close == null) return null;
+          return (
+            close * (hist.currency === "USD" ? fxOn(chartHistory.data!.fx, date, fxUsdCad) : 1)
+          );
+        };
+        const basePrice = priceCad(grid[base]!);
+        if (basePrice == null || basePrice <= 0) return [];
+        const annualYield = benchmark.annualYield ?? 0;
+        const series: (number | null)[] = Array(grid.length).fill(null);
+        if (mode === "TWR") {
+          const baseTime = Date.parse(grid[base]!);
+          for (let i = base; i < grid.length; i++) {
+            const price = priceCad(grid[i]!);
+            if (price == null) continue;
+            const years = (Date.parse(grid[i]!) - baseTime) / (365 * 86_400_000);
+            const growth = (price / basePrice) * Math.exp(annualYield * years);
+            series[i] = Math.round((growth - 1) * 10000) / 100;
+          }
+        } else {
+          const initial = values[base] ?? 0;
+          if (initial > 0) {
+            let units = initial / basePrice;
+            let lastDate = grid[base]!;
+            let flowIndex = flows.findIndex((flow) => flow.date > lastDate);
+            for (let i = base; i < grid.length; i++) {
+              const date = grid[i]!;
+              if (i > base && annualYield > 0) {
+                const days = (Date.parse(date) - Date.parse(lastDate)) / 86_400_000;
+                units *= Math.exp((annualYield * days) / 365);
+              }
+              while (flowIndex < flows.length && flows[flowIndex]!.date <= date) {
+                const flow = flows[flowIndex]!;
+                if (flow.date > grid[base]!) {
+                  const flowPrice = priceCad(flow.date);
+                  if (flowPrice != null && flowPrice > 0) units += flow.amount / flowPrice;
+                }
+                flowIndex++;
+              }
+              const value = priceCad(date);
+              if (value != null) {
+                if (i === base) {
+                  series[i] = 0;
+                } else {
+                  const rawFlows = flows
+                    .filter((flow) => flow.date > grid[base]! && flow.date <= date)
+                    .map((flow) => ({
+                      date: new Date(`${flow.date}T00:00:00Z`),
+                      amount: -flow.amount,
+                    }));
+                  const rate = xirr([
+                    { date: new Date(`${grid[base]}T00:00:00Z`), amount: -initial },
+                    ...rawFlows,
+                    { date: new Date(`${date}T00:00:00Z`), amount: units * value },
+                  ]);
+                  series[i] =
+                    rate == null
+                      ? null
+                      : Math.round(chartMoneyWeightedReturn(rate, grid[base]!, date) * 100) / 100;
+                }
+              }
+              lastDate = date;
+            }
+          }
+        }
+        return [{ label: benchmark.label, series }];
+      });
+      const rows: Record<string, string | number>[] = [];
+      for (let i = base; i < grid.length; i++) {
+        const row: Record<string, string | number> = {
+          date: grid[i]!,
+          ts: Date.parse(`${grid[i]}T00:00:00Z`),
+        };
+        const portfolio = portfolioSeries[i - base];
+        if (portfolio != null) row["Portfolio"] = portfolio;
+        for (const benchmark of benchmarkSeries) {
+          const value = benchmark.series[i];
+          if (value != null) row[benchmark.label] = value;
+        }
+        rows.push(row);
+      }
+      return rows;
+    }
+
     const grid = comparison.grid;
     const found = grid.findIndex((d) => d >= periodStart);
     if (found < 0) return [];
     const base = Math.max(0, found - 1);
-    const flows = comparison.stepFlows;
+    const flows = contributionFlows(transactions, cashAccounts);
 
     const rebase = (values: number[]): (number | null)[] => {
       const out: (number | null)[] = [];
@@ -347,10 +511,9 @@ function PerformancePage() {
         }
         const prev = values[i - 1] ?? 0;
         const cur = values[i] ?? 0;
-        const flow = flows[i] ?? 0;
         if (mode === "TWR") {
-          if (prev > 0) chain *= (cur - flow) / prev;
-          else if (cur > 0 && flow > 0) chain *= cur / flow;
+          const periodReturn = twrSubperiodReturn(prev, cur, flows, grid[i - 1]!, grid[i]!);
+          if (periodReturn != null) chain *= 1 + periodReturn;
           out.push(Math.round((chain - 1) * 10000) / 100);
         } else {
           const initial = values[base] ?? 0;
@@ -365,7 +528,11 @@ function PerformancePage() {
                   { date: new Date(`${grid[i]}T00:00:00Z`), amount: cur },
                 ])
               : null;
-          out.push(rate == null ? null : Math.round(rate * 100) / 100);
+          out.push(
+            rate == null
+              ? null
+              : Math.round(chartMoneyWeightedReturn(rate, grid[base]!, grid[i]!) * 100) / 100,
+          );
         }
       }
       return out;
@@ -427,18 +594,46 @@ function PerformancePage() {
       rows.push(row);
     }
     return rows;
-  }, [comparison, periodStart, mode, benchmarkHistory.data, fxUsdCad, transactions, cashAccounts]);
+  }, [
+    comparison,
+    period,
+    periodStart,
+    start,
+    end,
+    mode,
+    benchmarkHistory.data,
+    chartHistory.data,
+    fxUsdCad,
+    transactions,
+    holdings,
+    cashAccounts,
+    selection,
+  ]);
+  const chartBenchmarks =
+    period !== "ALL" && chartHistory.data
+      ? selection.filter((benchmark) =>
+          chartHistory.data!.series.some(
+            (series) => series.symbol.toUpperCase() === benchmark.symbol.toUpperCase(),
+          ),
+        )
+      : (comparison?.benchmarks ?? []).filter((benchmark) => benchmark.available);
 
   const allTimeReturns = useMemo(() => {
     if (!comparison || comparison.portfolio.length < 2) return { total: null, annual: null };
     const values = comparison.portfolio;
     let chain = 1;
+    const flows = contributionFlows(transactions, cashAccounts);
     for (let i = 1; i < values.length; i++) {
       const prev = values[i - 1] ?? 0;
       const cur = values[i] ?? 0;
-      const flow = comparison.stepFlows[i] ?? 0;
-      if (prev > 0) chain *= (cur - flow) / prev;
-      else if (cur > 0 && flow > 0) chain *= cur / flow;
+      const periodReturn = twrSubperiodReturn(
+        prev,
+        cur,
+        flows,
+        comparison.grid[i - 1]!,
+        comparison.grid[i]!,
+      );
+      if (periodReturn != null) chain *= 1 + periodReturn;
     }
     const total = (chain - 1) * 100;
     const years =
@@ -448,7 +643,7 @@ function PerformancePage() {
       total,
       annual: years >= 1 && chain > 0 ? (Math.pow(chain, 1 / years) - 1) * 100 : null,
     };
-  }, [comparison]);
+  }, [comparison, transactions, cashAccounts]);
 
   /** Y-axis always includes the zero baseline, with a little breathing room. */
   const yDomain = useMemo((): [number, number] => {
@@ -470,12 +665,13 @@ function PerformancePage() {
       ? ((chartData[chartData.length - 1]!["ts"] as number) - (chartData[0]!["ts"] as number)) /
         86_400_000
       : 0;
-  const formatTick = (ts: number) => {
-    const d = new Date(ts);
-    return spanDays > 400
-      ? d.toLocaleDateString("en-CA", { month: "short", year: "2-digit" })
-      : d.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
-  };
+  const formatTick = (ts: number) =>
+    new Date(ts).toLocaleDateString("en-CA", {
+      timeZone: "UTC",
+      ...(spanDays > 400
+        ? { month: "short", year: "2-digit" }
+        : { month: "short", day: "numeric" }),
+    });
   const twrTick = (v: number) =>
     Math.abs(yDomain[1] - yDomain[0]) < 10 ? `${v.toFixed(1)}%` : `${v.toFixed(0)}%`;
 
@@ -497,8 +693,9 @@ function PerformancePage() {
         <div>
           <h1 className="text-2xl font-semibold">Performance &amp; benchmarking</h1>
           <p className="text-sm text-muted-foreground">
-            Each benchmark buys the index ETF with your exact deposit dates and amounts, so the gap
-            you see is real alpha — not a static overlay.
+            {mode === "TWR"
+              ? "Time-weighted mode compares market performance without the timing effect of deposits or withdrawals."
+              : "Money-weighted mode simulates your starting balance and each cash flow in the selected index ETF."}
           </p>
         </div>
         <div className="space-y-1">
@@ -524,11 +721,7 @@ function PerformancePage() {
           icon={<Wallet className="h-4 w-4" />}
           label="Portfolio value"
           value={formatCad(portfolioValue)}
-          hint={
-            comparison
-              ? `${formatCad(contributionSummary.added)} added · ${formatCad(contributionSummary.withdrawn)} withdrawn`
-              : undefined
-          }
+          hint={`Cost basis ${formatCad(costBasis)}`}
         />
         <StatCard
           icon={<TrendingUp className="h-4 w-4" />}
@@ -604,7 +797,7 @@ function PerformancePage() {
           <span className="text-xs text-muted-foreground">
             {mode === "TWR"
               ? "Pure market performance, starting at 0% for this window."
-              : "Annualised return using cash-flow timing within this window."}
+              : "Money-weighted return; cumulative under one year and annualised after that."}
           </span>
         </div>
 
@@ -631,7 +824,10 @@ function PerformancePage() {
           ))}
         </div>
 
-        {loading || history.isLoading || (mode === "TWR" && benchmarkHistory.isLoading) ? (
+        {loading ||
+        history.isLoading ||
+        (mode === "TWR" && period === "ALL" && benchmarkHistory.isLoading) ||
+        (period !== "ALL" && chartHistory.isLoading) ? (
           <p className="mt-4 text-sm text-muted-foreground">Loading market history…</p>
         ) : transactions.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">
@@ -639,21 +835,27 @@ function PerformancePage() {
           </p>
         ) : history.isError ||
           !history.data ||
-          (mode === "TWR" && (benchmarkHistory.isError || !benchmarkHistory.data)) ? (
+          (mode === "TWR" &&
+            period === "ALL" &&
+            (benchmarkHistory.isError || !benchmarkHistory.data)) ||
+          (period !== "ALL" && (chartHistory.isError || !chartHistory.data)) ? (
           <div className="mt-4 space-y-2">
             <p className="text-sm text-destructive">
               {history.error instanceof Error && history.error.message
                 ? history.error.message
                 : benchmarkHistory.error instanceof Error && benchmarkHistory.error.message
                   ? benchmarkHistory.error.message
-                  : "Market history could not be loaded right now."}
+                  : chartHistory.error instanceof Error && chartHistory.error.message
+                    ? chartHistory.error.message
+                    : "Market history could not be loaded right now."}
             </p>
             <Button
               size="sm"
               variant="secondary"
               onClick={() => {
                 void history.refetch();
-                if (mode === "TWR") void benchmarkHistory.refetch();
+                if (mode === "TWR" && period === "ALL") void benchmarkHistory.refetch();
+                if (period !== "ALL") void chartHistory.refetch();
               }}
             >
               Try again
@@ -686,6 +888,7 @@ function PerformancePage() {
                   formatter={(v: number, name: string) => [formatValue(v), name]}
                   labelFormatter={(ts: number) =>
                     new Date(ts).toLocaleDateString("en-CA", {
+                      timeZone: "UTC",
                       year: "numeric",
                       month: "short",
                       day: "numeric",
@@ -702,19 +905,17 @@ function PerformancePage() {
                   strokeWidth={2.5}
                   dot={false}
                 />
-                {(comparison?.benchmarks ?? [])
-                  .filter((b) => b.available)
-                  .map((b, i) => (
-                    <Line
-                      key={b.id}
-                      type="linear"
-                      dataKey={b.label}
-                      stroke={CHART_COLORS[i % CHART_COLORS.length]}
-                      strokeWidth={1.75}
-                      strokeDasharray="5 4"
-                      dot={false}
-                    />
-                  ))}
+                {chartBenchmarks.map((b, i) => (
+                  <Line
+                    key={b.id}
+                    type="linear"
+                    dataKey={b.label}
+                    stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                    strokeWidth={1.75}
+                    strokeDasharray="5 4"
+                    dot={false}
+                  />
+                ))}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -792,6 +993,39 @@ function PerformancePage() {
       </div>
     </div>
   );
+}
+
+/** Modified Dietz return for snapshot intervals without an exact valuation on every cash-flow date. */
+function twrSubperiodReturn(
+  startValue: number,
+  endValue: number,
+  flows: { date: string; amount: number }[],
+  startDate: string,
+  endDate: string,
+): number | null {
+  const spanDays = (Date.parse(endDate) - Date.parse(startDate)) / 86_400_000;
+  if (spanDays <= 0) return null;
+  let totalFlows = 0;
+  let weightedFlows = 0;
+  for (const flow of flows) {
+    if (flow.date <= startDate || flow.date > endDate) continue;
+    const weight = (Date.parse(endDate) - Date.parse(flow.date)) / (spanDays * 86_400_000);
+    totalFlows += flow.amount;
+    weightedFlows += flow.amount * weight;
+  }
+  const denominator = startValue + weightedFlows;
+  if (denominator > 0) return (endValue - startValue - totalFlows) / denominator;
+  if (startValue <= 0 && totalFlows > 0) return endValue / totalFlows - 1;
+  return null;
+}
+
+/** Keep sub-year money-weighted chart returns cumulative instead of extrapolating them to a year. */
+function chartMoneyWeightedReturn(annualizedPct: number, start: string, end: string): number {
+  const years = (Date.parse(end) - Date.parse(start)) / (365 * 86_400_000);
+  if (years >= 1) return annualizedPct;
+  const annualFactor = 1 + annualizedPct / 100;
+  if (years <= 0 || annualFactor <= 0) return 0;
+  return (Math.pow(annualFactor, years) - 1) * 100;
 }
 
 function StatCard({

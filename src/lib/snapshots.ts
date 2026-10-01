@@ -72,7 +72,45 @@ export function monthEndHashes(
     .sort(
       (a, b) => a.transaction_date.localeCompare(b.transaction_date) || a.id.localeCompare(b.id),
     );
-  let h = fnv(2166136261, `v1|${scope}|${cashAccounts ? [...cashAccounts].sort().join(",") : "*"}`);
+  let cash = 0;
+  let hasCashFloorShortfall = false;
+  for (const t of txns) {
+    if (cashAccounts && !cashAccounts.has(t.account_id)) continue;
+    const fx = t.fx_rate || 1;
+    const gross =
+      (t.amount != null && t.amount !== 0 ? t.amount : (t.units || 0) * (t.price_per_unit || 0)) *
+      fx;
+    const fee = (t.fee || 0) * fx;
+    switch (t.transaction_type) {
+      case "DEPOSIT":
+        cash += gross;
+        break;
+      case "WITHDRAWAL":
+      case "BUY":
+        cash -= gross + (t.transaction_type === "BUY" ? fee : 0);
+        break;
+      case "SELL":
+        cash += gross - fee;
+        break;
+      case "DIVIDEND":
+        cash += gross;
+        break;
+      case "FEE":
+        cash -= gross + fee;
+        break;
+    }
+    if (cash < 0) {
+      hasCashFloorShortfall = true;
+      cash = 0;
+    }
+  }
+  // Only rebuild affected snapshots. v2 covers the changed treatment of
+  // transactions whose old row-by-row cash calculation hit the zero floor.
+  const calculationVersion = hasCashFloorShortfall ? "v2" : "v1";
+  let h = fnv(
+    2166136261,
+    `${calculationVersion}|${scope}|${cashAccounts ? [...cashAccounts].sort().join(",") : "*"}`,
+  );
   let i = 0;
   return monthEnds.map((me) => {
     while (i < txns.length && txns[i]!.transaction_date <= me) {
