@@ -68,22 +68,31 @@ export type BenchmarkId = string;
 
 export type SeriesMap = Map<string, { currency: string; points: HistoryPoint[] }>;
 
-/** Most recent close at or before `date`; never substitute a future close. */
+/**
+ * Most recent close at or before `date`.
+ *
+ * If the requested date is before the first available close (which can happen
+ * when a trade lands on a holiday/weekend and the history window is too short),
+ * use the nearest available trading-day close instead of dropping the cash flow.
+ */
 export function closeOn(points: HistoryPoint[], date: string): number | null {
+  if (points.length === 0) return null;
   let lo = 0;
   let hi = points.length - 1;
-  let best: number | null = null;
+  let best: HistoryPoint | null = null;
+  let firstAfter: HistoryPoint | null = null;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
     const p = points[mid]!;
     if (p.date <= date) {
-      best = p.close;
+      best = p;
       lo = mid + 1;
     } else {
+      firstAfter = p;
       hi = mid - 1;
     }
   }
-  return best;
+  return best?.close ?? firstAfter?.close ?? null;
 }
 
 export function fxOn(fx: HistoryPoint[], date: string, fallback: number): number {
