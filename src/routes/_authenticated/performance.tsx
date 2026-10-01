@@ -17,6 +17,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,6 +30,8 @@ import { Button } from "@/components/ui/button";
 import {
   BENCHMARK_GROUPS,
   DEFAULT_BENCHMARKS,
+  closeOn,
+  fxOn,
   type BenchmarkChoice,
   type SeriesMap,
 } from "@/lib/benchmark";
