@@ -72,6 +72,46 @@ describe("BenefitEngine", () => {
     expect(benefit.gis).toBeGreaterThan(0);
   });
 
+  it("uses the published July 2026 GIS income tables and residence eligibility", () => {
+    const single = estimateGovernmentBenefits(person, 65, 10_000, {
+      previousYearIncome: 10_000, inflationRate: 0, calendarYear: 2026,
+    });
+    const spouseOnOas = estimateGovernmentBenefits(person, 65, 10_000, {
+      householdSize: 2, partnerAge: 67, partnerReceivesOas: true,
+      previousYearIncome: 5_000, partnerIncomeForBenefits: 5_000,
+      inflationRate: 0, calendarYear: 2026,
+    });
+    const spouseNotOnOas = estimateGovernmentBenefits(person, 65, 10_000, {
+      householdSize: 2, partnerAge: 62, partnerOasResidenceYears: 8,
+      previousYearIncome: 5_000, partnerIncomeForBenefits: 5_000,
+      inflationRate: 0, calendarYear: 2026,
+    });
+    expect(single.gis).toBeCloseTo(541.17 * 12, 2);
+    expect(spouseOnOas.gis).toBeCloseTo(418.79 * 12, 2);
+    expect(spouseNotOnOas.gis).toBeCloseTo(1041.17 * 12, 2);
+    expect(estimateGovernmentBenefits({ ...person, oasResidenceYears: 9 }, 65, 0, {
+      previousYearIncome: 0, inflationRate: 0, calendarYear: 2026,
+    }).gis).toBe(0);
+  });
+
+  it("estimates the 60-to-64 Allowance from the published couple table", () => {
+    const allowance = estimateGovernmentBenefits({ ...person, oasResidenceYears: 40 }, 62, 0, {
+      householdSize: 2, partnerAge: 68, partnerReceivesOas: true, partnerOasResidenceYears: 40,
+      previousYearIncome: 7_500, partnerIncomeForBenefits: 7_500,
+      inflationRate: 0, calendarYear: 2026,
+    });
+    expect(allowance.allowance).toBeCloseTo(565.79 * 12, 2);
+    expect(allowance.gis).toBe(0);
+  });
+
+  it("uses the separate published Allowance for the Survivor schedule", () => {
+    const allowance = estimateGovernmentBenefits({ ...person, oasResidenceYears: 40 }, 62, 10_000, {
+      householdSize: 1, previousYearIncome: 10_000, survivor: true,
+      inflationRate: 0, calendarYear: 2026,
+    });
+    expect(allowance.allowance).toBeCloseTo(912.34 * 12, 2);
+  });
+
   it("caps survivor CPP at the retirement maximum while respecting the survivor rate", () => {
     const combined = estimateCppSurvivorAnnual(12000, 65, 12000, 60);
     expect(combined).toBeLessThanOrEqual(1507.65 * 12 * 1.02);

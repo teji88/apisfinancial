@@ -788,6 +788,7 @@ function Analysis({ result }: { result: SimulationResult | null }) {
               ["CPP / QPP", analysis.annual.reduce((sum, row) => sum + row.cpp, 0)],
               ["OAS", analysis.annual.reduce((sum, row) => sum + row.oas, 0)],
               ["GIS", analysis.annual.reduce((sum, row) => sum + row.gis, 0)],
+              ["Allowance", analysis.annual.reduce((sum, row) => sum + row.allowance, 0)],
             ].map(([label, value]) => (
               <div key={String(label)} className="flex justify-between border-b pb-2 last:border-0">
                 <span>{String(label)}</span><span className="num font-semibold">{formatCad(Number(value))}</span>

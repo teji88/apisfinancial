@@ -235,7 +235,7 @@ export function runRetirementSimulation(
     totalDebtPayments += debtPayments;
 
     let benefits = 0;
-    const benefitSources = { cpp: 0, oas: 0, gis: 0 };
+    const benefitSources = { cpp: 0, oas: 0, gis: 0, allowance: 0 };
     let taxableBenefits = 0;
     let otherIncome = 0;
     let nonRegisteredInvestmentIncome = 0;
@@ -305,9 +305,11 @@ export function runRetirementSimulation(
 
       if (age >= 60) {
         const benefit = estimateGovernmentBenefits(person, age, priorYearTaxableIncome, {
-          householdSize: people.length,
+          householdSize: alivePeople.length,
           partnerAge,
           partnerReceivesOas,
+          partnerOasResidenceYears: partner?.oasResidenceYears,
+          survivor: stage === "SURVIVOR",
           // Couple GIS thresholds are based on combined income. The current
           // simulation keeps a household-level prior-year income ledger.
           partnerIncomeForBenefits: partner ? priorYearIncomeByRole[partner.role] : 0,
@@ -320,10 +322,12 @@ export function runRetirementSimulation(
         const monthlyCpp = benefit.cpp / 12;
         const monthlyOas = benefit.oas / 12;
         const monthlyGis = benefit.gis / 12;
-        benefits += monthlyCpp + monthlyOas + monthlyGis;
+        const monthlyAllowance = benefit.allowance / 12;
+        benefits += monthlyCpp + monthlyOas + monthlyGis + monthlyAllowance;
         benefitSources.cpp += monthlyCpp;
         benefitSources.oas += monthlyOas;
         benefitSources.gis += monthlyGis;
+        benefitSources.allowance += monthlyAllowance;
         taxableBenefits += monthlyCpp + monthlyOas;
         monthlyTaxInputs[person.role].cpp = (monthlyTaxInputs[person.role].cpp ?? 0) + monthlyCpp;
         monthlyTaxInputs[person.role].oas = (monthlyTaxInputs[person.role].oas ?? 0) + monthlyOas;

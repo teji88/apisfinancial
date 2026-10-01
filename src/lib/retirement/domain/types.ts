@@ -135,6 +135,7 @@ export interface MonthlySnapshot {
     cpp: Money;
     oas: Money;
     gis: Money;
+    allowance: Money;
   };
   withdrawals: Money;
   withdrawalSources?: {

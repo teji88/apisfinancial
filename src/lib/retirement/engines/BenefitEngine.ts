@@ -1,16 +1,20 @@
 import { CANADA_2026_PARAMETERS } from "../rules/canada2026";
+import { GIS_TABLES_2026_Q3, type GisBand } from "../rules/gisTables2026Q3";
 import type { Money, PersonScenario, PersonRole } from "../domain/types";
 
 export interface BenefitEstimate {
   cpp: Money;
   oas: Money;
   gis: Money;
+  allowance: Money;
 }
 
 export interface BenefitHouseholdContext {
   householdSize?: number;
   partnerAge?: number;
   partnerReceivesOas?: boolean;
+  partnerOasResidenceYears?: number;
+  survivor?: boolean;
   partnerIncomeForBenefits?: Money;
   previousYearIncome?: Money;
   /** Employment and self-employment income included in previousYearIncome. */
@@ -35,6 +39,22 @@ function applyGisEmploymentExemption(nonEmploymentIncome: number, employmentInco
   const fullExemption = Math.min(earnings, 5_000);
   const partialExemption = Math.max(0, Math.min(earnings, 15_000) - 5_000) * 0.5;
   return Math.max(0, nonEmploymentIncome + earnings - fullExemption - partialExemption);
+}
+
+/** Looks up Service Canada's published benefit for the income band. */
+function monthlyPublishedBenefit(table: readonly GisBand[], annualIncome: number, amountColumn: number): number {
+  const income = Math.max(0, annualIncome);
+  let low = 0;
+  let high = table.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >>> 1;
+    const band = table[mid];
+    if (!band) return 0;
+    if (income < band[0]) high = mid - 1;
+    else if (income > band[1]) low = mid + 1;
+    else return (band[amountColumn] ?? 0) / 100;
+  }
+  return 0;
 }
 
 export function estimateGovernmentBenefits(
@@ -81,7 +101,7 @@ export function estimateGovernmentBenefits(
     ? baseOasMonthly * 12 * residenceFactor * oasDeferralFactor * indexFactor
     : 0;
 
-  // GIS uses the prior year's income for the July-to-June entitlement period.
+  // GIS/Allowance use the prior year's income for the July-to-June entitlement period.
   // OAS itself is excluded from GIS income. Employment/self-employment earnings
   // receive the statutory $5,000 full + next $10,000 at 50% exemption.
   // Couple calculations use the published marital-status thresholds and the
@@ -102,41 +122,33 @@ export function estimateGovernmentBenefits(
   const partnerAge = context.partnerAge ?? 0;
   const partnerReceivesOas = Boolean(context.partnerReceivesOas);
 
-  let gisMonthlyMaximum = 0;
-  let gisIncomeThreshold = 0;
-
-  if ((context.householdSize ?? 1) <= 1) {
-    gisMonthlyMaximum = CANADA_2026_PARAMETERS.gis.singleMaxMonthly;
-    gisIncomeThreshold = CANADA_2026_PARAMETERS.gis.singleIncomeCutoff;
-  } else if (partnerReceivesOas) {
-    gisMonthlyMaximum = CANADA_2026_PARAMETERS.gis.spouseOasMaxMonthly;
-    gisIncomeThreshold = CANADA_2026_PARAMETERS.gis.spouseOasIncomeCutoff;
-  } else if (partnerAge >= 60 && partnerAge < 65) {
-    // The current published category for a spouse receiving the Allowance is
-    // the same maximum/threshold as a spouse receiving OAS.
-    gisMonthlyMaximum = CANADA_2026_PARAMETERS.gis.spouseOasMaxMonthly;
-    gisIncomeThreshold = CANADA_2026_PARAMETERS.gis.spouseOasIncomeCutoff;
-  } else {
-    gisMonthlyMaximum = CANADA_2026_PARAMETERS.gis.singleMaxMonthly;
-    gisIncomeThreshold = CANADA_2026_PARAMETERS.gis.spouseNotOasIncomeCutoff;
-  }
-
-  const gisEligible = age >= 65 && age >= oasStartAge && oasAnnual > 0;
-  const gisReductionIncome = (context.householdSize ?? 1) <= 1
-    ? adjustedPriorYearIncome
-    : combinedIncome;
-
-  const gisAnnual = gisEligible && gisReductionIncome < gisIncomeThreshold
-    ? Math.max(
-        0,
-        gisMonthlyMaximum * 12 - Math.max(0, gisReductionIncome) * 0.5,
-      ) * indexFactor
+  const hasPartner = (context.householdSize ?? 1) > 1;
+  const partnerCanReceiveAllowance = partnerAge >= 60 && partnerAge < 65 &&
+    (context.partnerOasResidenceYears ?? 0) >= 10;
+  const ownResidenceEligible = person.oasResidenceYears >= 10;
+  const gisEligible = age >= 65 && age >= oasStartAge && oasAnnual > 0 && ownResidenceEligible;
+  const incomeAt2025Dollars = hasPartner ? combinedIncome / indexFactor : adjustedPriorYearIncome / indexFactor;
+  const table = !hasPartner ? GIS_TABLES_2026_Q3.single
+    : partnerCanReceiveAllowance ? GIS_TABLES_2026_Q3.allowanceCouple
+    : partnerReceivesOas ? GIS_TABLES_2026_Q3.spouseOas
+    : GIS_TABLES_2026_Q3.spouseNoOas;
+  const gisAnnual = gisEligible
+    ? monthlyPublishedBenefit(table, incomeAt2025Dollars, 2) * 12 * indexFactor
     : 0;
+  const survivorAllowanceEligible = Boolean(context.survivor) && age >= 60 && age < 65 && ownResidenceEligible;
+  const coupleAllowanceEligible = hasPartner && age >= 60 && age < 65 && partnerReceivesOas && ownResidenceEligible &&
+    (context.partnerOasResidenceYears ?? 0) >= 10;
+  const allowanceAnnual = survivorAllowanceEligible
+    ? monthlyPublishedBenefit(GIS_TABLES_2026_Q3.survivorAllowance, adjustedPriorYearIncome / indexFactor, 2) * 12 * indexFactor
+    : coupleAllowanceEligible
+      ? monthlyPublishedBenefit(GIS_TABLES_2026_Q3.allowanceCouple, incomeAt2025Dollars, 5) * 12 * indexFactor
+      : 0;
 
   return {
     cpp: cppAnnual,
     oas: oasAnnual,
     gis: gisAnnual,
+    allowance: allowanceAnnual,
   };
 }
 

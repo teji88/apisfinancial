@@ -10,6 +10,7 @@ export interface AnnualAnalysisRow {
   cpp: number;
   oas: number;
   gis: number;
+  allowance: number;
   withdrawals: number;
   taxes: number;
   spending: number;
@@ -97,6 +98,7 @@ export function buildRetirementAnalysis(result: SimulationResult | null): Analys
       cpp: 0,
       oas: 0,
       gis: 0,
+      allowance: 0,
       withdrawals: 0,
       taxes: 0,
       spending: 0,
@@ -116,6 +118,7 @@ export function buildRetirementAnalysis(result: SimulationResult | null): Analys
     row.cpp += month.benefitSources?.cpp ?? 0;
     row.oas += month.benefitSources?.oas ?? 0;
     row.gis += month.benefitSources?.gis ?? 0;
+    row.allowance += month.benefitSources?.allowance ?? 0;
     row.withdrawals += month.withdrawals;
     row.taxes += month.taxes;
     row.spending += month.spending;
