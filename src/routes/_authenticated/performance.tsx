@@ -385,28 +385,7 @@ function PerformancePage() {
         return out;
       };
       const portfolioSeries =
-        mode === "TWR"
-          ? rebase(values)
-          : values.slice(base).map((current, offset) => {
-              const index = base + offset;
-              if (index === base) return 0;
-              const initial = values[base] ?? 0;
-              if (initial <= 0) return null;
-              const rawFlows = flows
-                .filter((flow) => flow.date > grid[base]! && flow.date <= grid[index]!)
-                .map((flow) => ({
-                  date: new Date(`${flow.date}T00:00:00Z`),
-                  amount: -flow.amount,
-                }));
-              const rate = xirr([
-                { date: new Date(`${grid[base]}T00:00:00Z`), amount: -initial },
-                ...rawFlows,
-                { date: new Date(`${grid[index]}T00:00:00Z`), amount: current },
-              ]);
-              return rate == null
-                ? null
-                : Math.round(chartMoneyWeightedReturn(rate, grid[base]!, grid[index]!) * 100) / 100;
-            });
+        mode === "TWR" ? rebase(values) : values.slice(base).map((value) => value);
       const benchmarkSeries = selection.flatMap((benchmark) => {
         const hist = historyMap.get(benchmark.symbol.toUpperCase());
         if (!hist?.points.length) return [];
@@ -451,27 +430,7 @@ function PerformancePage() {
                 flowIndex++;
               }
               const value = priceCad(date);
-              if (value != null) {
-                if (i === base) {
-                  series[i] = 0;
-                } else {
-                  const rawFlows = flows
-                    .filter((flow) => flow.date > grid[base]! && flow.date <= date)
-                    .map((flow) => ({
-                      date: new Date(`${flow.date}T00:00:00Z`),
-                      amount: -flow.amount,
-                    }));
-                  const rate = xirr([
-                    { date: new Date(`${grid[base]}T00:00:00Z`), amount: -initial },
-                    ...rawFlows,
-                    { date: new Date(`${date}T00:00:00Z`), amount: units * value },
-                  ]);
-                  series[i] =
-                    rate == null
-                      ? null
-                      : Math.round(chartMoneyWeightedReturn(rate, grid[base]!, date) * 100) / 100;
-                }
-              }
+              if (value != null) series[i] = units * value;
               lastDate = date;
             }
           }
@@ -511,29 +470,9 @@ function PerformancePage() {
         }
         const prev = values[i - 1] ?? 0;
         const cur = values[i] ?? 0;
-        if (mode === "TWR") {
-          const periodReturn = twrSubperiodReturn(prev, cur, flows, grid[i - 1]!, grid[i]!);
-          if (periodReturn != null) chain *= 1 + periodReturn;
-          out.push(Math.round((chain - 1) * 10000) / 100);
-        } else {
-          const initial = values[base] ?? 0;
-          const rawFlows = contributionFlows(transactions, cashAccounts)
-            .filter((f) => f.date > grid[base]! && f.date <= grid[i]!)
-            .map((f) => ({ date: new Date(`${f.date}T00:00:00Z`), amount: -f.amount }));
-          const rate =
-            initial > 0
-              ? xirr([
-                  { date: new Date(`${grid[base]}T00:00:00Z`), amount: -initial },
-                  ...rawFlows,
-                  { date: new Date(`${grid[i]}T00:00:00Z`), amount: cur },
-                ])
-              : null;
-          out.push(
-            rate == null
-              ? null
-              : Math.round(chartMoneyWeightedReturn(rate, grid[base]!, grid[i]!) * 100) / 100,
-          );
-        }
+        const periodReturn = twrSubperiodReturn(prev, cur, flows, grid[i - 1]!, grid[i]!);
+        if (periodReturn != null) chain *= 1 + periodReturn;
+        out.push(Math.round((chain - 1) * 10000) / 100);
       }
       return out;
     };
@@ -570,12 +509,18 @@ function PerformancePage() {
       });
     };
 
-    const portfolioSeries = rebase(comparison.portfolio);
+    const portfolioSeries =
+      mode === "TWR"
+        ? rebase(comparison.portfolio)
+        : comparison.portfolio.slice(base).map((value) => value);
     const benchSeries = comparison.benchmarks
       .filter((b) => b.available)
       .map((b) => ({
         label: b.label,
-        series: mode === "TWR" ? benchTwr(b.symbol, b.annualYield ?? 0) : rebase(b.values),
+        series:
+          mode === "TWR"
+            ? benchTwr(b.symbol, b.annualYield ?? 0)
+            : b.values.slice(base).map((value) => value),
       }));
 
     const rows: Record<string, string | number>[] = [];
@@ -645,10 +590,10 @@ function PerformancePage() {
     };
   }, [comparison, transactions, cashAccounts]);
 
-  /** Y-axis always includes the zero baseline, with a little breathing room. */
+  /** Give each chart mode an appropriate value range and breathing room. */
   const yDomain = useMemo((): [number, number] => {
-    let min = 0;
-    let max = 0;
+    let min = mode === "TWR" ? 0 : Number.POSITIVE_INFINITY;
+    let max = mode === "TWR" ? 0 : Number.NEGATIVE_INFINITY;
     for (const row of chartData) {
       for (const [k, v] of Object.entries(row)) {
         if (k === "date" || k === "ts" || typeof v !== "number") continue;
@@ -656,9 +601,11 @@ function PerformancePage() {
         if (v > max) max = v;
       }
     }
-    const span = Math.max(max - min, 1);
-    return [min - span * 0.08, max + span * 0.08];
-  }, [chartData]);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 1];
+    const span = Math.max(max - min, mode === "TWR" ? 1 : Math.abs(max) * 0.02, 1);
+    const padding = span * 0.08;
+    return [min - padding, max + padding];
+  }, [chartData, mode]);
 
   const spanDays =
     chartData.length > 1
@@ -672,10 +619,8 @@ function PerformancePage() {
         ? { month: "short", year: "2-digit" }
         : { month: "short", day: "numeric" }),
     });
-  const twrTick = (v: number) =>
-    Math.abs(yDomain[1] - yDomain[0]) < 10 ? `${v.toFixed(1)}%` : `${v.toFixed(0)}%`;
-
-  const formatValue = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}%`;
+  const formatChartValue = (v: number) =>
+    mode === "TWR" ? `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}%` : formatCad(v);
 
   const tooltipStyle = {
     background: "var(--popover)",
@@ -695,7 +640,7 @@ function PerformancePage() {
           <p className="text-sm text-muted-foreground">
             {mode === "TWR"
               ? "Time-weighted mode compares market performance without the timing effect of deposits or withdrawals."
-              : "Money-weighted mode simulates your starting balance and each cash flow in the selected index ETF."}
+              : "Money-weighted mode shows your portfolio value in CAD alongside a benchmark funded by the same cash flows."}
           </p>
         </div>
         <div className="space-y-1">
@@ -778,7 +723,7 @@ function PerformancePage() {
           {(
             [
               { id: "TWR", label: "Time-weighted (%)" },
-              { id: "MWR", label: "Money-weighted (%)" },
+              { id: "MWR", label: "Money-weighted value ($)" },
             ] as const
           ).map((m) => (
             <button
@@ -797,7 +742,7 @@ function PerformancePage() {
           <span className="text-xs text-muted-foreground">
             {mode === "TWR"
               ? "Pure market performance, starting at 0% for this window."
-              : "Money-weighted return; cumulative under one year and annualised after that."}
+              : "CAD value of your portfolio and the cash-flow-matched benchmark investments."}
           </span>
         </div>
 
@@ -881,11 +826,15 @@ function PerformancePage() {
                   stroke="var(--muted-foreground)"
                   width={72}
                   domain={yDomain}
-                  tickFormatter={(v: number) => twrTick(v)}
+                  tickFormatter={(v: number) =>
+                    mode === "TWR" ? `${v.toFixed(0)}%` : formatCad(v, 0)
+                  }
                 />
-                <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="3 3" />
+                {mode === "TWR" ? (
+                  <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="3 3" />
+                ) : null}
                 <Tooltip
-                  formatter={(v: number, name: string) => [formatValue(v), name]}
+                  formatter={(v: number, name: string) => [formatChartValue(v), name]}
                   labelFormatter={(ts: number) =>
                     new Date(ts).toLocaleDateString("en-CA", {
                       timeZone: "UTC",
@@ -1017,15 +966,6 @@ function twrSubperiodReturn(
   if (denominator > 0) return (endValue - startValue - totalFlows) / denominator;
   if (startValue <= 0 && totalFlows > 0) return endValue / totalFlows - 1;
   return null;
-}
-
-/** Keep sub-year money-weighted chart returns cumulative instead of extrapolating them to a year. */
-function chartMoneyWeightedReturn(annualizedPct: number, start: string, end: string): number {
-  const years = (Date.parse(end) - Date.parse(start)) / (365 * 86_400_000);
-  if (years >= 1) return annualizedPct;
-  const annualFactor = 1 + annualizedPct / 100;
-  if (years <= 0 || annualFactor <= 0) return 0;
-  return (Math.pow(annualFactor, years) - 1) * 100;
 }
 
 function StatCard({
