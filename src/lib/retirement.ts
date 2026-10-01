@@ -181,8 +181,10 @@ export type PlannerInputs = {
   lifeExpectancy: number;
   province: ProvinceCode;
   inflation: number; // %
-  workingGrowth: number; // % nominal growth during accumulation
-  retirementGrowth: number; // % nominal growth during decumulation
+  workingGrowth?: number; // % nominal growth during accumulation
+  retirementGrowth?: number; // % nominal growth during decumulation
+  /** @deprecated Use workingGrowth and retirementGrowth. */
+  growth?: number;
   desiredIncome: number; // household after-tax, today's CAD
   annualSavings: number; // today's CAD per year until retirement
   savingsSplit: SavingsSplit; // percentages, normalised internally
@@ -324,8 +326,8 @@ const zeroDraw = (): Draw => ({ reg: 0, lif: 0, nonreg: 0, tfsa: 0 });
 export function projectRetirement(input: PlannerInputs): Projection {
   // Real-dollar engine: balances grow at the inflation-stripped return and every
   // spending need, tax bracket, CPP/OAS amount and clawback line stays at 2026 values.
-  const workingGrowth = realReturn(input.workingGrowth, input.inflation);
-  const retirementGrowth = realReturn(input.retirementGrowth, input.inflation);
+  const workingGrowth = realReturn(input.workingGrowth ?? input.growth ?? 6, input.inflation);
+  const retirementGrowth = realReturn(input.retirementGrowth ?? input.growth ?? 6, input.inflation);
   const thisYear = new Date().getUTCFullYear();
 
   const specs: PersonSpec[] = input.spouse ? [input.self, input.spouse] : [input.self];
