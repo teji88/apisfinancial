@@ -35,7 +35,7 @@ export function isUsListed(holding: Holding, _event?: DividendEvent): boolean {
   if (/[.-]UN(\.TO)?$/.test(s)) return false;
   if (holding.currency === "CAD") return false;
   const bare = s.replace(/^[A-Z]+:/, "").replace(/-/g, ".");
-  if (CANADIAN_BASE_SET.has(bare) && holding.currency !== "USD") return false;
+  if (CANADIAN_BASE_SET.has(bare)) return false;
   return holding.currency === "USD";
 }
 
@@ -230,7 +230,7 @@ export function reconcileDividends(
         }
       }
       const dateGap = dayDiff(match.transaction_date, payDate);
-      if (Math.abs(dateGap) > 3) {
+      if (Math.abs(dateGap) > 7) {
         reasons.push(
           `Recorded on ${match.transaction_date}, but the payment date was ${payDate} (${Math.abs(dateGap)} days ${dateGap > 0 ? "late" : "early"}).`,
         );

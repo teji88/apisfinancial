@@ -540,7 +540,7 @@ function DividendsPage() {
         </h2>
         {loading ? (
           <p className="mt-3 text-sm text-muted-foreground">Loading…</p>
-        ) : rows.length === 0 ? (
+        ) : summaryRows.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">
             No holdings yet. Add trades in the ledger or import a statement.
           </p>
@@ -560,7 +560,7 @@ function DividendsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((r) => (
+                {summaryRows.map((r) => (
                 <TableRow key={r.holdingId}>
                   <TableCell className="font-medium">
                     {r.symbol}
@@ -717,7 +717,9 @@ function DividendsPage() {
                     setReview({
                       ...review,
                       units,
-                      amount: Number((units * review.perShare).toFixed(2)),
+                      amount: Number(
+                        (units * review.perShare * (1 - review.withholdingRate)).toFixed(2),
+                      ),
                     });
                   }}
                 />
@@ -734,7 +736,9 @@ function DividendsPage() {
                     setReview({
                       ...review,
                       perShare,
-                      amount: Number((review.units * perShare).toFixed(2)),
+                      amount: Number(
+                        (review.units * perShare * (1 - review.withholdingRate)).toFixed(2),
+                      ),
                     });
                   }}
                 />
