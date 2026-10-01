@@ -426,7 +426,7 @@ function PerformancePage() {
 
   const spanDays =
     chartData.length > 1
-      ? ((chartData[chartData.length - 1]!.ts as number) - (chartData[0]!.ts as number)) /
+      ? ((chartData[chartData.length - 1]!["ts"] as number) - (chartData[0]!["ts"] as number)) /
         86_400_000
       : 0;
   const formatTick = (ts: number) => {

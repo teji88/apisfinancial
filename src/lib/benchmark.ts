@@ -355,6 +355,7 @@ export type BenchmarkResult = {
   label: string;
   symbol: string;
   note: string;
+  annualYield: number;
   values: number[];
   endValue: number;
   mwrr: number | null;
