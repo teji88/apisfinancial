@@ -90,7 +90,7 @@ describe("tax-aware gross withdrawal solver", () => {
 
   it("taxes only the realized gain portion of a non-registered withdrawal", () => {
     const taxFree = solveGrossWithdrawalForNetNeed({ ...base, netNeed: 10_000, maxGross: 20_000, taxableRegistered: false, nonRegisteredGainFraction: 0 });
-    const halfGain = solveGrossWithdrawalForNetNeed({ ...base, netNeed: 10_000, maxGross: 20_000, taxableRegistered: false, nonRegisteredGainFraction: 0.5 });
+    const halfGain = solveGrossWithdrawalForNetNeed({ ...base, netNeed: 10_000, maxGross: 20_000, taxableRegistered: false, nonRegisteredGainFraction: 0.5, payer: { age: 70, rrspRrif: 50_000 } });
     expect(taxFree.grossWithdrawal).toBe(10_000);
     expect(halfGain.grossWithdrawal).toBeGreaterThan(10_000);
     expect(halfGain.incrementalTax).toBeGreaterThan(0);
@@ -142,7 +142,7 @@ describe("tax-aware gross withdrawal solver", () => {
       province: "AB",
       payerAge: 70,
       spouseAge: 70,
-      taxInputs: { MAIN_USER: { age: 70 }, PARTNER: { age: 70 } },
+      taxInputs: { MAIN_USER: { age: 70, rrspRrif: 50_000 }, PARTNER: { age: 70 } },
       owners: [{
         accountId: "nr-1",
         owner: "MAIN_USER",

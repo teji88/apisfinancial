@@ -221,10 +221,8 @@ export function calculateTaxFromIncome(
     provincialPensionIncomeCredit;
   const federalTax = Math.max(0, federalGross - federalBasicCredit(ledgers.netIncome) - federalDividendCredit - federalPensionIncomeCredit);
   const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province) - provincialPensionIncomeCredit);
-  // OAS itself is excluded from the income base used for the OAS recovery calculation.
-  // The full CRA return has additional line-specific adjustments; those will be
-  // represented explicitly as the retirement tax ledger becomes more granular.
-  const oasRecoveryIncome = Math.max(0, ledgers.netIncome - ledgers.oas);
+  // OAS is included in net income for the recovery tax calculation.
+  const oasRecoveryIncome = ledgers.netIncome;
   const oasRecovery = oasRecoveryForIncome(oasRecoveryIncome, age, ledgers.oas);
   const foreignIncome = Math.max(0, ledgers.foreignIncome);
   // V1 FTC model: the federal and provincial credits are each limited by

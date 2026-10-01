@@ -10,6 +10,7 @@ import { formatCad, summariseAccount } from "@/lib/finance";
 import { usePortfolio } from "@/lib/portfolio";
 import {
   buildRetirementOverview,
+  buildRetirementAnalysis,
   createDefaultRetirementScenario,
   retirementStore,
   runBasicSimulation,
@@ -25,7 +26,7 @@ import {
   type RetirementScenario,
   type SimulationResult,
   type OptimizationResult,
-} from "@/lib/retirement";
+} from "@/lib/retirement/index";
 
 export const Route = createFileRoute("/_authenticated/retirement")({
   staticData: { sitemap: false },
@@ -119,7 +120,7 @@ function RetirementPage() {
   const runOptimization = async () => {
     setOptimizing(true);
     try {
-      const { optimizeRetirementPlan } = await import("@/lib/retirement");
+      const { optimizeRetirementPlan } = await import("@/lib/retirement/index");
       const next = optimizeRetirementPlan({
         scenario: activeScenario,
         startingPortfolio: portfolio.total,
@@ -639,7 +640,7 @@ function ScenarioPanel({
   );
 }
 
-function StressOverview({ stressResults }: { stressResults: ScenarioStressTestResult; onScenarios: () => void }) {
+function StressOverview({ stressResults, onScenarios }: { stressResults: ScenarioStressTestResult; onScenarios: () => void }) {
   const summaries = summarizeStressTests(stressResults).filter(s => s.kind !== "BASE");
   const attention = summaries.filter(s => s.status === "DEPLETES" || s.status === "SHORTFALL").length;
   return <div className="panel p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stress testing</p><h3 className="mt-1 font-display text-lg font-semibold">{attention === 0 ? "Base plan holds across the selected stress tests" : `${attention} stress scenario${attention === 1 ? "" : "s"} need attention`}</h3><p className="mt-1 text-sm text-muted-foreground">These are deterministic what-if cases, not probabilities.</p></div><Button variant="outline" onClick={onScenarios}>View scenarios</Button></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{summaries.slice(0,3).map(s => <div key={s.kind} className="rounded-lg border p-3"><p className="font-medium">{s.name}</p><p className="mt-1 text-xs text-muted-foreground">{scenarioStatusText(s)}</p></div>)}</div></div>;
@@ -647,7 +648,7 @@ function StressOverview({ stressResults }: { stressResults: ScenarioStressTestRe
 function ScenarioResults({ summaries }: { summaries: ScenarioSummary[] }) {
   return <div className="panel p-5"><h3 className="font-display text-lg font-semibold">Stress-test results</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2 pr-4">Scenario</th><th className="pb-2 pr-4">Result</th><th className="pb-2 pr-4">Ending portfolio</th><th className="pb-2 pr-4">Max shortfall</th><th className="pb-2">Change vs base</th></tr></thead><tbody>{summaries.map(s => <tr key={s.kind} className="border-b last:border-0"><td className="py-3 pr-4 font-medium">{s.name}</td><td className="py-3 pr-4">{scenarioStatusText(s)}</td><td className="py-3 pr-4 num">{formatCad(s.endingPortfolio)}</td><td className="py-3 pr-4 num">{formatCad(s.maximumShortfall)}</td><td className="py-3 num">{formatCad(s.deltaEndingPortfolio)}</td></tr>)}</tbody></table></div></div>;
 }
-\nfunction Analysis({ result }: { result: SimulationResult | null }) {
+function Analysis({ result }: { result: SimulationResult | null }) {
   const analysis = buildRetirementAnalysis(result);
   if (!result || !analysis) {
     return <ComingSoon title="Analysis" text="Run the plan from Overview or Plan first. Detailed cash flow, withdrawals, taxes, benefits, portfolio trajectory, debt and reconciliation diagnostics will appear here." />;

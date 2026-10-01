@@ -89,9 +89,11 @@ export function planWithdrawalSequence(input: WithdrawalSequenceInput): Withdraw
         registeredAccountType: accountType,
         nonRegisteredGainFraction: bucket === "NON_REGISTERED" ? account.gainFraction : undefined,
       });
-      const netCash = Math.min(remainingNeed, solved.netCash);
+      const exactTaxFreeFunding = solved.incrementalTax === 0 && Math.abs(solved.netCash - remainingNeed) <= 0.005;
+      const grossWithdrawal = exactTaxFreeFunding ? remainingNeed : solved.grossWithdrawal;
+      const netCash = exactTaxFreeFunding ? remainingNeed : Math.min(remainingNeed, solved.netCash);
       if (solved.grossWithdrawal <= 0 || netCash <= 0) continue;
-      steps.push({ bucket, owner: account.owner, accountId: account.accountId, grossWithdrawal: solved.grossWithdrawal, incrementalTax: solved.incrementalTax, netCash });
+      steps.push({ bucket, owner: account.owner, accountId: account.accountId, grossWithdrawal, incrementalTax: solved.incrementalTax, netCash });
       remainingNeed = Math.max(0, remainingNeed - netCash);
     }
   }

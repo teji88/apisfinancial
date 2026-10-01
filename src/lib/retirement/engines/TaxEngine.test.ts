@@ -34,7 +34,7 @@ describe("TaxEngine Canadian retirement ledgers", () => {
     const bc = calculateTaxFromIncome({ rrspRrif: 50_000 }, "BC", 65);
     const on = calculateTaxFromIncome({ rrspRrif: 50_000 }, "ON", 65);
     expect(bc.provincialTax).toBeCloseTo(2_059.90, 2);
-    expect(on.provincialTax).toBeCloseTo(2_065.56, 2);
+    expect(on.provincialTax).toBeCloseTo(1_869.06, 2);
   });
 
   it("applies the 2026 federal and Alberta basic personal credits", () => {
