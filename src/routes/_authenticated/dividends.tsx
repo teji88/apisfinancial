@@ -16,8 +16,12 @@ import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { usePortfolio, useAddTransaction, useUpdateTransaction } from "@/lib/portfolio";
-import { getDividendHistory } from "@/lib/history.functions";
-import { reconcileDividends, type DividendSuggestion } from "@/lib/dividend-reconcile";
+import { getDividendHistory, getFxRateOn } from "@/lib/history.functions";
+import {
+  reconcileDividends,
+  withholdingRate,
+  type DividendSuggestion,
+} from "@/lib/dividend-reconcile";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 
@@ -76,6 +80,9 @@ type ReviewDraft = {
   units: number;
   perShare: number;
   amount: number;
+  fxRate: number;
+  fxRateSource: "historical" | "current" | "existing" | "manual";
+  fxRateLoading: boolean;
   transactionId?: string | undefined;
   withholdingRate: number;
 };
@@ -99,6 +106,7 @@ function DividendsPage() {
   const addTransaction = useAddTransaction();
   const updateTransaction = useUpdateTransaction();
   const fetchDivHistory = useServerFn(getDividendHistory);
+  const fetchFxRateOn = useServerFn(getFxRateOn);
   const { entitlement } = useEntitlement();
   const [recording, setRecording] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewDraft | null>(null);
@@ -123,6 +131,13 @@ function DividendsPage() {
   const [monthly, setMonthly] = useState(500);
   const [drip, setDrip] = useState(true);
   const [summaryAccount, setSummaryAccount] = useState("all");
+  const [projectionMetric, setProjectionMetric] = useState<"annualIncome" | "portfolioValue">(
+    "annualIncome",
+  );
+  const [tableSort, setTableSort] = useState<{
+    key: "forwardIncome" | "symbol" | "yieldPct" | "yieldOnCostPct" | "received12m";
+    direction: "asc" | "desc";
+  }>({ key: "forwardIncome", direction: "desc" });
 
   const positions = useMemo(
     () => computePositions(holdings, transactions, quotes, fxUsdCad),
@@ -150,7 +165,8 @@ function DividendsPage() {
   const historyItems = useMemo(() => {
     const first = new Map<string, string>();
     for (const t of transactions) {
-      if (!t.holding_id || (t.transaction_type !== "BUY" && t.transaction_type !== "DRIP")) continue;
+      if (!t.holding_id || (t.transaction_type !== "BUY" && t.transaction_type !== "DRIP"))
+        continue;
       const prev = first.get(t.holding_id);
       if (!prev || t.transaction_date < prev) first.set(t.holding_id, t.transaction_date);
     }
@@ -176,24 +192,34 @@ function DividendsPage() {
     );
     // Holdings with no dividend history available fall back to the latest
     // ex-dividend date from the quote feed.
+    const today = new Date().toISOString().slice(0, 10);
+    const holdingById = new Map(holdings.map((holding) => [holding.id, holding]));
+    const accountById = new Map(accounts.map((account) => [account.id, account]));
     const fallback: DividendSuggestion[] = pendingDividends(rows, transactions, holdings)
-      .filter((p) => !covered.has(p.holdingId))
-      .map((p) => ({
-        key: p.holdingId + p.exDivDate,
-        kind: "missing",
-        holdingId: p.holdingId,
-        accountId: p.accountId,
-        symbol: p.symbol,
-        currency: p.currency,
-        exDate: p.exDivDate,
-        payDate: p.exDivDate,
-        units: p.units,
-        perShare: p.perShare,
-        gross: p.amount,
-        withholdingRate: 0,
-        expected: p.amount,
-        reasons: [],
-      }));
+      .filter((p) => !covered.has(p.holdingId) && p.exDivDate <= today)
+      .flatMap((p) => {
+        const holding = holdingById.get(p.holdingId);
+        if (!holding) return [];
+        const rate = withholdingRate(accountById.get(p.accountId), holding);
+        return [
+          {
+            key: p.holdingId + p.exDivDate,
+            kind: "missing" as const,
+            holdingId: p.holdingId,
+            accountId: p.accountId,
+            symbol: p.symbol,
+            currency: p.currency,
+            exDate: p.exDivDate,
+            payDate: p.exDivDate,
+            units: p.units,
+            perShare: p.perShare,
+            gross: p.amount,
+            withholdingRate: rate,
+            expected: p.amount * (1 - rate),
+            reasons: [],
+          },
+        ];
+      });
     const seen = new Set<string>();
     return [...suggestions, ...fallback]
       .filter((p) => (seen.has(p.key) ? false : (seen.add(p.key), true)))
@@ -242,9 +268,59 @@ function DividendsPage() {
     [totals.marketValue, totals.forward, growth, priceGrowth, monthly, drip],
   );
 
+  const sortedSummaryRows = useMemo(() => {
+    const rowsToSort = [...summaryRows];
+    rowsToSort.sort((a, b) => {
+      const aValue = tableSort.key === "symbol" ? a.symbol : a[tableSort.key];
+      const bValue = tableSort.key === "symbol" ? b.symbol : b[tableSort.key];
+      if (aValue == null) return bValue == null ? 0 : 1;
+      if (bValue == null) return -1;
+      const comparison =
+        typeof aValue === "string" && typeof bValue === "string"
+          ? aValue.localeCompare(bValue)
+          : Number(aValue) - Number(bValue);
+      return tableSort.direction === "asc" ? comparison : -comparison;
+    });
+    return rowsToSort;
+  }, [summaryRows, tableSort]);
+
+  const sortBy = (key: typeof tableSort.key) => {
+    setTableSort((previous) => ({
+      key,
+      direction:
+        previous.key === key
+          ? previous.direction === "asc"
+            ? "desc"
+            : "asc"
+          : key === "symbol"
+            ? "asc"
+            : "desc",
+    }));
+  };
+
   const accountName = (id: string) => {
     const a = accounts.find((x) => x.id === id);
     return a ? `${a.account_type} · ${a.account_name}` : "—";
+  };
+
+  const refreshHistoricalFx = (key: string, date: string) => {
+    void fetchFxRateOn({ data: { date } })
+      .then(({ rate }) => {
+        setReview((current) => {
+          if (current?.key !== key || current.date !== date || current.fxRateSource === "manual")
+            return current;
+          return rate != null && Number.isFinite(rate) && rate > 0
+            ? { ...current, fxRate: rate, fxRateSource: "historical", fxRateLoading: false }
+            : { ...current, fxRate: fxUsdCad, fxRateSource: "current", fxRateLoading: false };
+        });
+      })
+      .catch(() => {
+        setReview((current) =>
+          current?.key === key && current.date === date && current.fxRateSource !== "manual"
+            ? { ...current, fxRate: fxUsdCad, fxRateSource: "current", fxRateLoading: false }
+            : current,
+        );
+      });
   };
 
   const openReview = (p: DividendSuggestion) => {
@@ -252,7 +328,11 @@ function DividendsPage() {
       setUpgradeOpen(true);
       return;
     }
-    setReview({
+    const existing = p.transactionId
+      ? transactions.find((transaction) => transaction.id === p.transactionId)
+      : undefined;
+    const hasStoredFx = p.currency === "USD" && (existing?.fx_rate ?? 0) > 1.05;
+    const draft: ReviewDraft = {
       key: p.key,
       holdingId: p.holdingId,
       accountId: p.accountId,
@@ -262,9 +342,16 @@ function DividendsPage() {
       units: Number(p.units.toFixed(4)),
       perShare: p.perShare,
       amount: Number(p.expected.toFixed(2)),
+      fxRate: hasStoredFx ? existing!.fx_rate! : fxUsdCad,
+      fxRateSource: hasStoredFx ? "existing" : "current",
+      fxRateLoading: p.currency === "USD" && !hasStoredFx,
       transactionId: p.transactionId,
       withholdingRate: p.withholdingRate,
-    });
+    };
+    setReview(draft);
+    if (p.currency === "USD" && !hasStoredFx) {
+      refreshHistoricalFx(p.key, p.payDate);
+    }
   };
 
   const record = async (draft: ReviewDraft) => {
@@ -286,7 +373,7 @@ function DividendsPage() {
           pricePerUnit: 0,
           amount: Number(draft.amount.toFixed(2)),
           currency: draft.currency,
-          fxRate: draft.currency === "USD" ? existing.fx_rate || fxUsdCad : 1,
+          fxRate: draft.currency === "USD" ? draft.fxRate : 1,
           fee: existing.fee,
           date: draft.date,
         });
@@ -304,7 +391,7 @@ function DividendsPage() {
         pricePerUnit: 0,
         amount: Number(draft.amount.toFixed(2)),
         currency: draft.currency,
-        fxRate: draft.currency === "USD" ? fxUsdCad : 1,
+        fxRate: draft.currency === "USD" ? draft.fxRate : 1,
         fee: 0,
         date: draft.date,
       });
@@ -549,39 +636,91 @@ function DividendsPage() {
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
-                  <TableHead>Symbol</TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      className="hover:text-foreground"
+                      onClick={() => sortBy("symbol")}
+                    >
+                      Symbol
+                      {tableSort.key === "symbol"
+                        ? tableSort.direction === "asc"
+                          ? " ↑"
+                          : " ↓"
+                        : ""}
+                    </button>
+                  </TableHead>
                   <TableHead>Account</TableHead>
                   <TableHead className="text-right">Units</TableHead>
                   <TableHead className="text-right">Rate / share</TableHead>
                   <TableHead className="text-right">Forward income</TableHead>
-                  <TableHead className="text-right">Yield</TableHead>
-                  <TableHead className="text-right">Yield on cost</TableHead>
-                  <TableHead className="text-right">Received 12m</TableHead>
+                  <TableHead className="text-right">
+                    <button
+                      type="button"
+                      className="hover:text-foreground"
+                      onClick={() => sortBy("yieldPct")}
+                    >
+                      Yield
+                      {tableSort.key === "yieldPct"
+                        ? tableSort.direction === "asc"
+                          ? " ↑"
+                          : " ↓"
+                        : ""}
+                    </button>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <button
+                      type="button"
+                      className="hover:text-foreground"
+                      onClick={() => sortBy("yieldOnCostPct")}
+                    >
+                      Yield on cost
+                      {tableSort.key === "yieldOnCostPct"
+                        ? tableSort.direction === "asc"
+                          ? " ↑"
+                          : " ↓"
+                        : ""}
+                    </button>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <button
+                      type="button"
+                      className="hover:text-foreground"
+                      onClick={() => sortBy("received12m")}
+                    >
+                      Received 12m
+                      {tableSort.key === "received12m"
+                        ? tableSort.direction === "asc"
+                          ? " ↑"
+                          : " ↓"
+                        : ""}
+                    </button>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {summaryRows.map((r) => (
-                <TableRow key={r.holdingId}>
-                  <TableCell className="font-medium">
-                    {r.symbol}
-                    <span className="ml-2 text-xs text-muted-foreground">{r.currency}</span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {accountName(r.accountId)}
-                  </TableCell>
-                  <TableCell className="num text-right">{formatUnits(r.units)}</TableCell>
-                  <TableCell className="num text-right">
-                    {r.ratePerShare == null ? "—" : r.ratePerShare.toFixed(4)}
-                  </TableCell>
-                  <TableCell className="num text-right">{formatCad(r.forwardIncome)}</TableCell>
-                  <TableCell className="num text-right">
-                    {r.yieldPct == null ? "—" : `${r.yieldPct.toFixed(2)}%`}
-                  </TableCell>
-                  <TableCell className="num text-right">
-                    {r.yieldOnCostPct == null ? "—" : `${r.yieldOnCostPct.toFixed(2)}%`}
-                  </TableCell>
-                  <TableCell className="num text-right">{formatCad(r.received12m)}</TableCell>
-                </TableRow>
+                {sortedSummaryRows.map((r) => (
+                  <TableRow key={r.holdingId}>
+                    <TableCell className="font-medium">
+                      {r.symbol}
+                      <span className="ml-2 text-xs text-muted-foreground">{r.currency}</span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {accountName(r.accountId)}
+                    </TableCell>
+                    <TableCell className="num text-right">{formatUnits(r.units)}</TableCell>
+                    <TableCell className="num text-right">
+                      {r.ratePerShare == null ? "—" : r.ratePerShare.toFixed(4)}
+                    </TableCell>
+                    <TableCell className="num text-right">{formatCad(r.forwardIncome)}</TableCell>
+                    <TableCell className="num text-right">
+                      {r.yieldPct == null ? "—" : `${r.yieldPct.toFixed(2)}%`}
+                    </TableCell>
+                    <TableCell className="num text-right">
+                      {r.yieldOnCostPct == null ? "—" : `${r.yieldOnCostPct.toFixed(2)}%`}
+                    </TableCell>
+                    <TableCell className="num text-right">{formatCad(r.received12m)}</TableCell>
+                  </TableRow>
                 ))}
               </TableBody>
             </Table>
@@ -634,6 +773,34 @@ function DividendsPage() {
           </div>
         </div>
 
+        <div
+          className="mt-4 flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Projection chart metric"
+        >
+          <span className="text-xs text-muted-foreground">Chart:</span>
+          {(
+            [
+              { key: "annualIncome", label: "Annual income" },
+              { key: "portfolioValue", label: "Portfolio value" },
+            ] as const
+          ).map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              aria-pressed={projectionMetric === option.key}
+              onClick={() => setProjectionMetric(option.key)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                projectionMetric === option.key
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
         <div className="mt-5 h-64">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={projection}>
@@ -644,18 +811,24 @@ function DividendsPage() {
                 stroke="var(--muted-foreground)"
                 tickFormatter={(y: number) => `Yr ${y}`}
               />
-              <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" width={70} />
+              <YAxis
+                tick={{ fontSize: 11 }}
+                stroke="var(--muted-foreground)"
+                width={84}
+                tickFormatter={(value: number) => formatCad(value)}
+              />
               <Tooltip
-                formatter={(v: number, key) => [
+                formatter={(v: number) => [
                   formatCad(v),
-                  key === "annualIncome" ? "Annual income" : "Portfolio value",
+                  projectionMetric === "annualIncome" ? "Annual income" : "Portfolio value",
                 ]}
                 labelFormatter={(y) => `Year ${y}`}
                 contentStyle={tooltipStyle}
               />
               <Line
                 type="monotone"
-                dataKey="annualIncome"
+                dataKey={projectionMetric}
+                name={projectionMetric === "annualIncome" ? "Annual income" : "Portfolio value"}
                 stroke="var(--chart-1)"
                 strokeWidth={2.5}
                 dot={false}
@@ -688,7 +861,9 @@ function DividendsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {review?.transactionId ? "Correct this dividend" : "Check this dividend before it is saved"}
+              {review?.transactionId
+                ? "Correct this dividend"
+                : "Check this dividend before it is saved"}
             </DialogTitle>
             <DialogDescription>
               {review ? `${review.symbol} · ${accountName(review.accountId)}` : ""}
@@ -702,7 +877,17 @@ function DividendsPage() {
                   id="div-date"
                   type="date"
                   value={review.date}
-                  onChange={(e) => setReview({ ...review, date: e.target.value })}
+                  onChange={(e) => {
+                    const date = e.target.value;
+                    setReview({
+                      ...review,
+                      date,
+                      fxRate: review.currency === "USD" ? fxUsdCad : review.fxRate,
+                      fxRateSource: review.currency === "USD" ? "current" : review.fxRateSource,
+                      fxRateLoading: review.currency === "USD",
+                    });
+                    if (review.currency === "USD") refreshHistoricalFx(review.key, date);
+                  }}
                 />
               </div>
               <div className="space-y-1.5">
@@ -743,6 +928,37 @@ function DividendsPage() {
                   }}
                 />
               </div>
+              {review.currency === "USD" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="div-fx">USD to CAD exchange rate</Label>
+                  <Input
+                    id="div-fx"
+                    type="number"
+                    min="0.0001"
+                    step="0.0001"
+                    value={review.fxRate}
+                    onChange={(e) =>
+                      setReview({
+                        ...review,
+                        fxRate: Number(e.target.value),
+                        fxRateSource: "manual",
+                        fxRateLoading: false,
+                      })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {review.fxRateLoading
+                      ? "Looking up the historical rate…"
+                      : review.fxRateSource === "historical"
+                        ? `Historical rate for ${review.date}`
+                        : review.fxRateSource === "existing"
+                          ? "Existing ledger rate"
+                          : review.fxRateSource === "manual"
+                            ? "Manually entered rate"
+                            : "Current rate; historical rate unavailable"}
+                  </p>
+                </div>
+              ) : null}
               <div className="space-y-1.5">
                 <Label htmlFor="div-total">Total ({review.currency})</Label>
                 <Input
@@ -760,7 +976,14 @@ function DividendsPage() {
               Cancel
             </Button>
             <Button
-              disabled={!review || recording === review.key || !review.amount}
+              disabled={
+                !review ||
+                recording === review.key ||
+                !review.amount ||
+                review.fxRateLoading ||
+                (review.currency === "USD" &&
+                  (!Number.isFinite(review.fxRate) || review.fxRate <= 0))
+              }
               onClick={() => review && void record(review)}
             >
               Record dividend
