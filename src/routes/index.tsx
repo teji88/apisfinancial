@@ -93,10 +93,10 @@ function Landing() {
           <ApisLogo variant="full" size="sm" />
 
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild size="sm" className="honey-fill">
               <Link to="/retirement">Retirement planner</Link>
             </Button>
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild size="sm" className="honey-fill">
               <Link to="/auth">Sign in</Link>
             </Button>
             <Button asChild size="sm" className="honey-fill">
@@ -109,6 +109,14 @@ function Landing() {
       <main>
         <section className="relative overflow-hidden">
           <div className="relative mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6 md:py-24">
+            <div className="mx-auto mb-3 h-24 w-52" aria-label="A small bee moving between honeycomb cells">
+              <div className="honey-flight" aria-hidden="true">
+                <span className="honey-cell honey-cell-one" />
+                <span className="honey-cell honey-cell-two" />
+                <span className="honey-cell honey-cell-three honey-cell-filled" />
+                <span className="honey-bee">🐝</span>
+              </div>
+            </div>
             <p className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-primary">
               Built for Canadian investors
             </p>
