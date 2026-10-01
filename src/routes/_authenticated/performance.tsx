@@ -609,23 +609,34 @@ function PerformancePage() {
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis
-                  dataKey="date"
+                  dataKey="ts"
+                  type="number"
+                  scale="time"
+                  domain={["dataMin", "dataMax"]}
                   tick={{ fontSize: 11 }}
                   stroke="var(--muted-foreground)"
                   minTickGap={40}
+                  tickFormatter={formatTick}
                 />
                 <YAxis
                   tick={{ fontSize: 11 }}
                   stroke="var(--muted-foreground)"
                   width={72}
+                  domain={yDomain}
                   tickFormatter={(v: number) =>
-                    mode === "TWR"
-                      ? `${v.toFixed(0)}%`
-                      : formatCad(Math.round(v)).replace(".00", "")
+                    mode === "TWR" ? twrTick(v) : formatCad(Math.round(v)).replace(".00", "")
                   }
                 />
+                <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="3 3" />
                 <Tooltip
                   formatter={(v: number, name: string) => [formatValue(v), name]}
+                  labelFormatter={(ts: number) =>
+                    new Date(ts).toLocaleDateString("en-CA", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  }
                   contentStyle={tooltipStyle}
                 />
 
