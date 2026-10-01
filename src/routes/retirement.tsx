@@ -472,7 +472,22 @@ function RetirementPage() {
   );
 
 
-  if (authLoading || (!isGuest && (loading || profileQuery.isLoading)) || !p || !inputs || !projection || !derived) {
+  if (!authLoading && !isGuest && profileQuery.isError) {
+    return (
+      <div className="p-6 text-sm text-destructive">
+        We couldn’t load your retirement profile. Please refresh and try again.
+      </div>
+    );
+  }
+
+  if (
+    authLoading ||
+    (!isGuest && (loading || profileQuery.isLoading)) ||
+    !p ||
+    !inputs ||
+    !projection ||
+    !derived
+  ) {
     return <p className="p-6 text-sm text-muted-foreground">Loading your plan…</p>;
   }
 
