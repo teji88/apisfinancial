@@ -117,7 +117,7 @@ function ReadOnlyBanner() {
   );
 }
 
-function AppHeader() {
+export function AppHeader() {
   const {
     accounts,
     holdings,
