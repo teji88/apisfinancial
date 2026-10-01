@@ -28,8 +28,8 @@ import {
   type OptimizationResult,
 } from "@/lib/retirement/index";
 
-export const Route = createFileRoute("/_authenticated/retirement")({
-  staticData: { sitemap: false },
+export const Route = createFileRoute("/retirement")({
+  staticData: { sitemap: true },
   head: () => ({
     meta: [
       { title: "Retirement — Apis Financial" },

@@ -1,3 +1,4 @@
+import { postLoginPath } from "@/lib/pending-plan";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ApisLogo } from "@/components/brand/ApisLogo";
@@ -5,19 +6,12 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/useAuth";
-import { useServerFn } from "@tanstack/react-start";
-import { applyReferralCode } from "@/lib/referral.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const REF_KEY = "apis_referral_code";
-
 export const Route = createFileRoute("/auth")({
   staticData: { sitemap: false },
-  validateSearch: (search: Record<string, unknown>): { ref?: string } =>
-    typeof search["ref"] === "string" ? { ref: search["ref"] } : {},
-
   head: () => ({
     meta: [
       { title: "Sign in — Apis Financial" },
@@ -41,21 +35,10 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
-  const { ref } = Route.useSearch();
-  const applyReferral = useServerFn(applyReferralCode);
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "reset">(
-    ref ? "signup" : "signin",
-  );
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-
-  // Remember who invited them until their account exists.
-  useEffect(() => {
-    if (ref && typeof window !== "undefined") {
-      window.localStorage.setItem(REF_KEY, ref.trim().toUpperCase());
-    }
-  }, [ref]);
 
   // Arriving from a password-reset email: let them set a new password.
   useEffect(() => {
@@ -70,18 +53,7 @@ function AuthPage() {
 
   useEffect(() => {
     if (loading || !session || mode === "reset") return;
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem(REF_KEY) : null;
-    void (async () => {
-      if (stored) {
-        try {
-          await applyReferral({ data: { code: stored } });
-        } catch {
-          // An invalid or already-used code simply does nothing.
-        }
-        window.localStorage.removeItem(REF_KEY);
-      }
-      void navigate({ to: "/dashboard" });
-    })();
+    void navigate({ to: postLoginPath() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, session, mode]);
 
@@ -109,11 +81,11 @@ function AuthPage() {
         const { error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
         toast.success("Your password is updated.");
-        void navigate({ to: "/dashboard" });
+        void navigate({ to: postLoginPath() });
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        void navigate({ to: "/dashboard" });
+        void navigate({ to: postLoginPath() });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
@@ -131,7 +103,7 @@ function AuthPage() {
       return;
     }
     if (result.redirected) return;
-    void navigate({ to: "/dashboard" });
+    void navigate({ to: postLoginPath() });
   }
 
   return (

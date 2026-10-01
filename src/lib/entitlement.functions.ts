@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-export type Tier = "free" | "pro" | "pro_plus" | "invite" | "trial" | "referral";
+export type Tier = "free" | "pro" | "pro_plus" | "invite";
 
 export type Entitlement = {
   tier: Tier;
@@ -17,8 +17,6 @@ export type Entitlement = {
   accountLimit: number | null;
   holdingLimit: number | null;
   isAdmin: boolean;
-  /** When the 30-day free trial ends, if it has not already. */
-  trialEndsAt: string | null;
 };
 
 export const FREE_ACCOUNT_LIMIT = 1;
@@ -31,57 +29,34 @@ export const getEntitlement = createServerFn({ method: "POST" })
   .inputValidator((data: { environment: "sandbox" | "live" }) => data)
   .handler(async ({ data, context }): Promise<Entitlement> => {
     const { supabase, userId } = context;
+    // Plan-state checks run through the server-side client so the internal
+    // database routines never need to be callable by signed-in users.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const now = Date.now();
 
-    const [
-      { data: subs },
-      { data: redemptions },
-      adminRoleResult,
-      { data: profile },
-      { data: rewards },
-    ] = await Promise.all([
-      supabase
-        .from("subscriptions")
-        .select("status, price_id, current_period_end, cancel_at_period_end")
-        .eq("user_id", userId)
-        .eq("environment", data.environment)
-        .order("created_at", { ascending: false })
-        .limit(5),
-      supabase
-        .from("invite_redemptions")
-        .select("access_until, redeemed_at")
-        .eq("user_id", userId)
-        .order("redeemed_at", { ascending: false })
-        .limit(5),
-      supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .eq("role", "admin")
-        .maybeSingle(),
-      supabase.from("profiles").select("trial_ends_at").eq("id", userId).maybeSingle(),
-      supabase
-        .from("referral_rewards")
-        .select("plan, access_until")
-        .eq("referrer_id", userId)
-        .order("access_until", { ascending: false })
-        .limit(1),
-    ]);
-
-    const isAdmin = Boolean(adminRoleResult?.data);
-
-    const trialEndsAt =
-      profile?.trial_ends_at && new Date(profile.trial_ends_at).getTime() > now
-        ? profile.trial_ends_at
-        : null;
-
-    const reward = (rewards ?? []).find((r) => new Date(r.access_until).getTime() > now);
+    const [{ data: subs }, { data: redemptions }, { data: isAdmin }, { data: limitState }] =
+      await Promise.all([
+        supabase
+          .from("subscriptions")
+          .select("status, price_id, current_period_end, cancel_at_period_end")
+          .eq("user_id", userId)
+          .eq("environment", data.environment)
+          .order("created_at", { ascending: false })
+          .limit(5),
+        supabase
+          .from("invite_redemptions")
+          .select("access_until, redeemed_at")
+          .eq("user_id", userId)
+          .order("redeemed_at", { ascending: false })
+          .limit(5),
+        supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" }),
+        supabaseAdmin.rpc("free_limit_state", { _user_id: userId }),
+      ]);
 
     const base = {
       cancelAtPeriodEnd: false,
       isAdmin: Boolean(isAdmin),
       readOnlyReason: null as Entitlement["readOnlyReason"],
-      trialEndsAt,
     };
 
     // The app owner always has full access.
@@ -138,34 +113,6 @@ export const getEntitlement = createServerFn({ method: "POST" })
       };
     }
 
-    // A free year earned by referring a friend.
-    if (reward) {
-      return {
-        ...base,
-        tier: "referral",
-        readOnly: false,
-        graceUntil: null,
-        accessEndsAt: reward.access_until,
-        plan: reward.plan,
-        accountLimit: null,
-        holdingLimit: null,
-      };
-    }
-
-    // The 30-day trial: every feature unlocked, no card needed.
-    if (trialEndsAt) {
-      return {
-        ...base,
-        tier: "trial",
-        readOnly: false,
-        graceUntil: null,
-        accessEndsAt: trialEndsAt,
-        plan: "trial",
-        accountLimit: null,
-        holdingLimit: null,
-      };
-    }
-
     // Everything in Apis Financial is free. The only thing a subscription adds
     // is AI reading of PDFs and screenshots, so a lapsed plan simply becomes
     // the free plan again — nothing is locked and nothing is read-only.
@@ -173,6 +120,8 @@ export const getEntitlement = createServerFn({ method: "POST" })
       (subs ?? []).map((s) => s.current_period_end).find(Boolean) ??
       (redemptions ?? []).map((r) => r.access_until).find(Boolean) ??
       null;
+
+    void limitState;
 
     return {
       ...base,
@@ -185,7 +134,6 @@ export const getEntitlement = createServerFn({ method: "POST" })
       accountLimit: null,
       holdingLimit: null,
     };
-
   });
 
 export const redeemInviteCode = createServerFn({ method: "POST" })
@@ -234,27 +182,13 @@ export const redeemInviteCode = createServerFn({ method: "POST" })
     },
   );
 
-async function assertAdmin(context: { userId: string; supabase?: any }) {
-  if (context.supabase) {
-    const { data } = await context.supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (data) return;
-  }
-  try {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: isAdmin } = await supabaseAdmin.rpc("has_role", {
-      _user_id: context.userId,
-      _role: "admin",
-    });
-    if (isAdmin) return;
-  } catch {
-    // Service role key not configured on this host
-  }
-  throw new Error("Forbidden");
+async function assertAdmin(context: { userId: string }) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: isAdmin } = await supabaseAdmin.rpc("has_role", {
+    _user_id: context.userId,
+    _role: "admin",
+  });
+  if (!isAdmin) throw new Error("Forbidden");
 }
 
 function randomCode(): string {

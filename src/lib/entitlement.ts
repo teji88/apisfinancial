@@ -17,9 +17,7 @@ const FREE_FALLBACK: Entitlement = {
   accountLimit: null,
   holdingLimit: null,
   isAdmin: false,
-  trialEndsAt: null,
 };
-
 
 export function useEntitlement() {
   const fetchEntitlement = useServerFn(getEntitlement);
@@ -31,18 +29,15 @@ export function useEntitlement() {
   const entitlement = query.data ?? FREE_FALLBACK;
   return {
     entitlement,
-    /** The only paid feature: AI reading of PDFs and screenshots. */
+    /** The only paid feature: AI reading of PDFs and screenshots ($10/yr). */
     hasStatementAi: entitlement.tier !== "free",
     /** Everything else in Apis Financial is free for everyone. */
     hasPro: true,
     hasProPlus: true,
-    /** True while the free 30-day trial of everything is running. */
-    onTrial: entitlement.tier === "trial",
     loading: query.isLoading,
     refetch: query.refetch,
   };
 }
-
 
 export function formatDate(iso: string | null): string {
   if (!iso) return "—";

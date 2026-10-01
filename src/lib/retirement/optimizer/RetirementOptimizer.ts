@@ -76,6 +76,8 @@ function objectiveValue(m: Candidate["metrics"], objective: StrategyPreferences[
 }
 
 function multiObjectiveDominates(a: Candidate, b: Candidate): boolean {
+  if (a.violations.length < b.violations.length) return true;
+  if (a.violations.length > b.violations.length) return false;
   const av = [a.metrics.lifetimeSpending, a.metrics.lifetimeAfterTaxCash, a.metrics.endingPortfolio, a.metrics.minimumPortfolio, -a.metrics.lifetimeTax, -a.metrics.maximumSpendingShortfall];
   const bv = [b.metrics.lifetimeSpending, b.metrics.lifetimeAfterTaxCash, b.metrics.endingPortfolio, b.metrics.minimumPortfolio, -b.metrics.lifetimeTax, -b.metrics.maximumSpendingShortfall];
   let strictlyBetter = false;
@@ -116,16 +118,21 @@ export function optimizeRetirementPlan(problem: OptimizationProblem): Optimizati
   const feasible = candidates.filter(c => c.violations.length === 0);
   const pool = feasible.length ? feasible : candidates;
   const pareto = pool.filter((a, i) => !pool.some((b, j) => i !== j && multiObjectiveDominates(b, a)));
+  const selected = [...pool].sort((a, b) => b.objectiveValue - a.objectiveValue)[0];
 
   return {
+    candidates,
     feasiblePlans: feasible.map(c => c.scenario),
     paretoFrontier: pareto.map(c => c.scenario),
+    paretoCandidates: pareto,
+    selectedPlan: selected?.scenario,
+    selectedCandidate: selected,
     objective,
     constraints: [
       { name: "feasible", satisfied: feasible.length > 0, value: feasible.length, limit: 1 },
-      ...(problem.constraints?.minimumEstate !== undefined ? [{ name: "minimumEstate", satisfied: feasible.length > 0, limit: problem.constraints.minimumEstate }] : []),
-      ...(problem.constraints?.maximumShortfall !== undefined ? [{ name: "maximumShortfall", satisfied: feasible.length > 0, limit: problem.constraints.maximumShortfall }] : []),
-      ...(problem.constraints?.maximumDepletionAge !== undefined ? [{ name: "maximumDepletionAge", satisfied: feasible.length > 0, limit: problem.constraints.maximumDepletionAge }] : []),
+      ...(problem.constraints?.minimumEstate !== undefined ? [{ name: "minimumEstate", satisfied: feasible.some(c => !c.violations.includes("minimumEstate")), limit: problem.constraints.minimumEstate }] : []),
+      ...(problem.constraints?.maximumShortfall !== undefined ? [{ name: "maximumShortfall", satisfied: feasible.some(c => !c.violations.includes("maximumShortfall")), limit: problem.constraints.maximumShortfall }] : []),
+      ...(problem.constraints?.maximumDepletionAge !== undefined ? [{ name: "maximumDepletionAge", satisfied: feasible.some(c => !c.violations.includes("maximumDepletionAge")), limit: problem.constraints.maximumDepletionAge }] : []),
     ],
   };
 }

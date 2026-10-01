@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { PlanUpgrade } from "@/components/PlanUpgrade";
-import { ReferralCard } from "@/components/ReferralCard";
+
 
 import { useEntitlement, formatDate } from "@/lib/entitlement";
 import { getStripeEnvironment } from "@/lib/stripe";
@@ -58,8 +58,8 @@ function PlanPage() {
   const isOwner = entitlement.plan === "owner";
   const isPaid = (entitlement.tier === "pro" || entitlement.tier === "pro_plus") && !isOwner;
   const isInvite = entitlement.tier === "invite";
-  const isTrial = entitlement.tier === "trial";
-  const isReferral = entitlement.tier === "referral";
+  const isTrial = false;
+  const isReferral = false;
 
   async function refreshFromProvider(quiet = false) {
     const result = await sync({ data: { environment: getStripeEnvironment() } });
@@ -243,7 +243,7 @@ function PlanPage() {
         )}
       </div>
 
-      <ReferralCard />
+    
 
       {!isPaid && !isInvite && !isOwner && <PlanUpgrade />}
     </div>

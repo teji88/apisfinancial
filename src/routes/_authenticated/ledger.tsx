@@ -609,7 +609,7 @@ function LedgerPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="max-h-[37.5rem] overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>

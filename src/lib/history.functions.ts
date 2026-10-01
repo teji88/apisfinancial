@@ -59,3 +59,45 @@ export const getQuoteOnDate = createServerFn({ method: "POST" })
     const { fetchQuoteOnDate } = await import("./history.server");
     return fetchQuoteOnDate(data.symbol, data.date);
   });
+
+const DividendHistoryInput = z.object({
+  items: z
+    .array(
+      z.object({
+        symbol: z.string().min(1),
+        since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      }),
+    )
+    .max(400),
+});
+
+export type DividendHistoryResponse = {
+  bySymbol: Record<
+    string,
+    Array<{ exDate: string; payDate: string | null; amount: number; currency: string }>
+  >;
+  missing: string[];
+};
+
+/** Historical dividend payments for each symbol since its first purchase. */
+export const getDividendHistory = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => DividendHistoryInput.parse(data))
+  .handler(async ({ data }): Promise<DividendHistoryResponse> => {
+    const { fetchDividendHistory, mapLimit } = await import("./history.server");
+    const earliest = new Map<string, string>();
+    for (const it of data.items) {
+      const s = it.symbol.trim().toUpperCase();
+      const prev = earliest.get(s);
+      if (!prev || it.since < prev) earliest.set(s, it.since);
+    }
+    const entries = Array.from(earliest.entries());
+    const results = await mapLimit(entries, 4, ([s, since]) => fetchDividendHistory(s, since));
+    const bySymbol: DividendHistoryResponse["bySymbol"] = {};
+    const missing: string[] = [];
+    entries.forEach(([s], i) => {
+      const r = results[i];
+      if (r) bySymbol[s] = r;
+      else missing.push(s);
+    });
+    return { bySymbol, missing };
+  });

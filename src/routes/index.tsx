@@ -1,3 +1,4 @@
+import { postLoginPath } from "@/lib/pending-plan";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import {
@@ -5,12 +6,9 @@ import {
   Check,
   Coins,
   FileUp,
-  Gift,
   Landmark,
   LayoutDashboard,
-  Minus,
   Receipt,
-  Sparkles,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -78,31 +76,12 @@ const FEATURES = [
   },
 ];
 
-const COMPARISON: Array<{
-  label: string;
-  free: string | boolean;
-  pro: string | boolean;
-}> = [
-  { label: "Accounts", free: "Unlimited", pro: "Unlimited" },
-  { label: "Holdings", free: "Unlimited", pro: "Unlimited" },
-  { label: "Ledger, adjusted cost base and returns", free: true, pro: true },
-  { label: "Dividends and the ten-year compounder", free: true, pro: true },
-  { label: "Benchmarking, all accounts combined", free: true, pro: true },
-  { label: "Retirement plan and withdrawal schedule", free: true, pro: true },
-  { label: "Your own retirement age, CPP and OAS start dates", free: true, pro: true },
-  { label: "Your own inflation, growth and life expectancy", free: true, pro: true },
-  { label: "Couple, household, RESP and RDSP planning", free: true, pro: true },
-  { label: "CSV imports and typing transactions in", free: true, pro: true },
-  { label: "Upload a PDF statement for AI reading", free: false, pro: true },
-  { label: "Upload a screenshot or photo for AI reading", free: false, pro: true },
-];
-
 function Landing() {
   const { session, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && session) void navigate({ to: "/dashboard" });
+    if (!loading && session) void navigate({ to: postLoginPath() });
   }, [loading, session, navigate]);
 
   return (
@@ -114,6 +93,9 @@ function Landing() {
           <ApisLogo variant="full" size="sm" />
 
           <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/retirement">Retirement planner</Link>
+            </Button>
             <Button asChild variant="ghost" size="sm">
               <Link to="/auth">Sign in</Link>
             </Button>
@@ -140,15 +122,14 @@ function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Button asChild size="lg" className="honey-fill">
-                <Link to="/auth">Start your 30-day free trial</Link>
+                <Link to="/auth">Get started free</Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-accent/50">
-                <a href="#pricing">See pricing</a>
+                <Link to="/retirement">Try the free retirement planner</Link>
               </Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              Free to use, with no account or holding limits. Only having PDFs and screenshots read
-              for you costs anything — $10 a year.
+              No card needed. Everything is free — only PDF and screenshot reading is $10 a year.
             </p>
           </div>
         </section>
@@ -171,63 +152,23 @@ function Landing() {
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-6xl px-4 py-14 md:px-6">
-          <div className="grid gap-5 md:grid-cols-2">
-            <div className="honey-card p-6">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/25 text-primary ring-1 ring-accent/40">
-                <Sparkles className="h-5 w-5" />
-              </span>
-              <h3 className="mt-3 font-display text-xl font-semibold">
-                30 days of everything, free
-              </h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Every new account starts with a full 30-day trial that includes statement uploads.
-                No card, no commitment — when it ends you keep every other feature, free, forever.
-              </p>
-              <Button asChild className="honey-fill mt-5">
-                <Link to="/auth">Start the free trial</Link>
-              </Button>
-            </div>
-
-            <div className="honey-card p-6">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/25 text-primary ring-1 ring-accent/40">
-                <Gift className="h-5 w-5" />
-              </span>
-              <h3 className="mt-3 font-display text-xl font-semibold">
-                Refer a friend, get a year free
-              </h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Share your personal invite link from inside the app. When a friend who joins through
-                it subscribes for $10 a year, you get a full year at no charge. Refer three friends,
-                get three years. There is no limit.
-              </p>
-              <Button asChild variant="outline" className="mt-5 border-accent/50">
-                <Link to="/auth">Create your invite link</Link>
-              </Button>
-            </div>
-          </div>
-        </section>
-
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
           <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
           <p className="mx-auto mt-3 max-w-xl text-center text-sm text-muted-foreground">
-            Everything in Apis Financial is free, with no limits. The one paid extra is having
-            statements read for you — about the price of a coffee, once a year.
+            Everything is free. The only paid extra is having PDF statements and screenshots read
+            for you.
           </p>
-
           <div className="mx-auto mt-10 grid max-w-3xl gap-5 md:grid-cols-2">
             <div className="honey-card p-6">
               <h3 className="text-lg font-semibold">Free</h3>
               <p className="num mt-2 text-3xl font-semibold">$0</p>
-              <p className="mt-1 text-xs text-muted-foreground">Forever · no card needed</p>
+              <p className="mt-1 text-xs text-muted-foreground">Forever</p>
               <ul className="mt-5 space-y-2 text-sm">
                 {[
-                  "Unlimited accounts and holdings",
-                  "Ledger, adjusted cost base and returns",
-                  "Dividends and the ten-year compounder",
-                  "Benchmarking across all accounts",
-                  "The full household retirement planner",
-                  "CSV imports and typing transactions in",
+                  "Unlimited accounts, holdings and transactions",
+                  "Ledger, dividends, performance and benchmarking",
+                  "The full retirement planner",
+                  "CSV imports",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
@@ -236,30 +177,20 @@ function Landing() {
                 ))}
               </ul>
               <Button asChild className="mt-6 w-full border-accent/50" variant="outline">
-                <Link to="/auth">Create an account</Link>
+                <Link to="/auth">Create a free account</Link>
               </Button>
             </div>
-
-            <div className="honey-card relative overflow-hidden border-accent/60 p-6 ring-1 ring-accent/30">
-              <div className="relative flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Statement reading</h3>
-                <span className="rounded-full bg-accent/25 px-2.5 py-1 text-xs font-medium text-primary ring-1 ring-accent/40">
-                  Optional
-                </span>
-              </div>
-
-              <p className="num relative mt-2 text-3xl font-semibold">
+            <div className="honey-card border-accent/60 p-6 ring-1 ring-accent/30">
+              <h3 className="text-lg font-semibold">Statement reading</h3>
+              <p className="num mt-2 text-3xl font-semibold">
                 $10<span className="text-base font-normal text-muted-foreground">/year</span>
               </p>
-              <p className="relative mt-1 text-xs text-muted-foreground">
-                Cancel any time · that is the only price
-              </p>
-              <ul className="relative mt-5 space-y-2 text-sm">
+              <p className="mt-1 text-xs text-muted-foreground">Optional · cancel any time</p>
+              <ul className="mt-5 space-y-2 text-sm">
                 {[
-                  "Everything in the free plan",
-                  "Upload a PDF statement and have it read",
-                  "Upload a screenshot or photo of a statement",
-                  "Rows are drafted for you to check before saving",
+                  "Everything in Free",
+                  "Upload PDF statements and screenshots",
+                  "Transactions drafted for you to check",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
@@ -267,35 +198,10 @@ function Landing() {
                   </li>
                 ))}
               </ul>
-              <Button asChild className="honey-fill relative mt-6 w-full">
-                <Link to="/auth">Get statement reading</Link>
+              <Button asChild className="honey-fill mt-6 w-full">
+                <Link to="/auth">Get started</Link>
               </Button>
             </div>
-          </div>
-
-          <div className="honey-card mt-12 overflow-x-auto">
-            <table className="w-full min-w-[620px] text-sm">
-              <thead>
-                <tr className="border-b border-border/60 text-left">
-                  <th className="px-5 py-3 font-medium">What you get</th>
-                  <th className="px-5 py-3 text-center font-medium">Free</th>
-                  <th className="px-5 py-3 text-center font-medium">$10 / year</th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARISON.map((row) => (
-                  <tr key={row.label} className="border-b border-border/40 last:border-0">
-                    <td className="px-5 py-3">{row.label}</td>
-                    <td className="px-5 py-3 text-center">
-                      <Cellv value={row.free} />
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <Cellv value={row.pro} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </section>
 
@@ -323,10 +229,4 @@ function Landing() {
       </footer>
     </div>
   );
-}
-
-function Cellv({ value }: { value: string | boolean }) {
-  if (value === true) return <Check className="mx-auto h-4 w-4 text-accent" />;
-  if (value === false) return <Minus className="mx-auto h-4 w-4 text-muted-foreground" />;
-  return <span className="num">{value}</span>;
 }

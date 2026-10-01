@@ -17,7 +17,6 @@ import {
   xirr,
 } from "@/lib/finance";
 import { Button } from "@/components/ui/button";
-import { TrialBanner } from "@/components/TrialBanner";
 
 import {
   Table,
@@ -184,7 +183,6 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <TrialBanner />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -301,7 +299,7 @@ function Dashboard() {
             Accounts
           </h2>
         </div>
-        <div className="overflow-x-auto">
+        <div className="max-h-[37.5rem] overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
