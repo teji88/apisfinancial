@@ -606,7 +606,7 @@ function RetirementPage() {
         </div>
       </div>
 
-      <div className="sticky top-0 z-30 -mx-4 border-b border-border/60 bg-background/95 px-4 py-3 shadow-sm backdrop-blur md:-mx-6 md:px-6">
+      <div className="sticky top-0 z-30 -mx-4 grid gap-4 border-b border-border/60 bg-background/95 px-4 py-3 shadow-sm backdrop-blur sm:grid-cols-2 lg:grid-cols-5 md:-mx-6 md:px-6">
         <StatCard
           icon={<CalendarClock className="h-4 w-4" />}
           label="Earliest sustainable retirement"
@@ -641,7 +641,8 @@ function RetirementPage() {
               : "No OAS clawback in this plan"
           }
           tone={totalClawback > 1 ? "warn" : "good"}
-        />        <StatCard
+        />
+        <StatCard
           icon={<Landmark className="h-4 w-4" />}
           label="Tax owed by your estate"
           value={formatCad(projection.estateTax)}
