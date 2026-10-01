@@ -358,12 +358,12 @@ export function projectRetirement(input: PlannerInputs): Projection {
     primary.rrsp = (primary.rrsp + contribution * share.rrsp) * (1 + workingGrowth);
     primary.acb += contribution * share.nonreg;
     primary.nonreg = (primary.nonreg + contribution * share.nonreg) * (1 + workingGrowth);
-    primary.lira *= 1 + growth;
+    primary.lira *= 1 + retirementGrowth;
     for (const p of people.slice(1)) {
-      p.tfsa *= 1 + growth;
-      p.rrsp *= 1 + growth;
-      p.lira *= 1 + growth;
-      p.nonreg *= 1 + growth;
+      p.tfsa *= 1 + retirementGrowth;
+      p.rrsp *= 1 + retirementGrowth;
+      p.lira *= 1 + retirementGrowth;
+      p.nonreg *= 1 + retirementGrowth;
     }
   }
 
@@ -405,8 +405,8 @@ export function projectRetirement(input: PlannerInputs): Projection {
           rrsp -= rrsp * f;
           lira -= lira * f;
         }
-        rrsp *= 1 + growth;
-        lira *= 1 + growth;
+        rrsp *= 1 + retirementGrowth;
+        lira *= 1 + retirementGrowth;
       }
       return false;
     });
@@ -653,10 +653,10 @@ export function projectRetirement(input: PlannerInputs): Projection {
           surplus = 0;
         }
       }
-      p.rrsp *= 1 + growth;
-      p.lira *= 1 + growth;
-      p.tfsa *= 1 + growth;
-      p.nonreg *= 1 + growth;
+      p.rrsp *= 1 + retirementGrowth;
+      p.lira *= 1 + retirementGrowth;
+      p.tfsa *= 1 + retirementGrowth;
+      p.nonreg *= 1 + retirementGrowth;
 
       const info = res.perPerson[i]!;
       perPerson.push({
