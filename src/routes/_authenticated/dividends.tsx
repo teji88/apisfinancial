@@ -81,7 +81,7 @@ type ReviewDraft = {
   perShare: number;
   amount: number;
   fxRate: number;
-  fxRateSource: "historical" | "current" | "existing" | "manual";
+  fxRateSource: "historical" | "current" | "existing" | "manual" | "awaiting-date";
   fxRateLoading: boolean;
   transactionId?: string | undefined;
   withholdingRate: number;
@@ -192,11 +192,11 @@ function DividendsPage() {
     );
     // Holdings with no dividend history available fall back to the latest
     // ex-dividend date from the quote feed.
-    const today = new Date().toISOString().slice(0, 10);
+    const fallbackCutoff = new Date(Date.now() - 28 * 86_400_000).toISOString().slice(0, 10);
     const holdingById = new Map(holdings.map((holding) => [holding.id, holding]));
     const accountById = new Map(accounts.map((account) => [account.id, account]));
     const fallback: DividendSuggestion[] = pendingDividends(rows, transactions, holdings)
-      .filter((p) => !covered.has(p.holdingId) && p.exDivDate <= today)
+      .filter((p) => !covered.has(p.holdingId) && p.exDivDate <= fallbackCutoff)
       .flatMap((p) => {
         const holding = holdingById.get(p.holdingId);
         if (!holding) return [];
@@ -216,6 +216,7 @@ function DividendsPage() {
             gross: p.amount,
             withholdingRate: rate,
             expected: p.amount * (1 - rate),
+            awaitingPayDate: true,
             reasons: [],
           },
         ];
@@ -338,18 +339,22 @@ function DividendsPage() {
       accountId: p.accountId,
       symbol: p.symbol,
       currency: p.currency,
-      date: p.payDate,
+      date: p.awaitingPayDate ? "" : p.payDate,
       units: Number(p.units.toFixed(4)),
       perShare: p.perShare,
       amount: Number(p.expected.toFixed(2)),
       fxRate: hasStoredFx ? existing!.fx_rate! : fxUsdCad,
-      fxRateSource: hasStoredFx ? "existing" : "current",
-      fxRateLoading: p.currency === "USD" && !hasStoredFx,
+      fxRateSource: hasStoredFx
+        ? "existing"
+        : p.currency === "USD" && p.awaitingPayDate
+          ? "awaiting-date"
+          : "current",
+      fxRateLoading: p.currency === "USD" && !hasStoredFx && !p.awaitingPayDate,
       transactionId: p.transactionId,
       withholdingRate: p.withholdingRate,
     };
     setReview(draft);
-    if (p.currency === "USD" && !hasStoredFx) {
+    if (p.currency === "USD" && !hasStoredFx && !p.awaitingPayDate) {
       refreshHistoricalFx(p.key, p.payDate);
     }
   };
@@ -566,8 +571,8 @@ function DividendsPage() {
                       {accountName(p.accountId)}
                     </TableCell>
                     <TableCell className="num">
-                      {p.payDate}
-                      {p.exDate !== p.payDate ? (
+                      {p.awaitingPayDate ? "Awaiting pay date" : p.payDate}
+                      {p.awaitingPayDate || p.exDate !== p.payDate ? (
                         <span className="block text-xs text-muted-foreground">ex {p.exDate}</span>
                       ) : null}
                     </TableCell>
@@ -883,10 +888,15 @@ function DividendsPage() {
                       ...review,
                       date,
                       fxRate: review.currency === "USD" ? fxUsdCad : review.fxRate,
-                      fxRateSource: review.currency === "USD" ? "current" : review.fxRateSource,
-                      fxRateLoading: review.currency === "USD",
+                      fxRateSource:
+                        review.currency === "USD"
+                          ? date
+                            ? "current"
+                            : "awaiting-date"
+                          : review.fxRateSource,
+                      fxRateLoading: review.currency === "USD" && Boolean(date),
                     });
-                    if (review.currency === "USD") refreshHistoricalFx(review.key, date);
+                    if (review.currency === "USD" && date) refreshHistoricalFx(review.key, date);
                   }}
                 />
               </div>
@@ -955,7 +965,9 @@ function DividendsPage() {
                           ? "Existing ledger rate"
                           : review.fxRateSource === "manual"
                             ? "Manually entered rate"
-                            : "Current rate; historical rate unavailable"}
+                            : review.fxRateSource === "awaiting-date"
+                              ? "Choose payment date to look up its historical rate"
+                              : "Current rate; historical rate unavailable"}
                   </p>
                 </div>
               ) : null}
@@ -980,6 +992,7 @@ function DividendsPage() {
                 !review ||
                 recording === review.key ||
                 !review.amount ||
+                !review.date ||
                 review.fxRateLoading ||
                 (review.currency === "USD" &&
                   (!Number.isFinite(review.fxRate) || review.fxRate <= 0))

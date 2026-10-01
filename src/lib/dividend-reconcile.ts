@@ -120,6 +120,8 @@ export type DividendSuggestion = {
   withholdingRate: number;
   /** Amount that should be in the ledger (net of any legitimate withholding). */
   expected: number;
+  /** Fallback quote-feed event has an ex-date but no known payment date. */
+  awaitingPayDate?: boolean | undefined;
   /** For fixes: the existing transaction and what it currently says. */
   transactionId?: string | undefined;
   recordedAmount?: number | undefined;
