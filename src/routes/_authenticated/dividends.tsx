@@ -122,6 +122,7 @@ function DividendsPage() {
   const [priceGrowth, setPriceGrowth] = useState(6);
   const [monthly, setMonthly] = useState(500);
   const [drip, setDrip] = useState(true);
+  const [summaryAccount, setSummaryAccount] = useState("all");
 
   const positions = useMemo(
     () => computePositions(holdings, transactions, quotes, fxUsdCad),
@@ -133,7 +134,19 @@ function DividendsPage() {
     [positions, quotes, transactions, fxUsdCad],
   );
 
-  const months = useMemo(() => monthlyIncome(transactions), [transactions]);
+  const summaryRows = useMemo(
+    () =>
+      summaryAccount === "all" ? rows : rows.filter((row) => row.accountId === summaryAccount),
+    [rows, summaryAccount],
+  );
+  const summaryTransactions = useMemo(
+    () =>
+      summaryAccount === "all"
+        ? transactions
+        : transactions.filter((transaction) => transaction.account_id === summaryAccount),
+    [transactions, summaryAccount],
+  );
+  const months = useMemo(() => monthlyIncome(summaryTransactions), [summaryTransactions]);
   const historyItems = useMemo(() => {
     const first = new Map<string, string>();
     for (const t of transactions) {
@@ -202,9 +215,9 @@ function DividendsPage() {
   ).length;
 
   const totals = useMemo(() => {
-    const marketValue = rows.reduce((s, r) => s + r.marketValue, 0);
-    const acb = rows.reduce((s, r) => s + r.acb, 0);
-    const forward = rows.reduce((s, r) => s + r.forwardIncome, 0);
+    const marketValue = summaryRows.reduce((s, r) => s + r.marketValue, 0);
+    const acb = summaryRows.reduce((s, r) => s + r.acb, 0);
+    const forward = summaryRows.reduce((s, r) => s + r.forwardIncome, 0);
     const received = months.reduce((s, m) => s + m.amount, 0);
     return {
       marketValue,
@@ -214,7 +227,7 @@ function DividendsPage() {
       yieldPct: marketValue > 0 ? (forward / marketValue) * 100 : null,
       yocPct: acb > 0 ? (forward / acb) * 100 : null,
     };
-  }, [rows, months]);
+  }, [summaryRows, months]);
 
   const projection = useMemo(
     () =>
@@ -314,12 +327,31 @@ function DividendsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-2xl font-semibold">Dividends</h1>
-        <p className="text-sm text-muted-foreground">
-          Income figures are converted to Canadian dollars
-          {pricesAsOf ? ` · dividend data as of ${pricesAsOf}` : ""}.
-        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <p className="text-sm text-muted-foreground">
+            Income figures are converted to Canadian dollars
+            {pricesAsOf ? ` · dividend data as of ${pricesAsOf}` : ""}.
+          </p>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            <span className="block">Summary account</span>
+            <select
+              aria-label="Filter dividend summary by account"
+              className="h-9 min-w-52 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+              value={summaryAccount}
+              onChange={(event) => setSummaryAccount(event.target.value)}
+            >
+              <option value="all">All accounts</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.account_name}
+                  {account.account_type ? ` · ${account.account_type}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
