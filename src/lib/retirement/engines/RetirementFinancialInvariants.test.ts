@@ -109,7 +109,7 @@ describe("retirement financial invariants", () => {
     for (const month of result.monthly) {
       const buckets = month.registered + month.tfsa + month.nonRegistered + month.cash;
       expect(month.portfolio).toBeCloseTo(buckets, 8);
-      expect(month.netWorth).toBeCloseTo(month.portfolio, 7);
+      expect(month.netWorth).toBeCloseTo(month.portfolio + month.householdCash - month.debt, 7);
     }
   });
 
