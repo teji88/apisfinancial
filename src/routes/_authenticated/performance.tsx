@@ -351,15 +351,53 @@ function PerformancePage() {
       return out;
     };
 
+    /**
+     * In time-weighted mode the benchmark curve is the ETF's pure total
+     * return over the window — price change plus reinvested distributions —
+     * with no cash-flow simulation, so a mid-window deposit can't distort
+     * the index line the way it would the portfolio's own value series.
+     */
+    const histMap: SeriesMap = new Map();
+    for (const s of history.data?.series ?? []) {
+      histMap.set(s.symbol.toUpperCase(), { currency: s.currency, points: s.points });
+    }
+    const benchTwr = (symbol: string, annualYield: number): (number | null)[] => {
+      const hist = histMap.get(symbol.toUpperCase());
+      const empty = grid.slice(base).map(() => null);
+      if (!hist || hist.points.length === 0) return empty;
+      const fx = history.data?.fx ?? [];
+      const priceCad = (date: string): number | null => {
+        const close = closeOn(hist.points, date);
+        if (close == null) return null;
+        return close * (hist.currency === "USD" ? fxOn(fx, date, fxUsdCad) : 1);
+      };
+      const basePrice = priceCad(grid[base]!);
+      if (basePrice == null || basePrice <= 0) return empty;
+      const baseTs = Date.parse(grid[base]!);
+      return grid.slice(base).map((date) => {
+        const p = priceCad(date);
+        if (p == null) return null;
+        const years = Math.max(0, (Date.parse(date) - baseTs) / 86_400_000) / 365;
+        const totalReturn = (p / basePrice) * Math.exp(annualYield * years);
+        return Math.round((totalReturn - 1) * 10000) / 100;
+      });
+    };
+
     const portfolioSeries = rebase(comparison.portfolio);
     const benchSeries = comparison.benchmarks
       .filter((b) => b.available)
-      .map((b) => ({ label: b.label, series: rebase(b.values) }));
+      .map((b) => ({
+        label: b.label,
+        series: mode === "TWR" ? benchTwr(b.symbol, b.annualYield ?? 0) : rebase(b.values),
+      }));
 
     const rows: Record<string, string | number>[] = [];
     for (let i = base; i < grid.length; i++) {
       const k = i - base;
-      const row: Record<string, string | number> = { date: grid[i]! };
+      const row: Record<string, string | number> = {
+        date: grid[i]!,
+        ts: Date.parse(grid[i]!),
+      };
       const pv = portfolioSeries[k];
       if (pv != null) row["Portfolio"] = pv;
       for (const b of benchSeries) {
@@ -369,7 +407,36 @@ function PerformancePage() {
       rows.push(row);
     }
     return rows;
-  }, [comparison, periodStart, mode]);
+  }, [comparison, periodStart, mode, history.data, fxUsdCad]);
+
+  /** Y-axis always includes the zero baseline, with a little breathing room. */
+  const yDomain = useMemo((): [number, number] => {
+    let min = 0;
+    let max = 0;
+    for (const row of chartData) {
+      for (const [k, v] of Object.entries(row)) {
+        if (k === "date" || k === "ts" || typeof v !== "number") continue;
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+    }
+    const span = Math.max(max - min, mode === "TWR" ? 1 : 100);
+    return [min - span * 0.08, max + span * 0.08];
+  }, [chartData, mode]);
+
+  const spanDays =
+    chartData.length > 1
+      ? ((chartData[chartData.length - 1]!.ts as number) - (chartData[0]!.ts as number)) /
+        86_400_000
+      : 0;
+  const formatTick = (ts: number) => {
+    const d = new Date(ts);
+    return spanDays > 400
+      ? d.toLocaleDateString("en-CA", { month: "short", year: "2-digit" })
+      : d.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+  };
+  const twrTick = (v: number) =>
+    Math.abs(yDomain[1] - yDomain[0]) < 10 ? `${v.toFixed(1)}%` : `${v.toFixed(0)}%`;
 
   const formatValue = (v: number) =>
     mode === "TWR" ? `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}%` : formatCad(v);
