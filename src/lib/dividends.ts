@@ -3,7 +3,7 @@
  * Everything returned here is expressed in CAD unless stated otherwise.
  */
 
-import type { Holding, HoldingPosition, Quote, Transaction } from "./finance";
+import { splitRatio, type Holding, type HoldingPosition, type Quote, type Transaction } from "./finance";
 
 export type DividendRow = {
   holdingId: string;
@@ -221,16 +221,42 @@ export function pendingDividends(
     if (!row.exDivDate || !row.exDivAmount || row.units <= 0) continue;
     if (alreadyRecorded(transactions, row.holdingId, row.exDivDate)) continue;
     const holding = holdingById.get(row.holdingId);
+    const units = unitsBeforeDate(transactions, row.holdingId, row.exDivDate);
+    if (units <= 0) continue;
     out.push({
       holdingId: row.holdingId,
       accountId: row.accountId,
       symbol: row.symbol,
       currency: holding?.currency ?? row.currency,
-      units: row.units,
+      units,
       perShare: row.exDivAmount,
-      amount: row.units * row.exDivAmount,
+      amount: units * row.exDivAmount,
       exDivDate: row.exDivDate,
     });
   }
   return out.sort((a, b) => b.exDivDate.localeCompare(a.exDivDate));
+}
+
+/** Quantity entitled to a dividend is the quantity held before the ex-date. */
+function unitsBeforeDate(transactions: Transaction[], holdingId: string, exDate: string): number {
+  let units = 0;
+  const relevant = transactions
+    .filter((t) => t.holding_id === holdingId && t.transaction_date < exDate)
+    .slice()
+    .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
+  for (const t of relevant) {
+    switch (t.transaction_type) {
+      case "BUY":
+      case "DRIP":
+        units += t.units || 0;
+        break;
+      case "SELL":
+        units = Math.max(0, units - (t.units || 0));
+        break;
+      case "SPLIT":
+        units *= splitRatio(t);
+        break;
+    }
+  }
+  return units;
 }

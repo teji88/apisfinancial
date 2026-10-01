@@ -197,6 +197,7 @@ export function computePositions(
       if (type === "BUY" || type === "DRIP") {
         units += t.units || 0;
         acb += grossCad(t) + feeCad(t);
+        if (type === "DRIP") dividends += grossCad(t);
         if (t.price_per_unit) ledgerPrice = t.price_per_unit;
       } else if (type === "SELL") {
         const sold = Math.min(t.units || 0, units);
