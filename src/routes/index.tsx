@@ -109,12 +109,38 @@ function Landing() {
       <main>
         <section className="relative overflow-hidden">
           <div className="relative mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6 md:py-24">
-            <div className="mx-auto mb-3 h-24 w-52" aria-label="A small bee moving between honeycomb cells">
-              <div className="honey-flight" aria-hidden="true">
-                <span className="honey-cell honey-cell-one" />
-                <span className="honey-cell honey-cell-two" />
-                <span className="honey-cell honey-cell-three honey-cell-filled" />
-                <span className="honey-bee">🐝</span>
+            <div className="mx-auto mb-3 h-24 w-60" aria-label="A small bee tending a growing honey reserve">
+              <div className="apis-hive-scene" aria-hidden="true">
+                <svg viewBox="0 0 240 96" className="apis-hive-art" role="presentation">
+                  <defs>
+                    <linearGradient id="apis-honey-fill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor="rgba(245,158,11,0.22)" />
+                      <stop offset="100%" stopColor="rgba(180,83,9,0.72)" />
+                    </linearGradient>
+                    <filter id="apis-honey-glow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="3" />
+                    </filter>
+                  </defs>
+                  <g className="apis-hive-cells">
+                    <path className="apis-hive-cell apis-hive-cell-a" d="M28 28 40 21 52 28v14l-12 7-12-7Z" />
+                    <path className="apis-hive-cell apis-hive-cell-b" d="M52 14 64 7 76 14v14l-12 7-12-7Z" />
+                    <path className="apis-hive-cell apis-hive-cell-c" d="M76 28 88 21 100 28v14l-12 7-12-7Z" />
+                    <path className="apis-hive-cell apis-hive-cell-d" d="M52 42 64 35 76 42v14l-12 7-12-7Z" />
+                    <path className="apis-hive-cell apis-hive-cell-e" d="M76 56 88 49 100 56v14l-12 7-12-7Z" />
+                    <path className="apis-hive-cell apis-hive-cell-f" d="M100 42 112 35 124 42v14l-12 7-12-7Z" />
+                  </g>
+                  <g className="apis-hive-honey">
+                    <path className="apis-honey-glow-cell" d="M52 14 64 7 76 14v14l-12 7-12-7Z" />
+                    <path className="apis-honey-fill-cell" d="M76 28 88 21 100 28v14l-12 7-12-7Z" />
+                  </g>
+                  <g className="apis-bee">
+                    <ellipse cx="0" cy="0" rx="8" ry="5.5" className="apis-bee-body" />
+                    <ellipse cx="-4" cy="-6" rx="6" ry="3.5" className="apis-bee-wing apis-bee-wing-left" />
+                    <ellipse cx="4" cy="-6" rx="6" ry="3.5" className="apis-bee-wing apis-bee-wing-right" />
+                    <path d="M-5-5 5 5M-1-5 9 5" className="apis-bee-stripe" />
+                    <circle cx="8" cy="0" r="1.4" className="apis-bee-eye" />
+                  </g>
+                </svg>
               </div>
             </div>
             <p className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-primary">
