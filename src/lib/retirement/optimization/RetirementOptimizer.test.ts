@@ -20,6 +20,23 @@ describe("RetirementOptimizer", () => {
     expect(result.selectedCandidate?.objectiveValue).toBeTypeOf("number");
   });
 
+  it("does not select a plan when every candidate violates a hard constraint", () => {
+    const scenario = createDefaultRetirementScenario(new Date("2026-01-01T00:00:00Z"));
+    const result = optimizeRetirementPlan({
+      scenario,
+      startingPortfolio: 0,
+      startYear: 2026,
+      variables: [],
+      constraints: { maximumTax: -1 },
+    });
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.violations).toContain("maximumTax");
+    expect(result.selectedCandidate).toBeUndefined();
+    expect(result.selectedPlan).toBeUndefined();
+    expect(result.paretoCandidates).toHaveLength(0);
+  });
+
   it("honours explicit constraints before selecting a plan", () => {
     const scenario = createDefaultRetirementScenario(new Date("2026-01-01T00:00:00Z"));
 

@@ -10,6 +10,7 @@ import { runRetirementSimulation } from "../engines/SimulationCoordinator";
 export interface OptimizationConstraints {
   minimumEstate?: number;
   maximumShortfall?: number;
+  maximumDepletionAge?: number;
   minimumSpending?: number;
   maximumTax?: number;
 }
@@ -19,7 +20,8 @@ export type OptimizationVariablePath =
   | "cppStartAge"
   | "oasStartAge"
   | "annualSpending"
-  | "withdrawalPolicy";
+  | "withdrawalPolicy"
+  | "cashReserve";
 
 export interface OptimizationVariable {
   path: OptimizationVariablePath;
@@ -86,6 +88,9 @@ function applyVariable(
           value as StrategyPreferences["withdrawalPolicy"];
       }
       break;
+    case "cashReserve":
+      if (typeof value === "number") next.strategy.cashReserve = value;
+      break;
   }
 
   return next;
@@ -109,7 +114,13 @@ function defaultVariables(
   ];
 }
 
+function ageAtDate(birthYear: number, birthMonth: number, isoDate: string): number {
+  const date = new Date(isoDate);
+  return date.getUTCFullYear() - birthYear - (date.getUTCMonth() + 1 < birthMonth ? 1 : 0);
+}
+
 function constraintViolations(
+  scenario: RetirementScenario,
   metrics: SimulationMetrics,
   constraints: OptimizationConstraints,
 ): string[] {
@@ -127,6 +138,12 @@ function constraintViolations(
     metrics.maximumSpendingShortfall > constraints.maximumShortfall
   ) {
     violations.push("maximumShortfall");
+  }
+  if (constraints.maximumDepletionAge !== undefined && metrics.depletionDate) {
+    const person = scenario.household.people[0];
+    if (person && ageAtDate(person.birthYear, person.birthMonth, metrics.depletionDate) < constraints.maximumDepletionAge) {
+      violations.push("maximumDepletionAge");
+    }
   }
   if (
     constraints.minimumSpending !== undefined &&
@@ -240,6 +257,7 @@ export function optimizeRetirementPlan(
       metrics: simulation.metrics,
       objectiveValue: objectiveValue(simulation.metrics, objective),
       violations: constraintViolations(
+        scenario,
         simulation.metrics,
         problem.constraints ?? {},
       ),
