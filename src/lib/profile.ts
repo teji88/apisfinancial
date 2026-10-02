@@ -102,7 +102,9 @@ async function getOrCreateProfile(): Promise<Profile | null> {
   // A trigger should normally create this row at signup. If it did not,
   // repair the profile here and let the database defaults populate all fields.
   const displayName =
-    (user.user_metadata?.display_name as string | undefined) ??
+    ((user.user_metadata as Record<string, unknown> | undefined)?.["display_name"] as
+      | string
+      | undefined) ??
     user.email?.split("@")[0] ??
     null;
 

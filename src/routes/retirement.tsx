@@ -846,7 +846,7 @@ function RetirementPage() {
               <p className="text-sm text-muted-foreground">
                 Balances by account type from age {inputs.retirementAge} to {inputs.lifeExpectancy},
                 using a real return of{" "}
-                {(((1 + inputs.workingGrowth / 100) / (1 + inputs.inflation / 100) - 1) * 100).toFixed(2)}% working-years real return and {(((1 + inputs.retirementGrowth / 100) / (1 + inputs.inflation / 100) - 1) * 100).toFixed(2)}% retirement-years real return. Amounts {moneyNote}.
+                {(((1 + (inputs.workingGrowth ?? 6) / 100) / (1 + inputs.inflation / 100) - 1) * 100).toFixed(2)}% working-years real return and {(((1 + (inputs.retirementGrowth ?? 6) / 100) / (1 + inputs.inflation / 100) - 1) * 100).toFixed(2)}% retirement-years real return. Amounts {moneyNote}.
               </p>
             </div>
             <div className="h-80 w-full">
