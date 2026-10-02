@@ -11,7 +11,7 @@ import { z } from "zod";
  */
 
 /** Default Gemini model for statement reading. Override with GEMINI_MODEL. */
-export const DEFAULT_GEMINI_MODEL = "gemini-3.1-pro";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 export const ParsedTransaction = z.object({
   account_type: z.string(),
@@ -19,7 +19,7 @@ export const ParsedTransaction = z.object({
   date: z.string(),
   type: z.string(),
   symbol: z.string().nullable(),
-  name: z.string().nullable(),
+  name: z.string().nullable().optional().default(null),
   quantity: z.number().nullable(),
   price: z.number().nullable(),
   amount: z.number().nullable(),
@@ -62,6 +62,7 @@ Rules:
 - Amounts for money leaving the account may be shown negative (e.g. -139.83);
   report a WITHDRAWAL with the positive amount.
 - symbol: the ticker in uppercase, with the .TO suffix for TSX listings. Null for cash rows.
+- name: the security's full name as shown on the statement (company or fund name), or null if not shown.
 - fee: commission charged on that row, 0 when none shown.
 - confidence: 0 to 1, how certain you are of the whole row. Flag anything you had to guess
   below 0.8 and explain briefly in note.
