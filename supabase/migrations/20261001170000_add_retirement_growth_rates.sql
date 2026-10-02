@@ -1,0 +1,3 @@
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS working_growth_rate NUMERIC NOT NULL DEFAULT 6.0,
+  ADD COLUMN IF NOT EXISTS retirement_growth_rate NUMERIC NOT NULL DEFAULT 4.5;
