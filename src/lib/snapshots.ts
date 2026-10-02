@@ -269,8 +269,22 @@ export function buildAnchoredComparison(args: {
     fresh.push({ month_end: d, ledger_hash: hash, portfolio_value: tailPortfolio[i]!, benchmarks });
   });
 
-  const grid = [...anchors.map((a) => a.month_end), ...tailGrid];
-  const portfolio = [...anchors.map((a) => Number(a.portfolio_value)), ...tailPortfolio];
+  // The grid must always open at the first transaction date. Anchors replace
+  // the months before them, which would otherwise drop the inception ->
+  // first-anchor subperiod from the TWR chain and start the charts a month
+  // late. The inception point carries value 0 — nothing is invested yet — and
+  // the TWR chaining counts the start-date flows in that first subperiod
+  // (twrSubperiodReturn's includeStartFlows), because a 0 opening value does
+  // not reflect them.
+  const anchorEnds = anchors.map((a) => a.month_end);
+  const needsInception = anchors.length > 0 && anchorEnds[0] !== start;
+  const inception = needsInception ? [start] : [];
+  const grid = [...inception, ...anchorEnds, ...tailGrid];
+  const portfolio = [
+    ...(needsInception ? [0] : []),
+    ...anchors.map((a) => Number(a.portfolio_value)),
+    ...tailPortfolio,
+  ];
 
   const invested = flows.reduce((s, f) => s + f.amount, 0);
   const xirrFlows = flows.map((f) => ({ date: new Date(f.date), amount: -f.amount }));
@@ -280,7 +294,11 @@ export function buildAnchoredComparison(args: {
   const benchmarks: BenchmarkResult[] = selection.map((b, j) => {
     const t = benchTails[j];
     if (!t) return { ...b, values: grid.map(() => 0), endValue: 0, mwrr: null, available: false };
-    const values = [...anchors.map((a) => Number(a.benchmarks[b.symbol]?.value ?? 0)), ...t.values];
+    const values = [
+      ...(needsInception ? [0] : []),
+      ...anchors.map((a) => Number(a.benchmarks[b.symbol]?.value ?? 0)),
+      ...t.values,
+    ];
     const endValue = values[values.length - 1] ?? 0;
     return { ...b, values, endValue, mwrr: mw(endValue), available: true };
   });
