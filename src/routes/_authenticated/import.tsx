@@ -156,7 +156,10 @@ function ImportPage() {
       next[p.name] = {
         target: byName?.id ?? byType?.id ?? "new",
         accountType: p.suggestedType,
-        currency: p.currency === "USD" ? "USD" : "CAD",
+        // Suggested currency for a newly created account; the user confirms it
+        // in the mapping step. Unknown stays a plain CAD starting point here,
+        // never a claim about the file.
+        currency: p.currency ?? "CAD",
         ownerType: "self",
         memberName: "",
       };
@@ -275,7 +278,9 @@ function ImportPage() {
             amount: t.amount,
             currency: t.currency,
             fee: t.fee,
-            confidence: 1,
+            // Profile-matched rows read at full confidence; heuristic rows
+            // arrive at 0.7 so review highlights them.
+            confidence: t.confidence ?? 1,
             note: t.note,
             rowId: `csv-${i}`,
             portfolio: t.portfolio,
