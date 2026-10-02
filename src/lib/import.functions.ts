@@ -72,8 +72,9 @@ export const parseStatement = createServerFn({ method: "POST" })
 
     const { GoogleGenerativeAI } = await import("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(apiKey);
+    const modelName = process.env["GEMINI_MODEL"] ?? DEFAULT_GEMINI_MODEL;
     const model = genAI.getGenerativeModel({
-      model: process.env["GEMINI_MODEL"] ?? DEFAULT_GEMINI_MODEL,
+      model: modelName,
       generationConfig: { responseMimeType: "application/json" },
       systemInstruction: STATEMENT_SYSTEM_PROMPT,
     });
@@ -119,6 +120,15 @@ export const parseStatement = createServerFn({ method: "POST" })
         message.includes("API key")
       ) {
         throw new Error("The Gemini API key was rejected. Check GEMINI_API_KEY on the server.");
+      }
+      if (
+        message.includes("404") ||
+        message.includes("NOT_FOUND") ||
+        (message.toLowerCase().includes("not found") && message.toLowerCase().includes("model"))
+      ) {
+        throw new Error(
+          `The configured AI model "${modelName}" is not available. Check the GEMINI_MODEL environment variable.`,
+        );
       }
       throw new Error("Reading that statement failed. Please try again.");
     }
