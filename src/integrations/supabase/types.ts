@@ -350,6 +350,7 @@ export type Database = {
           province: string
           referral_code: string | null
           referred_by: string | null
+          retirement_growth_rate: number
           save_pct_nonreg: number
           save_pct_rrsp: number
           save_pct_tfsa: number
@@ -369,6 +370,7 @@ export type Database = {
           target_retirement_age: number | null
           trial_ends_at: string | null
           updated_at: string
+          working_growth_rate: number
         }
         Insert: {
           annual_savings?: number
@@ -398,6 +400,7 @@ export type Database = {
           province?: string
           referral_code?: string | null
           referred_by?: string | null
+          retirement_growth_rate?: number
           save_pct_nonreg?: number
           save_pct_rrsp?: number
           save_pct_tfsa?: number
@@ -417,6 +420,7 @@ export type Database = {
           target_retirement_age?: number | null
           trial_ends_at?: string | null
           updated_at?: string
+          working_growth_rate?: number
         }
         Update: {
           annual_savings?: number
@@ -446,6 +450,7 @@ export type Database = {
           province?: string
           referral_code?: string | null
           referred_by?: string | null
+          retirement_growth_rate?: number
           save_pct_nonreg?: number
           save_pct_rrsp?: number
           save_pct_tfsa?: number
@@ -465,6 +470,7 @@ export type Database = {
           target_retirement_age?: number | null
           trial_ends_at?: string | null
           updated_at?: string
+          working_growth_rate?: number
         }
         Relationships: []
       }
