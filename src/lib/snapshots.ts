@@ -72,7 +72,45 @@ export function monthEndHashes(
     .sort(
       (a, b) => a.transaction_date.localeCompare(b.transaction_date) || a.id.localeCompare(b.id),
     );
-  let h = fnv(2166136261, `v1|${scope}|${cashAccounts ? [...cashAccounts].sort().join(",") : "*"}`);
+  let cash = 0;
+  let hasCashFloorShortfall = false;
+  for (const t of txns) {
+    if (cashAccounts && !cashAccounts.has(t.account_id)) continue;
+    const fx = t.fx_rate || 1;
+    const gross =
+      (t.amount != null && t.amount !== 0 ? t.amount : (t.units || 0) * (t.price_per_unit || 0)) *
+      fx;
+    const fee = (t.fee || 0) * fx;
+    switch (t.transaction_type) {
+      case "DEPOSIT":
+        cash += gross;
+        break;
+      case "WITHDRAWAL":
+      case "BUY":
+        cash -= gross + (t.transaction_type === "BUY" ? fee : 0);
+        break;
+      case "SELL":
+        cash += gross - fee;
+        break;
+      case "DIVIDEND":
+        cash += gross;
+        break;
+      case "FEE":
+        cash -= gross + fee;
+        break;
+    }
+    if (cash < 0) {
+      hasCashFloorShortfall = true;
+      cash = 0;
+    }
+  }
+  // Only rebuild affected snapshots. v2 covers the changed treatment of
+  // transactions whose old row-by-row cash calculation hit the zero floor.
+  const calculationVersion = hasCashFloorShortfall ? "v2" : "v1";
+  let h = fnv(
+    2166136261,
+    `${calculationVersion}|${scope}|${cashAccounts ? [...cashAccounts].sort().join(",") : "*"}`,
+  );
   let i = 0;
   return monthEnds.map((me) => {
     while (i < txns.length && txns[i]!.transaction_date <= me) {
@@ -133,6 +171,9 @@ export function buildAnchoredComparison(args: {
   portfolioEndValue: number;
   selection: BenchmarkChoice[];
   cashAccounts?: Set<string>;
+  /** Optional longer benchmark history used only for the true inception point. */
+  benchmarkHistory?: SeriesMap;
+  benchmarkFx?: HistoryPoint[];
   windowStart: string;
   anchors: Snapshot[];
   monthEnds: string[];
@@ -148,6 +189,8 @@ export function buildAnchoredComparison(args: {
     selection,
     cashAccounts,
     anchors,
+    benchmarkHistory,
+    benchmarkFx,
   } = args;
   if (transactions.length === 0) return { comparison: null, fresh: [] };
   const flows = contributionFlows(transactions, cashAccounts);
@@ -162,7 +205,11 @@ export function buildAnchoredComparison(args: {
     end,
     args.windowStart > tailStart ? args.windowStart : tailStart,
   );
-  const tailSet = new Set([...fine, ...pendingMonths]);
+  const tailSet = new Set([
+    ...fine,
+    ...pendingMonths,
+    ...flows.filter((f) => f.date > tailStart && f.date <= end).map((f) => f.date),
+  ]);
   if (anchor) tailSet.delete(anchor.month_end);
   const tailGrid = [...tailSet].filter((d) => d >= start).sort();
 
@@ -222,9 +269,22 @@ export function buildAnchoredComparison(args: {
     fresh.push({ month_end: d, ledger_hash: hash, portfolio_value: tailPortfolio[i]!, benchmarks });
   });
 
-  const grid = [...anchors.map((a) => a.month_end), ...tailGrid];
-  const portfolio = [...anchors.map((a) => Number(a.portfolio_value)), ...tailPortfolio];
-  if (portfolio.length > 0) portfolio[portfolio.length - 1] = portfolioEndValue;
+  // The grid must always open at the first transaction date. Anchors replace
+  // the months before them, which would otherwise drop the inception ->
+  // first-anchor subperiod from the TWR chain and start the charts a month
+  // late. The inception point carries value 0 — nothing is invested yet — and
+  // the TWR chaining counts the start-date flows in that first subperiod
+  // (twrSubperiodReturn's includeStartFlows), because a 0 opening value does
+  // not reflect them.
+  const anchorEnds = anchors.map((a) => a.month_end);
+  const needsInception = anchors.length > 0 && anchorEnds[0] !== start;
+  const inception = needsInception ? [start] : [];
+  const grid = [...inception, ...anchorEnds, ...tailGrid];
+  const portfolio = [
+    ...(needsInception ? [0] : []),
+    ...anchors.map((a) => Number(a.portfolio_value)),
+    ...tailPortfolio,
+  ];
 
   const invested = flows.reduce((s, f) => s + f.amount, 0);
   const xirrFlows = flows.map((f) => ({ date: new Date(f.date), amount: -f.amount }));
@@ -234,7 +294,11 @@ export function buildAnchoredComparison(args: {
   const benchmarks: BenchmarkResult[] = selection.map((b, j) => {
     const t = benchTails[j];
     if (!t) return { ...b, values: grid.map(() => 0), endValue: 0, mwrr: null, available: false };
-    const values = [...anchors.map((a) => Number(a.benchmarks[b.symbol]?.value ?? 0)), ...t.values];
+    const values = [
+      ...(needsInception ? [0] : []),
+      ...anchors.map((a) => Number(a.benchmarks[b.symbol]?.value ?? 0)),
+      ...t.values,
+    ];
     const endValue = values[values.length - 1] ?? 0;
     return { ...b, values, endValue, mwrr: mw(endValue), available: true };
   });

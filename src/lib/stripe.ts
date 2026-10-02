@@ -2,13 +2,13 @@ import { loadStripe, type Stripe } from "@stripe/stripe-js";
 
 type StripeEnv = "sandbox" | "live";
 
-const clientToken = import.meta.env["VITE_PAYMENTS_CLIENT_TOKEN"] as string | undefined;
+const publishableKey = import.meta.env["VITE_STRIPE_PUBLISHABLE_KEY"] as string | undefined;
 
 function paymentsEnvironment(): StripeEnv {
-  if (clientToken?.startsWith("pk_test_")) return "sandbox";
-  if (clientToken?.startsWith("pk_live_")) return "live";
+  if (publishableKey?.startsWith("pk_test_")) return "sandbox";
+  if (publishableKey?.startsWith("pk_live_")) return "live";
   throw new Error(
-    "Payments are not configured for this build. Complete go-live in your Lovable project to enable checkout.",
+    "Payments are not configured for this build. Add VITE_STRIPE_PUBLISHABLE_KEY to the environment.",
   );
 }
 
@@ -17,7 +17,7 @@ let stripePromise: Promise<Stripe | null> | null = null;
 export function getStripe(): Promise<Stripe | null> {
   if (!stripePromise) {
     paymentsEnvironment();
-    stripePromise = loadStripe(clientToken as string);
+    stripePromise = loadStripe(publishableKey as string);
   }
   return stripePromise;
 }
@@ -48,11 +48,9 @@ export const PLAN_PRICES: Record<PaidPlan, Record<ProBilling, { id: string; labe
   },
 };
 
-/** Which plan a stored price id belongs to (legacy ids all map to the one plan). */
 export function planOfPrice(priceId: string | null): PaidPlan | null {
   if (!priceId) return null;
   if (priceId.startsWith("pro_plus")) return "pro_plus";
   if (priceId.startsWith("pro")) return "pro";
   return null;
 }
-

@@ -24,11 +24,11 @@ export function effectiveCeiling(age: number, tolerance = 0): number {
 
 /* ---------------------------------- CPP / OAS --------------------------------- */
 
-/** 2026 maximum CPP at 65: $18,091/year. */
-export const CPP_MAX_ANNUAL_65 = 18_091;
+/** 2026 maximum CPP at 65: $1,507.65/month. */
+export const CPP_MAX_ANNUAL_65 = 1_507.65 * 12;
 export const CPP_MAX_MONTHLY_65 = CPP_MAX_ANNUAL_65 / 12;
-/** 2026 maximum OAS at 65: $8,732/year. */
-export const OAS_MAX_ANNUAL_65 = 8_732;
+/** 2026 maximum OAS at 65–74, annualized from the October–December 2026 rate. */
+export const OAS_MAX_ANNUAL_65 = 762.5 * 12;
 export const OAS_MAX_MONTHLY_65 = OAS_MAX_ANNUAL_65 / 12;
 export const OAS_CLAWBACK_THRESHOLD = 95_323;
 export const OAS_CLAWBACK_RATE = 0.15;
@@ -38,7 +38,7 @@ export function realReturn(nominalPct: number, inflationPct: number): number {
   return (1 + nominalPct / 100) / (1 + inflationPct / 100) - 1;
 }
 /** Year's maximum pensionable earnings (2026 estimate). */
-export const YMPE = 71_300;
+export const YMPE = 74_600;
 /** Contributory years counted after the 17% general drop-out. */
 export const CPP_QUALIFYING_YEARS = 39;
 
@@ -66,7 +66,7 @@ export function cppPercentFromEarnings(h: EarningsHistory): number {
 export function cppAt(startAge: number, pctOfMax: number): number {
   const base = CPP_MAX_MONTHLY_65 * 12 * (pctOfMax / 100);
   if (startAge < 65) return base * (1 - 0.006 * (65 - startAge) * 12);
-  if (startAge > 65) return base * (1 + 0.0084 * Math.min(60, (startAge - 65) * 12));
+  if (startAge > 65) return base * (1 + 0.007 * Math.min(60, (startAge - 65) * 12));
   return base;
 }
 
@@ -76,10 +76,10 @@ export function oasFractionFromResidence(years: number): number {
 }
 
 /** Annual OAS at the chosen start age, today's dollars, before clawback. */
-export function oasAt(startAge: number, fraction = 1): number {
+export function oasAt(startAge: number, fraction = 1, currentAge = startAge): number {
   const base = OAS_MAX_MONTHLY_65 * 12 * Math.min(1, Math.max(0, fraction));
   const months = Math.min(60, Math.max(0, (startAge - 65) * 12));
-  return base * (1 + 0.006 * months);
+  return base * (1 + 0.006 * months) * (currentAge >= 75 ? 1.1 : 1);
 }
 
 export function oasClawback(netIncome: number, oasReceived: number, threshold: number): number {
@@ -181,7 +181,10 @@ export type PlannerInputs = {
   lifeExpectancy: number;
   province: ProvinceCode;
   inflation: number; // %
-  growth: number; // %
+  workingGrowth?: number; // % nominal growth during accumulation
+  retirementGrowth?: number; // % nominal growth during decumulation
+  /** @deprecated Use workingGrowth and retirementGrowth. */
+  growth?: number;
   desiredIncome: number; // household after-tax, today's CAD
   annualSavings: number; // today's CAD per year until retirement
   savingsSplit: SavingsSplit; // percentages, normalised internally
@@ -323,7 +326,8 @@ const zeroDraw = (): Draw => ({ reg: 0, lif: 0, nonreg: 0, tfsa: 0 });
 export function projectRetirement(input: PlannerInputs): Projection {
   // Real-dollar engine: balances grow at the inflation-stripped return and every
   // spending need, tax bracket, CPP/OAS amount and clawback line stays at 2026 values.
-  const growth = realReturn(input.growth, input.inflation);
+  const workingGrowth = realReturn(input.workingGrowth ?? input.growth ?? 6, input.inflation);
+  const retirementGrowth = realReturn(input.retirementGrowth ?? input.growth ?? 6, input.inflation);
   const thisYear = new Date().getUTCFullYear();
 
   const specs: PersonSpec[] = input.spouse ? [input.self, input.spouse] : [input.self];
@@ -352,16 +356,16 @@ export function projectRetirement(input: PlannerInputs): Projection {
   const primary = people[0]!;
   for (let age = startAge; age < retireAge; age += 1) {
     const contribution = input.annualSavings;
-    primary.tfsa = (primary.tfsa + contribution * share.tfsa) * (1 + growth);
-    primary.rrsp = (primary.rrsp + contribution * share.rrsp) * (1 + growth);
+    primary.tfsa = (primary.tfsa + contribution * share.tfsa) * (1 + workingGrowth);
+    primary.rrsp = (primary.rrsp + contribution * share.rrsp) * (1 + workingGrowth);
     primary.acb += contribution * share.nonreg;
-    primary.nonreg = (primary.nonreg + contribution * share.nonreg) * (1 + growth);
-    primary.lira *= 1 + growth;
+    primary.nonreg = (primary.nonreg + contribution * share.nonreg) * (1 + workingGrowth);
+    primary.lira *= 1 + retirementGrowth;
     for (const p of people.slice(1)) {
-      p.tfsa *= 1 + growth;
-      p.rrsp *= 1 + growth;
-      p.lira *= 1 + growth;
-      p.nonreg *= 1 + growth;
+      p.tfsa *= 1 + retirementGrowth;
+      p.rrsp *= 1 + retirementGrowth;
+      p.lira *= 1 + retirementGrowth;
+      p.nonreg *= 1 + retirementGrowth;
     }
   }
 
@@ -381,7 +385,7 @@ export function projectRetirement(input: PlannerInputs): Projection {
     const cpp = people.map((p, i) => (ages[i]! >= p.spec.cppStartAge ? adjustedCpp(p.spec) : 0));
     const oasGross = people.map((p, i) =>
       ages[i]! >= Math.max(65, p.spec.oasStartAge)
-        ? oasAt(p.spec.oasStartAge, p.spec.oasFraction)
+        ? oasAt(p.spec.oasStartAge, p.spec.oasFraction, ages[i]!)
         : 0,
     );
     const other = people.map((p, i) => (ages[i]! >= p.spec.retirementAge ? p.spec.otherIncome : 0));
@@ -403,8 +407,8 @@ export function projectRetirement(input: PlannerInputs): Projection {
           rrsp -= rrsp * f;
           lira -= lira * f;
         }
-        rrsp *= 1 + growth;
-        lira *= 1 + growth;
+        rrsp *= 1 + retirementGrowth;
+        lira *= 1 + retirementGrowth;
       }
       return false;
     });
@@ -413,19 +417,22 @@ export function projectRetirement(input: PlannerInputs): Projection {
     /** Household tax for a set of draws, choosing the best pension split. */
     const evaluate = (draws: Draw[]) => {
       const pension = people.map((_, i) => draws[i]!.reg + draws[i]!.lif);
+      // RRSP withdrawals before conversion to a RRIF are not eligible pension
+      // income for the pension credit or the pension-income-splitting election.
+      const eligiblePension = people.map(
+        (_, i) => (ages[i]! >= 65 ? draws[i]!.lif : 0) + (ages[i]! >= 71 ? draws[i]!.reg : 0),
+      );
       const base = people.map((_, i) => cpp[i]! + oasGross[i]! + other[i]! + pension[i]!);
 
       let bestSplit = 0;
       let best: ReturnType<typeof scoreSplit> | null = null;
       const canSplit =
-        people.length === 2 && ages.some((a) => a >= 65) && pension.some((x) => x > 0);
+        people.length === 2 && eligiblePension.some((x) => x > 0);
       const options = canSplit ? [0, 0.1, 0.2, 0.3, 0.4, 0.5] : [0];
 
-      function scoreSplit(fraction: number) {
-        // Move eligible pension income from the higher-income person to the lower.
-        const hi = base[0]! >= (base[1] ?? -Infinity) ? 0 : 1;
-        const lo = hi === 0 ? 1 : 0;
-        const eligible = ages[hi]! >= 65 ? pension[hi]! : 0;
+      function scoreSplit(fraction: number, transferor: number | null) {
+        const recipient = transferor == null ? -1 : 1 - transferor;
+        const eligible = transferor == null ? 0 : eligiblePension[transferor]!;
         const moved = eligible * fraction;
 
         let taxes = 0;
@@ -440,11 +447,12 @@ export function projectRetirement(input: PlannerInputs): Projection {
         for (let i = 0; i < people.length; i += 1) {
           const p = people[i]!;
           const d = draws[i]!;
-          const adj = i === hi ? -moved : people.length === 2 && i === lo ? moved : 0;
+          const adj = i === transferor ? -moved : i === recipient ? moved : 0;
           const ordinary = base[i]! + adj;
           const gainRatio = p.nonreg > 0 ? Math.max(0, 1 - p.acb / p.nonreg) : 0;
           const gains = d.nonreg * gainRatio;
-          const pensionCredit = ages[i]! >= 65 ? Math.max(0, pension[i]! + adj) : 0;
+          const eligibleAdjustment = adj;
+          const pensionCredit = Math.max(0, eligiblePension[i]! + eligibleAdjustment);
           const t = computeTax({
             ordinary,
             capitalGains: gains,
@@ -461,11 +469,14 @@ export function projectRetirement(input: PlannerInputs): Projection {
         return { taxes, claw, taxable, perPerson, moved };
       }
 
-      for (const f of options) {
-        const s = scoreSplit(f);
-        if (!best || s.taxes < best.taxes) {
-          best = s;
-          bestSplit = f === 0 ? 0 : s.moved;
+      const transferors = canSplit ? [0, 1].filter((i) => eligiblePension[i]! > 0) : [null];
+      for (const transferor of transferors) {
+        for (const f of options) {
+          const s = scoreSplit(f, transferor);
+          if (!best || s.taxes < best.taxes) {
+            best = s;
+            bestSplit = f === 0 ? 0 : s.moved;
+          }
         }
       }
       const result = best!;
@@ -644,10 +655,10 @@ export function projectRetirement(input: PlannerInputs): Projection {
           surplus = 0;
         }
       }
-      p.rrsp *= 1 + growth;
-      p.lira *= 1 + growth;
-      p.tfsa *= 1 + growth;
-      p.nonreg *= 1 + growth;
+      p.rrsp *= 1 + retirementGrowth;
+      p.lira *= 1 + retirementGrowth;
+      p.tfsa *= 1 + retirementGrowth;
+      p.nonreg *= 1 + retirementGrowth;
 
       const info = res.perPerson[i]!;
       perPerson.push({
@@ -748,7 +759,7 @@ function adjustedCpp(spec: PersonSpec): number {
   const base = spec.cppAt65;
   if (spec.cppStartAge < 65) return base * (1 - 0.006 * (65 - spec.cppStartAge) * 12);
   if (spec.cppStartAge > 65)
-    return base * (1 + 0.0084 * Math.min(60, (spec.cppStartAge - 65) * 12));
+    return base * (1 + 0.007 * Math.min(60, (spec.cppStartAge - 65) * 12));
   return base;
 }
 

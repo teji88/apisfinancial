@@ -123,10 +123,11 @@ function Dashboard() {
     const realized = summaries.reduce((s, x) => s + x.realizedGain, 0);
     const dividends = summaries.reduce((s, x) => s + x.dividends, 0);
     const dayChange = summaries.reduce((s, x) => s + x.dayChange, 0);
-    const netDeposits = summaries.reduce((s, x) => s + x.netDeposits, 0);
-
     const cashAccounts = cashTrackingIds(accounts);
     const flows = externalFlows(transactions, cashAccounts);
+    const cashAdded = flows.reduce((sum, flow) => sum + Math.max(0, -flow.amount), 0);
+    const cashWithdrawn = flows.reduce((sum, flow) => sum + Math.max(0, flow.amount), 0);
+    const profitLoss = totalValue - cashAdded + cashWithdrawn;
     const mwrr =
       flows.length > 0 && totalValue !== 0
         ? xirr([...flows, { date: new Date(), amount: totalValue }])
@@ -144,7 +145,9 @@ function Dashboard() {
       realized,
       dividends,
       dayChange,
-      netDeposits,
+      cashAdded,
+      cashWithdrawn,
+      profitLoss,
       mwrr,
       twrrTotal,
       twrrAnnual,
@@ -241,9 +244,10 @@ function Dashboard() {
               }
             />
             <ReturnStat
-              label="Net deposits"
-              value={formatCad(totals.netDeposits)}
-              note="Contributions less withdrawals"
+              label="Total profit / loss"
+              value={formatCad(totals.profitLoss)}
+              note="Current value plus withdrawals, less contributions"
+              tone={totals.profitLoss >= 0 ? "gain" : "loss"}
             />
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
@@ -481,14 +485,30 @@ function StatCard({
   );
 }
 
-function ReturnStat({ label, value, note }: { label: string; value: string; note: string }) {
+function ReturnStat({
+  label,
+  value,
+  note,
+  tone,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  tone?: "gain" | "loss";
+}) {
   return (
     <div className="rounded-md bg-muted/60 p-4">
       <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
         <TrendingUp className="h-3.5 w-3.5" />
         {label}
       </p>
-      <p className="num mt-2 text-xl font-semibold">{value}</p>
+      <p
+        className={`num mt-2 text-xl font-semibold ${
+          tone === "gain" ? "text-gain" : tone === "loss" ? "text-loss" : ""
+        }`}
+      >
+        {value}
+      </p>
       <p className="mt-1 text-xs text-muted-foreground">{note}</p>
     </div>
   );
