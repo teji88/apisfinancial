@@ -47,7 +47,6 @@ import {
 } from "@/lib/retirement";
 
 import { PROVINCES, PROVINCE_CODES, type ProvinceCode } from "@/lib/tax";
-import { projectResp, projectRdsp } from "@/lib/family-accounts";
 import { Button } from "@/components/ui/button";
 import { Lock } from "lucide-react";
 import { useEntitlement } from "@/lib/entitlement";
@@ -101,8 +100,6 @@ const RRSP_TYPES = ["RRSP", "Spousal RRSP"];
 const LIRA_TYPES = ["LIRA", "LRSP"];
 const FHSA_TYPES = ["FHSA"];
 const NONREG_TYPES = ["Non-Registered", "Corporate"];
-const RESP_TYPES = ["RESP"];
-const RDSP_TYPES = ["RDSP"];
 
 function num(v: string, fallback = 0) {
   const cleaned = v.replace(/[^0-9.-]/g, "");
@@ -262,23 +259,6 @@ function RetirementPage() {
   const [policy, setPolicy] = useState<WithdrawalPolicy>("TAX_TARGETED");
   const [objective, setObjective] = useState<StrategyObjective>("MIN_TAX");
 
-  /** RESP/RDSP money counted as retirement savings only when switched on. */
-  // Education and disability plans are drawn by the child, not by you, so they
-  // get their own what-if settings rather than joining your retirement pots.
-  const [resp, setResp] = useState({
-    beneficiaryAge: 10,
-    studyStartAge: 18,
-    studyYears: 4,
-    contributionRatio: 0.6,
-    studentOtherIncome: 5000,
-  });
-  const [rdsp, setRdsp] = useState({
-    beneficiaryAge: 20,
-    paymentStartAge: 50,
-    paymentYears: 20,
-    contributionRatio: 0.3,
-    beneficiaryOtherIncome: 0,
-  });
 
   useEffect(() => {
     if (authLoading || form) return;
@@ -324,8 +304,6 @@ function RetirementPage() {
       lira: pick(LIRA_TYPES),
       fhsa: pick(FHSA_TYPES),
       nonreg: pick(NONREG_TYPES),
-      resp: pick(RESP_TYPES),
-      rdsp: pick(RDSP_TYPES),
     };
   }, [accounts, transactions, holdings, quotes, fxUsdCad]);
 
@@ -367,14 +345,6 @@ function RetirementPage() {
     };
   }, [p, byType]);
 
-  const respPlan = useMemo(
-    () => projectResp({ balance: byType.resp, ...resp }),
-    [byType.resp, resp],
-  );
-  const rdspPlan = useMemo(
-    () => projectRdsp({ balance: byType.rdsp, ...rdsp }),
-    [byType.rdsp, rdsp],
-  );
 
   const derived = useMemo(() => {
     if (!p) return null;
@@ -1237,169 +1207,6 @@ function RetirementPage() {
             </div>
           </div>
 
-          <div className="panel space-y-3 p-5">
-            <div>
-              <p className="text-sm font-medium">Education and disability plans</p>
-              <p className="text-xs text-muted-foreground">
-                An RESP or RDSP is drawn by the child or the beneficiary and taxed in their hands,
-                so it never counts as your income and can never reduce your OAS. Plan each one
-                separately below.
-              </p>
-            </div>
-
-            {!isProPlus ? (
-              <button
-                type="button"
-                onClick={() => openPrompt(PLUS_REASON)}
-                className="flex w-full items-center gap-2 rounded-lg border border-dashed px-4 py-3 text-left text-sm text-muted-foreground"
-              >
-                <Lock className="h-4 w-4" />
-                Planning a child's RESP or RDSP withdrawals is part of Pro+.
-              </button>
-            ) : (
-              <div className="grid gap-6 lg:grid-cols-2">
-                <div className="space-y-3">
-                  <p className="text-sm font-medium">
-                    RESP · {formatCad(byType.resp)} across your education accounts
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Child's age now">
-                      <Input
-                        type="number"
-                        value={resp.beneficiaryAge}
-                        onChange={(e) =>
-                          setResp((r) => ({ ...r, beneficiaryAge: num(e.target.value, 10) }))
-                        }
-                      />
-                    </Field>
-                    <Field label="Studies start at">
-                      <Input
-                        type="number"
-                        value={resp.studyStartAge}
-                        onChange={(e) =>
-                          setResp((r) => ({ ...r, studyStartAge: num(e.target.value, 18) }))
-                        }
-                      />
-                    </Field>
-                    <Field label="Years of study">
-                      <Input
-                        type="number"
-                        value={resp.studyYears}
-                        onChange={(e) =>
-                          setResp((r) => ({ ...r, studyYears: num(e.target.value, 4) }))
-                        }
-                      />
-                    </Field>
-                    <Field label="Your contributions (% of plan)">
-                      <Input
-                        type="number"
-                        value={Math.round(resp.contributionRatio * 100)}
-                        onChange={(e) =>
-                          setResp((r) => ({
-                            ...r,
-                            contributionRatio: Math.min(
-                              1,
-                              Math.max(0, num(e.target.value, 60) / 100),
-                            ),
-                          }))
-                        }
-                      />
-                    </Field>
-                    <Field label="Student's other income each year">
-                      <Input
-                        type="number"
-                        value={resp.studentOtherIncome}
-                        onChange={(e) =>
-                          setResp((r) => ({ ...r, studentOtherIncome: num(e.target.value) }))
-                        }
-                      />
-                    </Field>
-                  </div>
-                  <div className="rounded-lg bg-muted/40 p-3 text-xs">
-                    <p className="text-sm font-medium">
-                      {formatCad(respPlan.totalWithdrawn)} out · {formatCad(respPlan.totalTax)} tax
-                      ({respPlan.effectiveRate.toFixed(1)}%)
-                    </p>
-                    <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
-                      {respPlan.notes.map((n) => (
-                        <li key={n}>{n}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <p className="text-sm font-medium">
-                    RDSP · {formatCad(byType.rdsp)} across your disability accounts
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Beneficiary's age now">
-                      <Input
-                        type="number"
-                        value={rdsp.beneficiaryAge}
-                        onChange={(e) =>
-                          setRdsp((r) => ({ ...r, beneficiaryAge: num(e.target.value, 20) }))
-                        }
-                      />
-                    </Field>
-                    <Field label="Payments start at">
-                      <Input
-                        type="number"
-                        value={rdsp.paymentStartAge}
-                        onChange={(e) =>
-                          setRdsp((r) => ({ ...r, paymentStartAge: num(e.target.value, 50) }))
-                        }
-                      />
-                    </Field>
-                    <Field label="Years of payments">
-                      <Input
-                        type="number"
-                        value={rdsp.paymentYears}
-                        onChange={(e) =>
-                          setRdsp((r) => ({ ...r, paymentYears: num(e.target.value, 20) }))
-                        }
-                      />
-                    </Field>
-                    <Field label="Private contributions (% of plan)">
-                      <Input
-                        type="number"
-                        value={Math.round(rdsp.contributionRatio * 100)}
-                        onChange={(e) =>
-                          setRdsp((r) => ({
-                            ...r,
-                            contributionRatio: Math.min(
-                              1,
-                              Math.max(0, num(e.target.value, 30) / 100),
-                            ),
-                          }))
-                        }
-                      />
-                    </Field>
-                    <Field label="Beneficiary's other income each year">
-                      <Input
-                        type="number"
-                        value={rdsp.beneficiaryOtherIncome}
-                        onChange={(e) =>
-                          setRdsp((r) => ({ ...r, beneficiaryOtherIncome: num(e.target.value) }))
-                        }
-                      />
-                    </Field>
-                  </div>
-                  <div className="rounded-lg bg-muted/40 p-3 text-xs">
-                    <p className="text-sm font-medium">
-                      {formatCad(rdspPlan.totalWithdrawn)} out · {formatCad(rdspPlan.totalTax)} tax
-                      ({rdspPlan.effectiveRate.toFixed(1)}%)
-                    </p>
-                    <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
-                      {rdspPlan.notes.map((n) => (
-                        <li key={n}>{n}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
 
           <div className="flex justify-end">
             <Button onClick={save} disabled={updateProfile.isPending}>
