@@ -291,6 +291,17 @@ function LedgerPage() {
       toast.error("Enter how many new shares you get for each old share.");
       return;
     }
+    if (type === "SELL") {
+      const quantity = Number(units || 0);
+      const holding = holdings.find(
+        (h) => h.account_id === targetAccount && h.symbol === cleanSymbol,
+      );
+      const available = holding ? unitsHeldBeforeDate(holding.id, transactions, date) : 0;
+      if (quantity <= 0 || quantity > available + 1e-9) {
+        toast.error(`You can sell at most ${formatUnits(available)} shares held before that date.`);
+        return;
+      }
+    }
     try {
       await addTransaction.mutateAsync({
         accountId: targetAccount,
@@ -736,6 +747,7 @@ function LedgerPage() {
           transaction={editing}
           accounts={accounts}
           holdings={holdings}
+          transactions={transactions}
           onClose={() => setEditing(null)}
         />
       ) : null}
@@ -747,11 +759,13 @@ function EditTransactionDialog({
   transaction,
   accounts,
   holdings,
+  transactions,
   onClose,
 }: {
   transaction: Transaction;
   accounts: Account[];
   holdings: Holding[];
+  transactions: Transaction[];
   onClose: () => void;
 }) {
   const updateTransaction = useUpdateTransaction();
@@ -792,6 +806,19 @@ function EditTransactionDialog({
     if (isSplit && !(Number(units || 0) > 0)) {
       toast.error("Enter how many new shares you get for each old share.");
       return;
+    }
+    if (type === "SELL") {
+      const quantity = Number(units || 0);
+      const targetHolding = holdings.find(
+        (h) => h.account_id === accountId && h.symbol === normalizeTicker(symbol),
+      );
+      const available = targetHolding
+        ? unitsHeldBeforeDate(targetHolding.id, transactions, date, transaction.id)
+        : 0;
+      if (quantity <= 0 || quantity > available + 1e-9) {
+        toast.error(`You can sell at most ${formatUnits(available)} shares held before that date.`);
+        return;
+      }
     }
     try {
       await updateTransaction.mutateAsync({
@@ -968,4 +995,31 @@ function EditTransactionDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function unitsHeldBeforeDate(
+  holdingId: string,
+  transactions: Transaction[],
+  date: string,
+  excludedId?: string,
+): number {
+  let units = 0;
+  const ordered = transactions
+    .filter(
+      (t) =>
+        t.holding_id === holdingId &&
+        t.id !== excludedId &&
+        t.transaction_date < date,
+    )
+    .slice()
+    .sort(
+      (a, b) =>
+        a.transaction_date.localeCompare(b.transaction_date) || a.id.localeCompare(b.id),
+    );
+  for (const t of ordered) {
+    if (t.transaction_type === "BUY" || t.transaction_type === "DRIP") units += t.units || 0;
+    else if (t.transaction_type === "SELL") units = Math.max(0, units - (t.units || 0));
+    else if (t.transaction_type === "SPLIT") units *= (t.units || 0) > 0 ? t.units : 1;
+  }
+  return units;
 }
