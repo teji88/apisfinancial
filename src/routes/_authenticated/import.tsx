@@ -1,22 +1,34 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   FileUp,
   Loader2,
   Lock,
   PencilLine,
   Sparkles,
   Trash2,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { parseStatement, type ParsedTransaction } from "@/lib/import.functions";
 import { parseCsvText, type CsvPortfolio } from "@/lib/csv-import";
 import { classifyFile } from "@/lib/file-kind";
 import { getFxRateOn } from "@/lib/history.functions";
-import { useAccounts, useHoldings, useAddTransaction, createAccount } from "@/lib/portfolio";
+import { learnCsvMapping } from "@/lib/csv-learn.functions";
+import {
+  buildLearnedProfile,
+  deleteLearnedProfile,
+  loadLearnedProfiles,
+  saveLearnedProfile,
+  type LearnedColumnField,
+  type LearnedProfile,
+} from "@/lib/csv-learn";
+import { findDuplicateRows } from "@/lib/duplicate-check";
+import { useAccounts, useHoldings, useAddTransaction, createAccount, useTransactions } from "@/lib/portfolio";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { ACCOUNT_TYPES, OWNER_LABELS, TRANSACTION_TYPES } from "@/lib/finance";
@@ -112,10 +124,12 @@ async function readHeaderBytes(file: File): Promise<Uint8Array> {
 function ImportPage() {
   const accounts = useAccounts();
   const holdingsQuery = useHoldings();
+  const transactionsQuery = useTransactions();
   const { entitlement } = useEntitlement();
   const addTransaction = useAddTransaction();
   const fxOnDate = useServerFn(getFxRateOn);
   const parseStatementFn = useServerFn(parseStatement);
+  const learnMappingFn = useServerFn(learnCsvMapping);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [dragging, setDragging] = useState(false);
@@ -129,12 +143,30 @@ function ImportPage() {
   const [mapping, setMapping] = useState<Record<string, Mapping>>({});
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const holdings = holdingsQuery.data ?? [];
+  const ledgerTransactions = transactionsQuery.data ?? [];
   const isPro = entitlement.tier !== "free";
   const [upgradeReason, setUpgradeReason] = useState<string | null>(null);
+  // AI-learned CSV layouts, persisted on this device.
+  const [learnedProfiles, setLearnedProfiles] = useState<LearnedProfile[]>([]);
+  // A CSV the deterministic parser could not read, awaiting AI mapping.
+  const [learnCandidate, setLearnCandidate] = useState<{ fileName: string; text: string } | null>(null);
+  const [learning, setLearning] = useState(false);
+
+  useEffect(() => {
+    setLearnedProfiles(loadLearnedProfiles());
+  }, []);
 
   const accountList = accounts.data ?? [];
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pagedRows = rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+  /** Rows that probably duplicate a transaction already in the ledger. */
+  const duplicateIdx = useMemo(() => {
+    if (rows.length === 0 || ledgerTransactions.length === 0) return new Set<number>();
+    const holdingSymbols = new Map(holdings.map((h) => [h.id, h.symbol]));
+    return findDuplicateRows(rows, ledgerTransactions, holdingSymbols);
+  }, [rows, ledgerTransactions, holdings]);
+  const duplicateCount = duplicateIdx.size;
 
   function matchAccount(parsed: { account_type: string }): string {
     const byType = accountList.find(
@@ -261,9 +293,31 @@ function ImportPage() {
     }
     setBusy(true);
     setPage(0);
+    setLearnCandidate(null);
     try {
       if (kind === "csv-text") {
-        const result = parseCsvText(await readAsText(file), file.name);
+        const text = await readAsText(file);
+        let result;
+        try {
+          result = parseCsvText(text, file.name, learnedProfiles);
+        } catch (parseError) {
+          // The deterministic parser could not read this layout. Pro users
+          // get it learned automatically in the background; free users are
+          // pointed at the upgrade.
+          const message = parseError instanceof Error ? parseError.message : "";
+          if (/header row/i.test(message)) {
+            if (!isPro) {
+              setUpgradeReason(
+                "That CSV's layout is unfamiliar. Pro learns its columns automatically — once learned, the layout imports free forever.",
+              );
+              setUpgradeOpen(true);
+              return;
+            }
+            await runLearnLayout({ fileName: file.name, text });
+            return;
+          }
+          throw parseError;
+        }
         setBroker(`${result.broker} · read directly, no AI credits used`);
         setRows(
           result.transactions.map((t, i) => ({
@@ -352,6 +406,81 @@ function ImportPage() {
 
   function update(rowId: string, patch: Partial<Row>) {
     setRows((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, ...patch } : r)));
+  }
+
+  /**
+   * Ask the AI to map an unfamiliar CSV's columns, save the layout on this
+   * device, and re-parse deterministically. One paid call; every future
+   * import of the same format is free. Runs automatically for Pro users;
+   * the retry card appears only if the automatic attempt fails.
+   */
+  async function runLearnLayout(candidate: { fileName: string; text: string }) {
+    if (learning) return;
+    setLearning(true);
+    try {
+      const sample = candidate.text.split("\n").slice(0, 30).join("\n");
+      const learned = await learnMappingFn({
+        data: { fileName: candidate.fileName, sample },
+      });
+      // Fingerprint against the live header row so the saved layout matches
+      // exactly what the parser will see: the row containing the mapped date
+      // column wins.
+      const { parseCsvTable } = await import("@/lib/csv-parse");
+      const { normalizeHeader } = await import("@/lib/institution-profiles");
+      const table = parseCsvTable(candidate.text);
+      const dateHeader = normalizeHeader(learned.columns.date);
+      const headerRow = table
+        .slice(0, 25)
+        .find((row) => row.some((cell) => normalizeHeader(cell) === dateHeader));
+      if (!headerRow) throw new Error("Could not locate the header row in that file.");
+      // Drop unmapped fields so the profile only claims what the AI found.
+      const columns = Object.fromEntries(
+        Object.entries(learned.columns).filter(([, v]) => v != null),
+      ) as Partial<Record<LearnedColumnField, string>>;
+      const profile = buildLearnedProfile({
+        name: learned.institution_name,
+        headers: headerRow,
+        columns,
+        typeMap: learned.type_map,
+      });
+      const next = saveLearnedProfile(profile);
+      setLearnedProfiles(next);
+      const result = parseCsvText(candidate.text, candidate.fileName, next);
+      setBroker(`${result.broker} · layout learned, no AI credits used from here on`);
+      setRows(
+        result.transactions.map((t, i) => ({
+          account_type: "Non-Registered",
+          account_hint: t.portfolio,
+          date: t.date,
+          type: t.type,
+          symbol: t.symbol,
+          name: null,
+          quantity: t.quantity,
+          price: t.price,
+          amount: t.amount,
+          currency: t.currency,
+          fee: t.fee ?? 0,
+          confidence: t.confidence ?? 0.9,
+          note: t.note,
+          rowId: `learned-${i}`,
+          portfolio: t.portfolio,
+          fx: t.fx,
+          accountId: "",
+        })),
+      );
+      setPortfolios(result.portfolios);
+      setMapping(defaultMapping(result.portfolios));
+      setLearnCandidate(null);
+      toast.success(
+        `Learned the "${profile.name}" layout — saved on this device. Future files in this format import automatically.`,
+      );
+    } catch (error) {
+      // Leave the retry card up so the user can try again manually.
+      setLearnCandidate(candidate);
+      toast.error(error instanceof Error ? error.message : "Could not learn that layout.");
+    } finally {
+      setLearning(false);
+    }
   }
 
   /** A row is committable when it has a type, a date, and some value to record. */
@@ -480,9 +609,13 @@ function ImportPage() {
         {busy ? (
           <>
             <Loader2 className="h-7 w-7 animate-spin text-primary" />
-            <p className="text-sm font-medium">Reading your statement…</p>
+            <p className="text-sm font-medium">
+              {learning ? "Learning this CSV's layout…" : "Reading your statement…"}
+            </p>
             <p className="text-xs text-muted-foreground">
-              This can take up to a minute for long PDFs.
+              {learning
+                ? "One quick AI look at the columns — then it's saved and free forever."
+                : "This can take up to a minute for long PDFs."}
             </p>
           </>
         ) : (
@@ -529,6 +662,34 @@ function ImportPage() {
           </>
         )}
       </div>
+
+      {learnCandidate && !busy && !learning ? (
+        <div className="panel flex flex-col items-center gap-3 p-8 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Wand2 className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-sm font-medium">Couldn't learn this layout automatically</p>
+            <p className="mt-1 max-w-md text-xs text-muted-foreground">
+              The automatic attempt for {learnCandidate.fileName} failed. You can try again — once
+              the layout is learned it is saved on this device and future files import free.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button
+              size="sm"
+              disabled={learning}
+              onClick={() => void runLearnLayout(learnCandidate)}
+            >
+              {learning ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              {learning ? "Learning the layout…" : "Try learning again"}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setLearnCandidate(null)}>
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {portfolios.length > 0 ? (
         <div className="panel overflow-hidden">
@@ -653,6 +814,17 @@ function ImportPage() {
 
       {rows.length > 0 && portfolios.length === 0 ? (
         <div className="panel overflow-hidden">
+          {duplicateCount > 0 ? (
+            <div className="flex items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-5 py-3 text-sm">
+              <Copy className="h-4 w-4 shrink-0 text-amber-600" />
+              <p>
+                <span className="font-medium">{duplicateCount} row{duplicateCount === 1 ? "" : "s"}{" "}
+                {duplicateCount === 1 ? "looks" : "look"} like {duplicateCount === 1 ? "a duplicate" : "duplicates"}</span>{" "}
+                of {duplicateCount === 1 ? "a transaction" : "transactions"} already in your ledger. They're
+                flagged below — remove {duplicateCount === 1 ? "it" : "them"} or approve anyway.
+              </p>
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -698,9 +870,10 @@ function ImportPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pagedRows.map((row) => {
+                {pagedRows.map((row, pageIndex) => {
                   const low = row.confidence < 0.8;
                   const incomplete = isRowIncomplete(row);
+                  const isDupe = duplicateIdx.has(page * PAGE_SIZE + pageIndex);
                   // Show the derivable total when the reader left amount blank;
                   // anything the user types replaces it.
                   const derived = row.amount == null ? derivedAmount(row) : null;
@@ -711,7 +884,15 @@ function ImportPage() {
                       className={incomplete ? "bg-amber-500/10" : low ? "bg-primary/5" : undefined}
                     >
                       <TableCell className="whitespace-nowrap">
-                        {low ? (
+                        {isDupe ? (
+                          <span
+                            className="flex items-center gap-1 text-xs text-amber-600"
+                            title="This row matches a transaction already in your ledger"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            Duplicate?
+                          </span>
+                        ) : low ? (
                           <span
                             className="flex items-center gap-1 text-xs text-loss"
                             title={row.note ?? "Please double-check this row"}
@@ -882,6 +1063,44 @@ function ImportPage() {
             Rows highlighted in red were uncertain — check the date, amount and account before
             approving. Account types recognised: {ACCOUNT_TYPES.join(", ")}.
           </p>
+        </div>
+      ) : null}
+
+      {learnedProfiles.length > 0 ? (
+        <div className="panel overflow-hidden">
+          <div className="border-b px-5 py-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Learned CSV layouts
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Formats AI mapped for you, saved on this device. Matching files import automatically —
+              no AI needed.
+            </p>
+          </div>
+          <div className="divide-y">
+            {learnedProfiles.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <div>
+                  <p className="text-sm font-medium">{p.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {p.headerFingerprint.length} columns · saved{" "}
+                    {new Date(p.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Forget the ${p.name} layout`}
+                  onClick={() => {
+                    setLearnedProfiles(deleteLearnedProfile(p.id));
+                    toast.success(`Forgot the "${p.name}" layout.`);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 

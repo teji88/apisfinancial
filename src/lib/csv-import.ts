@@ -31,6 +31,11 @@ import {
   type CsvTransaction,
 } from "./csv-parse";
 import { PROFILES, finish, normalizeHeader } from "./institution-profiles";
+import {
+  matchLearnedProfile,
+  parseWithLearnedProfile,
+  type LearnedProfile,
+} from "./csv-learn";
 
 // Re-exported for compatibility; importers should prefer ./csv-parse.
 export {
@@ -203,7 +208,11 @@ function parseGeneric(table: string[][], fileName: string): CsvParseResult {
 
 /* ---------------------------------- entry ---------------------------------- */
 
-export function parseCsvText(text: string, fileName: string): CsvParseResult {
+export function parseCsvText(
+  text: string,
+  fileName: string,
+  learnedProfiles: LearnedProfile[] = [],
+): CsvParseResult {
   // Text-shape profiles first (sectioned exports have no header row).
   for (const profile of PROFILES) {
     if (profile.detectText?.(text)) {
@@ -219,6 +228,14 @@ export function parseCsvText(text: string, fileName: string): CsvParseResult {
   for (const profile of PROFILES) {
     if (profile.detectHeaders?.(headers)) {
       return profile.parse(table, fileName, text);
+    }
+  }
+  // AI-learned layouts saved from earlier imports: exact fingerprint match,
+  // deterministic parse, no AI cost.
+  if (learnedProfiles.length > 0) {
+    const learned = matchLearnedProfile(headers, learnedProfiles);
+    if (learned) {
+      return parseWithLearnedProfile(table, fileName, learned);
     }
   }
   return parseGeneric(table, fileName);
