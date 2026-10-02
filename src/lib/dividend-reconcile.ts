@@ -35,12 +35,16 @@ export function isUsListed(holding: Holding, _event?: DividendEvent): boolean {
   if (/[.-]UN(\.TO)?$/.test(s)) return false;
   if (holding.currency === "CAD") return false;
   const bare = s.replace(/^[A-Z]+:/, "").replace(/-/g, ".");
-  if (CANADIAN_BASE_SET.has(bare) && holding.currency !== "USD") return false;
+  if (CANADIAN_BASE_SET.has(bare)) return false;
   return holding.currency === "USD";
 }
 
 /** Expected foreign withholding rate for a holding in this account. */
-export function withholdingRate(account: Account | undefined, holding: Holding, event?: DividendEvent) {
+export function withholdingRate(
+  account: Account | undefined,
+  holding: Holding,
+  event?: DividendEvent,
+) {
   if (!isUsListed(holding, event)) return 0;
   const type = (account?.account_type ?? "").toUpperCase();
   if (TREATY_EXEMPT.includes(type)) return 0;
@@ -80,7 +84,8 @@ function recordedInListing(
   expected: number,
   gross: number,
 ): { amount: number; impliedFx: number | null } {
-  const raw = t.amount != null && t.amount !== 0 ? t.amount : (t.units || 0) * (t.price_per_unit || 0);
+  const raw =
+    t.amount != null && t.amount !== 0 ? t.amount : (t.units || 0) * (t.price_per_unit || 0);
   const fx = t.fx_rate || 1;
   if (listingCurrency === "USD" && (t.currency === "CAD" || t.currency !== "USD")) {
     if (fx > 1.05) return { amount: raw / fx, impliedFx: null };
@@ -93,7 +98,8 @@ function recordedInListing(
     return { amount: raw, impliedFx: null };
   }
   if (t.currency === listingCurrency) return { amount: raw, impliedFx: null };
-  if (listingCurrency === "CAD" && t.currency === "USD") return { amount: raw * (fx > 1.05 ? fx : 1), impliedFx: null };
+  if (listingCurrency === "CAD" && t.currency === "USD")
+    return { amount: raw * (fx > 1.05 ? fx : 1), impliedFx: null };
   return { amount: raw, impliedFx: null };
 }
 
@@ -114,6 +120,8 @@ export type DividendSuggestion = {
   withholdingRate: number;
   /** Amount that should be in the ledger (net of any legitimate withholding). */
   expected: number;
+  /** Fallback quote-feed event has an ex-date but no known payment date. */
+  awaitingPayDate?: boolean | undefined;
   /** For fixes: the existing transaction and what it currently says. */
   transactionId?: string | undefined;
   recordedAmount?: number | undefined;
@@ -147,17 +155,21 @@ export function reconcileDividends(
     const txns = (byHolding.get(h.id) ?? [])
       .slice()
       .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
-    const firstBuy = txns.find((t) => t.transaction_type === "BUY" || t.transaction_type === "DRIP");
+    const firstBuy = txns.find(
+      (t) => t.transaction_type === "BUY" || t.transaction_type === "DRIP",
+    );
     if (!firstBuy) continue;
     const recorded = txns.filter((t) => isDividendType(t.transaction_type));
     const used = new Set<string>();
     const account = accountById.get(h.account_id);
 
-    const seenEvents = new Set<string>();
+    const uniqueEvents = new Map<string, DividendEvent>();
     for (const ev of events) {
-      const evKey = `${ev.exDate}|${ev.payDate ?? ""}|${ev.amount}|${ev.currency}`;
-      if (seenEvents.has(evKey)) continue; // Duplicate feed row — same payment.
-      seenEvents.add(evKey);
+      const evKey = `${ev.exDate}|${ev.amount}|${ev.currency}`;
+      const prior = uniqueEvents.get(evKey);
+      if (!prior || (!prior.payDate && ev.payDate)) uniqueEvents.set(evKey, ev);
+    }
+    for (const ev of uniqueEvents.values()) {
       if (ev.exDate <= firstBuy.transaction_date) continue;
       const payDate = ev.payDate ?? ev.exDate;
       if (payDate > today) continue;
@@ -197,7 +209,12 @@ export function reconcileDividends(
       }
 
       if (!match) {
-        out.push({ ...base, key: `${h.id}|${ev.exDate}|${ev.amount}`, kind: "missing", reasons: [] });
+        out.push({
+          ...base,
+          key: `${h.id}|${ev.exDate}|${ev.amount}`,
+          kind: "missing",
+          reasons: [],
+        });
         continue;
       }
       used.add(match.id);
@@ -230,7 +247,7 @@ export function reconcileDividends(
         }
       }
       const dateGap = dayDiff(match.transaction_date, payDate);
-      if (Math.abs(dateGap) > 3) {
+      if (Math.abs(dateGap) > 7) {
         reasons.push(
           `Recorded on ${match.transaction_date}, but the payment date was ${payDate} (${Math.abs(dateGap)} days ${dateGap > 0 ? "late" : "early"}).`,
         );

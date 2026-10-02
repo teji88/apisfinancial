@@ -68,22 +68,31 @@ export type BenchmarkId = string;
 
 export type SeriesMap = Map<string, { currency: string; points: HistoryPoint[] }>;
 
-/** Most recent close at or before `date`. */
+/**
+ * Most recent close at or before `date`.
+ *
+ * If the requested date is before the first available close (which can happen
+ * when a trade lands on a holiday/weekend and the history window is too short),
+ * use the nearest available trading-day close instead of dropping the cash flow.
+ */
 export function closeOn(points: HistoryPoint[], date: string): number | null {
+  if (points.length === 0) return null;
   let lo = 0;
   let hi = points.length - 1;
-  let best: number | null = null;
+  let best: HistoryPoint | null = null;
+  let firstAfter: HistoryPoint | null = null;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
     const p = points[mid]!;
     if (p.date <= date) {
-      best = p.close;
+      best = p;
       lo = mid + 1;
     } else {
+      firstAfter = p;
       hi = mid - 1;
     }
   }
-  return best ?? points[0]?.close ?? null;
+  return best?.close ?? firstAfter?.close ?? null;
 }
 
 export function fxOn(fx: HistoryPoint[], date: string, fallback: number): number {
@@ -175,18 +184,43 @@ export function contributionFlows(
   cashAccounts?: Set<string>,
 ): FlowPoint[] {
   const flows: FlowPoint[] = [];
-  for (const t of transactions) {
-    const date = t.transaction_date;
-    const gross = grossOf(t);
-    const fee = (t.fee || 0) * (t.fx_rate || 1);
-    if (tracksCash(t, cashAccounts)) {
-      if (t.transaction_type === "DEPOSIT") flows.push({ date, amount: gross });
-      else if (t.transaction_type === "WITHDRAWAL") flows.push({ date, amount: -gross });
-      continue;
+  let trackedCash = 0;
+  const ordered = transactions
+    .slice()
+    .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
+  for (let i = 0; i < ordered.length;) {
+    const date = ordered[i]!.transaction_date;
+    let cashDeltaForDay = 0;
+    let flowForDay = 0;
+    let hasTrackedCashTransactions = false;
+    while (i < ordered.length && ordered[i]!.transaction_date === date) {
+      const t = ordered[i++]!;
+      const gross = grossOf(t);
+      const fee = (t.fee || 0) * (t.fx_rate || 1);
+      if (tracksCash(t, cashAccounts)) {
+        hasTrackedCashTransactions = true;
+        cashDeltaForDay += cashDelta(t, cashAccounts);
+        if (t.transaction_type === "DEPOSIT") flowForDay += gross;
+        else if (t.transaction_type === "WITHDRAWAL") flowForDay -= gross;
+      } else if (t.transaction_type === "BUY") {
+        flows.push({ date, amount: gross + fee });
+      } else if (t.transaction_type === "SELL") {
+        flows.push({ date, amount: -(gross - fee) });
+      } else if (t.transaction_type === "DIVIDEND") {
+        flows.push({ date, amount: -gross });
+      }
     }
-    if (t.transaction_type === "BUY") flows.push({ date, amount: gross + fee });
-    else if (t.transaction_type === "SELL") flows.push({ date, amount: -(gross - fee) });
-    else if (t.transaction_type === "DIVIDEND") flows.push({ date, amount: -gross });
+    if (hasTrackedCashTransactions) {
+      trackedCash += cashDeltaForDay;
+      if (trackedCash < 0) {
+        // The valuation series floors negative cash at zero. Record the
+        // funding shortfall as an implied contribution so it cannot appear as
+        // investment return; grouping by date avoids depending on row order.
+        flowForDay -= trackedCash;
+        trackedCash = 0;
+      }
+      if (flowForDay !== 0) flows.push({ date, amount: flowForDay });
+    }
   }
   return flows.sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -260,22 +294,27 @@ export function portfolioValueSeries(
 
   return grid.map((date) => {
     while (idx < txns.length && txns[idx]!.transaction_date <= date) {
-      const t = txns[idx]!;
-      cash += cashDelta(t, cashAccounts);
-      if (cash < 0) cash = 0; // implied contribution covers the shortfall
-      if (t.holding_id && (t.transaction_type === "BUY" || t.transaction_type === "DRIP")) {
-        units.set(t.holding_id, (units.get(t.holding_id) ?? 0) + (t.units || 0));
+      const transactionDate = txns[idx]!.transaction_date;
+      while (idx < txns.length && txns[idx]!.transaction_date === transactionDate) {
+        const t = txns[idx]!;
+        cash += cashDelta(t, cashAccounts);
+        if (t.holding_id && (t.transaction_type === "BUY" || t.transaction_type === "DRIP")) {
+          units.set(t.holding_id, (units.get(t.holding_id) ?? 0) + (t.units || 0));
+        }
+        if (t.holding_id && t.transaction_type === "SELL") {
+          units.set(t.holding_id, (units.get(t.holding_id) ?? 0) - (t.units || 0));
+        }
+        // A split moves no money: it only rescales the units and the ledger
+        // price, leaving both portfolio value and external flows unchanged.
+        if (t.holding_id && t.transaction_type === "SPLIT") {
+          const ratio = (t.units || 0) > 0 ? t.units! : 1;
+          units.set(t.holding_id, (units.get(t.holding_id) ?? 0) * ratio);
+        }
+        idx++;
       }
-      if (t.holding_id && t.transaction_type === "SELL") {
-        units.set(t.holding_id, (units.get(t.holding_id) ?? 0) - (t.units || 0));
-      }
-      // A split moves no money; it only rescales units, so contributions and
-      // benchmarks are untouched.
-      if (t.holding_id && t.transaction_type === "SPLIT") {
-        const ratio = (t.units || 0) > 0 ? t.units! : 1;
-        units.set(t.holding_id, (units.get(t.holding_id) ?? 0) * ratio);
-      }
-      idx++;
+      // Match the flow calculation's daily cash floor after all same-day
+      // transactions have been netted, regardless of database row order.
+      if (cash < 0) cash = 0;
     }
 
     let value = cash;
@@ -340,14 +379,75 @@ export function benchmarkValueSeries(
 export function stepFlowSeries(grid: string[], flows: FlowPoint[]): number[] {
   const sorted = flows.slice().sort((a, b) => a.date.localeCompare(b.date));
   let idx = 0;
+  let previous = "";
   return grid.map((date) => {
     let sum = 0;
-    while (idx < sorted.length && sorted[idx]!.date <= date) {
+    while (
+      idx < sorted.length &&
+      (previous
+        ? sorted[idx]!.date > previous && sorted[idx]!.date <= date
+        : sorted[idx]!.date <= date)
+    ) {
       sum += sorted[idx]!.amount;
       idx++;
     }
+    previous = date;
     return sum;
   });
+}
+
+
+/**
+ * Modified Dietz return for a grid subperiod: exact when the grid carries a
+ * valuation on every cash-flow date, a day-weighted approximation otherwise.
+ *
+ * Flows on `startDate` are excluded — they are already reflected in
+ * `startValue` — unless `includeStartFlows` is set. That flag is for the
+ * synthetic inception point (value 0 on the first transaction date): a 0
+ * opening value reflects nothing, so the start-date flows must be counted in
+ * the first subperiod.
+ */
+export function twrSubperiodReturn(
+  startValue: number,
+  endValue: number,
+  flows: { date: string; amount: number }[],
+  startDate: string,
+  endDate: string,
+  includeStartFlows = false,
+): number | null {
+  const spanDays = (Date.parse(endDate) - Date.parse(startDate)) / 86_400_000;
+  if (spanDays <= 0) return null;
+  let totalFlows = 0;
+  let weightedFlows = 0;
+  for (const flow of flows) {
+    if (flow.date < startDate || flow.date > endDate) continue;
+    if (flow.date === startDate && !includeStartFlows) continue;
+    const weight = (Date.parse(endDate) - Date.parse(flow.date)) / (spanDays * 86_400_000);
+    totalFlows += flow.amount;
+    weightedFlows += flow.amount * weight;
+  }
+  const denominator = startValue + weightedFlows;
+  if (denominator > 0) return (endValue - startValue - totalFlows) / denominator;
+  if (startValue <= 0 && totalFlows > 0) return endValue / totalFlows - 1;
+  return null;
+}
+
+/**
+ * Whether the TWR subperiod ending at grid index `i` should count flows dated
+ * on its start date. True only for the interval opening off the synthetic
+ * inception point (grid[0] is the first transaction date carrying value 0):
+ * a 0 opening value reflects nothing, so excluding the start-date flows would
+ * drop the first month's return from the chain. Everywhere else the opening
+ * value already reflects its date's flows, so counting them again would
+ * double-count (e.g. a month-end contribution on a period view's first date).
+ */
+export function includeStartFlowsForInterval(
+  grid: string[],
+  values: readonly (number | null)[],
+  start: string,
+  i: number,
+): boolean {
+  return i === 1 && grid[0] === start && (values[0] ?? 0) === 0;
 }
 
 export type BenchmarkResult = {
@@ -355,6 +455,7 @@ export type BenchmarkResult = {
   label: string;
   symbol: string;
   note: string;
+  annualYield: number;
   values: number[];
   endValue: number;
   mwrr: number | null;
@@ -399,8 +500,6 @@ export function buildComparison(
     fxNow,
     cashAccounts,
   );
-  if (portfolio.length > 0) portfolio[portfolio.length - 1] = portfolioEndValue;
-
   const invested = flows.reduce((s, f) => s + f.amount, 0);
   const xirrFlows = flows.map((f) => ({ date: new Date(f.date), amount: -f.amount }));
   const portfolioMwrr =
