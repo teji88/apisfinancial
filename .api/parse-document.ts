@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const config = {
   api: {
@@ -27,36 +27,33 @@ export default async function handler(req: any, res: any) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Using Pro for maximum financial document accuracy
+    // JSON mode avoids strict schema sequence mismatch errors.
     const model = genAI.getGenerativeModel({
       model: 'gemini-3.1-pro',
       generationConfig: { 
         responseMimeType: 'application/json',
-        responseSchema: {
-          type: SchemaType.OBJECT,
-          properties: {
-            institution: { type: SchemaType.STRING },
-            accountType: { type: SchemaType.STRING, description: "Must be RRSP, TFSA, RRIF, or Non-Registered" },
-            transactions: {
-              type: SchemaType.ARRAY,
-              items: {
-                type: SchemaType.OBJECT,
-                properties: {
-                  ticker: { type: SchemaType.STRING, nullable: true },
-                  transactionType: { type: SchemaType.STRING, description: "Buy, Sell, Dividend, or Deposit" },
-                  amount: { type: SchemaType.NUMBER },
-                  date: { type: SchemaType.STRING, description: "YYYY-MM-DD" }
-                },
-                required: ["transactionType", "amount", "date"]
-              }
-            }
-          },
-          required: ["institution", "accountType", "transactions"]
-        }
       },
     });
 
-    const prompt = `You are an expert Canadian financial document parser for Apis Financial. Analyze this image or PDF document and extract the holdings and transactions exactly as defined by the schema.`;
+    const prompt = `
+      You are an expert Canadian financial document parser for Apis Financial.
+      Analyze this uploaded document image or PDF. Extract stock transactions, holdings, and account details.
+      You MUST return your answer as a valid JSON object matching this exact structure:
+      {
+        "institution": "Name of financial institution (e.g. Wealthsimple, TD, RBC) or null",
+        "accountType": "RRSP, TFSA, RRIF, or Non-Registered, or null",
+        "totalBalance": 0.00,
+        "transactions": [
+          {
+            "ticker": "Stock ticker symbol or asset name",
+            "transactionType": "Buy, Sell, Dividend, or Deposit",
+            "amount": 0.00,
+            "date": "YYYY-MM-DD"
+          }
+        ]
+      }
+      If any field cannot be found, use null or an empty array. Do not include markdown code blocks like \`\`\`json in your response, just return the raw JSON string.
+    `;
 
     const result = await model.generateContent([
       prompt,
@@ -68,7 +65,9 @@ export default async function handler(req: any, res: any) {
       },
     ]);
 
-    const parsedJson = JSON.parse(result.response.text());
+    const rawText = result.response.text();
+    const cleanedJsonText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedJson = JSON.parse(cleanedJsonText);
     return res.status(200).json(parsedJson);
   } catch (error: any) {
     console.error('Parsing error:', error);
