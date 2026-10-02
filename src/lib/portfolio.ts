@@ -49,34 +49,46 @@ export function useTransactions() {
   return useQuery({
     queryKey: ["transactions"],
     queryFn: async (): Promise<Transaction[]> => {
-      // The database returns at most 1000 rows per request, so keep asking for
-      // the next page until every transaction has been loaded. Share counts,
-      // cost base and account values are wrong if any history is missing.
-      const all: Transaction[] = [];
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await supabase
-          .from("transactions")
-          .select(
-            "id, account_id, holding_id, transaction_type, units, price_per_unit, amount, currency, fx_rate, fee, transaction_date",
-          )
-          .order("transaction_date", { ascending: false })
-          .order("id", { ascending: true })
-          .range(from, from + PAGE - 1);
+      // Fetch the first page and exact visible row count together. RLS applies
+      // to both, so the count describes only this user's transactions.
+      const columns =
+        "id, account_id, holding_id, transaction_type, units, price_per_unit, amount, currency, fx_rate, fee, transaction_date";
+      const first = await supabase
+        .from("transactions")
+        .select(columns, { count: "exact" })
+        .order("transaction_date", { ascending: false })
+        .order("id", { ascending: true })
+        .range(0, PAGE - 1);
+      if (first.error) throw first.error;
+
+      const count = first.count ?? first.data?.length ?? 0;
+      const pages = Math.ceil(count / PAGE);
+      const remaining: NonNullable<typeof first.data>[] = [];
+      for (let page = 1; page < pages; page += 4) {
+        const batch = await Promise.all(
+          Array.from({ length: Math.min(4, pages - page) }, (_, offset) => {
+            const current = page + offset;
+            return supabase
+              .from("transactions")
+              .select(columns)
+              .order("transaction_date", { ascending: false })
+              .order("id", { ascending: true })
+              .range(current * PAGE, (current + 1) * PAGE - 1);
+          }),
+        );
+        const error = batch.find((result) => result.error)?.error;
         if (error) throw error;
-        const batch = data ?? [];
-        for (const t of batch) {
-          all.push({
-            ...t,
-            units: Number(t.units),
-            price_per_unit: Number(t.price_per_unit),
-            amount: t.amount == null ? null : Number(t.amount),
-            fx_rate: Number(t.fx_rate),
-            fee: Number(t.fee),
-          });
-        }
-        if (batch.length < PAGE) break;
+        remaining.push(...batch.map((result) => result.data ?? []));
       }
-      return all;
+
+      return [first.data ?? [], ...remaining].flat().map((t) => ({
+        ...t,
+        units: Number(t.units),
+        price_per_unit: Number(t.price_per_unit),
+        amount: t.amount == null ? null : Number(t.amount),
+        fx_rate: Number(t.fx_rate),
+        fee: Number(t.fee),
+      }));
     },
   });
 }
