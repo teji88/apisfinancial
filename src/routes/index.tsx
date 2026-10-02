@@ -93,10 +93,10 @@ function Landing() {
           <ApisLogo variant="full" size="sm" />
 
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild size="sm" className="honey-fill">
               <Link to="/retirement">Retirement planner</Link>
             </Button>
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild size="sm" className="honey-fill">
               <Link to="/auth">Sign in</Link>
             </Button>
             <Button asChild size="sm" className="honey-fill">
@@ -109,6 +109,40 @@ function Landing() {
       <main>
         <section className="relative overflow-hidden">
           <div className="relative mx-auto w-full max-w-6xl px-4 py-16 text-center md:px-6 md:py-24">
+            <div className="mx-auto mb-3 h-24 w-60" aria-label="A small bee tending a growing honey reserve">
+              <div className="apis-hive-scene" aria-hidden="true">
+                <svg viewBox="0 0 240 96" className="apis-hive-art" role="presentation">
+                  <defs>
+                    <linearGradient id="apis-honey-fill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor="rgba(245,158,11,0.22)" />
+                      <stop offset="100%" stopColor="rgba(180,83,9,0.72)" />
+                    </linearGradient>
+                    <filter id="apis-honey-glow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="3" />
+                    </filter>
+                  </defs>
+                  <g className="apis-hive-cells">
+                    <path className="apis-hive-cell apis-hive-cell-a" d="M28 28 40 21 52 28v14l-12 7-12-7Z" />
+                    <path className="apis-hive-cell apis-hive-cell-b" d="M52 14 64 7 76 14v14l-12 7-12-7Z" />
+                    <path className="apis-hive-cell apis-hive-cell-c" d="M76 28 88 21 100 28v14l-12 7-12-7Z" />
+                    <path className="apis-hive-cell apis-hive-cell-d" d="M52 42 64 35 76 42v14l-12 7-12-7Z" />
+                    <path className="apis-hive-cell apis-hive-cell-e" d="M76 56 88 49 100 56v14l-12 7-12-7Z" />
+                    <path className="apis-hive-cell apis-hive-cell-f" d="M100 42 112 35 124 42v14l-12 7-12-7Z" />
+                  </g>
+                  <g className="apis-hive-honey">
+                    <path className="apis-honey-glow-cell" d="M52 14 64 7 76 14v14l-12 7-12-7Z" />
+                    <path className="apis-honey-fill-cell" d="M76 28 88 21 100 28v14l-12 7-12-7Z" />
+                  </g>
+                  <g className="apis-bee">
+                    <ellipse cx="0" cy="0" rx="8" ry="5.5" className="apis-bee-body" />
+                    <ellipse cx="-4" cy="-6" rx="6" ry="3.5" className="apis-bee-wing apis-bee-wing-left" />
+                    <ellipse cx="4" cy="-6" rx="6" ry="3.5" className="apis-bee-wing apis-bee-wing-right" />
+                    <path d="M-5-5 5 5M-1-5 9 5" className="apis-bee-stripe" />
+                    <circle cx="8" cy="0" r="1.4" className="apis-bee-eye" />
+                  </g>
+                </svg>
+              </div>
+            </div>
             <p className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-primary">
               Built for Canadian investors
             </p>
@@ -136,6 +170,46 @@ function Landing() {
 
         <section className="mx-auto w-full max-w-6xl px-4 pb-4 md:px-6">
           <BenchmarkSimulator />
+        </section>
+
+        <section className="border-y border-border/60 bg-background/40">
+          <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 py-16 md:grid-cols-[1.05fr_0.95fr] md:px-6 md:py-20">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">The idea behind Apis</p>
+              <h2 className="mt-3 max-w-xl font-display text-3xl font-semibold leading-tight md:text-4xl">
+                Build your reserve while the days are good.
+              </h2>
+              <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">
+                Bees spend their days gathering and building. The honey they store is what gives the hive
+                a reserve when it is needed. Apis Financial follows the same simple idea: keep track of what
+                you have built, understand how it can grow, and make a plan for the years when you will live
+                from it.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5">Work &amp; build</span>
+                <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5">Grow &amp; protect</span>
+                <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5">Use when needed</span>
+              </div>
+            </div>
+            <div className="honey-card relative overflow-hidden p-7">
+              <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-accent/10 blur-3xl" />
+              <div className="relative">
+                <p className="text-sm font-medium text-primary">Your financial hive</p>
+                <div className="mt-6 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                  {Array.from({ length: 15 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={`honey-story-cell ${i === 7 || i === 11 ? "honey-story-cell-full" : ""}`}
+                    />
+                  ))}
+                </div>
+                <p className="mt-6 text-sm leading-6 text-muted-foreground">
+                  Your accounts are the cells. Your investments are the reserve. The plan is what helps
+                  you decide how and when to draw from it.
+                </p>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="border-y border-border/60 bg-background/40">
