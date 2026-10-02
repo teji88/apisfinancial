@@ -12,7 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { parseStatement, type ParsedTransaction } from "@/lib/import.functions";
+import type { ParseResult, ParsedTransaction } from "@/lib/import.functions";
 import { parseCsvText, type CsvPortfolio } from "@/lib/csv-import";
 import { getFxRateOn } from "@/lib/history.functions";
 import { useAccounts, useHoldings, useAddTransaction, createAccount } from "@/lib/portfolio";
@@ -109,7 +109,6 @@ function ImportPage() {
   const holdingsQuery = useHoldings();
   const { entitlement } = useEntitlement();
   const addTransaction = useAddTransaction();
-  const parse = useServerFn(parseStatement);
   const fxOnDate = useServerFn(getFxRateOn);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -277,14 +276,23 @@ function ImportPage() {
         }
         return;
       }
-      const result = await parse({
-        data: {
+      const response = await fetch("/api/parse-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           fileName: file.name,
           mimeType: file.type || "application/octet-stream",
           dataUrl,
           text,
-        },
+        }),
       });
+      const result = (await response.json()) as ParseResult & {
+        error?: string;
+        message?: string;
+      };
+      if (!response.ok) {
+        throw new Error(result.error ?? result.message ?? "Reading that statement failed.");
+      }
       setBroker(result.broker);
       setRows(
         result.transactions.map((t, i) => ({
