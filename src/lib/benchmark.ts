@@ -396,6 +396,60 @@ export function stepFlowSeries(grid: string[], flows: FlowPoint[]): number[] {
   });
 }
 
+
+/**
+ * Modified Dietz return for a grid subperiod: exact when the grid carries a
+ * valuation on every cash-flow date, a day-weighted approximation otherwise.
+ *
+ * Flows on `startDate` are excluded — they are already reflected in
+ * `startValue` — unless `includeStartFlows` is set. That flag is for the
+ * synthetic inception point (value 0 on the first transaction date): a 0
+ * opening value reflects nothing, so the start-date flows must be counted in
+ * the first subperiod.
+ */
+export function twrSubperiodReturn(
+  startValue: number,
+  endValue: number,
+  flows: { date: string; amount: number }[],
+  startDate: string,
+  endDate: string,
+  includeStartFlows = false,
+): number | null {
+  const spanDays = (Date.parse(endDate) - Date.parse(startDate)) / 86_400_000;
+  if (spanDays <= 0) return null;
+  let totalFlows = 0;
+  let weightedFlows = 0;
+  for (const flow of flows) {
+    if (flow.date < startDate || flow.date > endDate) continue;
+    if (flow.date === startDate && !includeStartFlows) continue;
+    const weight = (Date.parse(endDate) - Date.parse(flow.date)) / (spanDays * 86_400_000);
+    totalFlows += flow.amount;
+    weightedFlows += flow.amount * weight;
+  }
+  const denominator = startValue + weightedFlows;
+  if (denominator > 0) return (endValue - startValue - totalFlows) / denominator;
+  if (startValue <= 0 && totalFlows > 0) return endValue / totalFlows - 1;
+  return null;
+}
+
+/**
+ * Whether the TWR subperiod ending at grid index `i` should count flows dated
+ * on its start date. True only for the interval opening off the synthetic
+ * inception point (grid[0] is the first transaction date carrying value 0):
+ * a 0 opening value reflects nothing, so excluding the start-date flows would
+ * drop the first month's return from the chain. Everywhere else the opening
+ * value already reflects its date's flows, so counting them again would
+ * double-count (e.g. a month-end contribution on a period view's first date).
+ */
+export function includeStartFlowsForInterval(
+  grid: string[],
+  values: readonly (number | null)[],
+  start: string,
+  i: number,
+): boolean {
+  return i === 1 && grid[0] === start && (values[0] ?? 0) === 0;
+}
+
 export type BenchmarkResult = {
   id: string;
   label: string;
