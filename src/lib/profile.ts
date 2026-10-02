@@ -10,6 +10,8 @@ export type Profile = {
   target_retirement_age: number | null;
   inflation_rate: number;
   growth_rate: number;
+  working_growth_rate: number;
+  retirement_growth_rate: number;
   life_expectancy: number;
   marital_status: string;
   spouse_age: number | null;
@@ -46,7 +48,7 @@ export type Profile = {
 };
 
 const COLUMNS =
-  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg";
+  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg";
 
 function toNumbers(row: Record<string, unknown>): Profile {
   const num = (v: unknown, fallback = 0) => (v == null ? fallback : Number(v));
@@ -54,6 +56,8 @@ function toNumbers(row: Record<string, unknown>): Profile {
     ...(row as unknown as Profile),
     inflation_rate: num(row["inflation_rate"], 2.5),
     growth_rate: num(row["growth_rate"], 6),
+    working_growth_rate: num(row["working_growth_rate"], 6),
+    retirement_growth_rate: num(row["retirement_growth_rate"], 4.5),
     life_expectancy: num(row["life_expectancy"], 95),
     spouse_rrsp: num(row["spouse_rrsp"]),
     spouse_tfsa: num(row["spouse_tfsa"]),
@@ -84,14 +88,40 @@ function toNumbers(row: Record<string, unknown>): Profile {
   };
 }
 
+async function getOrCreateProfile(): Promise<Profile | null> {
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+
+  const user = auth.user;
+  if (!user) return null;
+
+  const { data, error } = await supabase.from("profiles").select(COLUMNS).maybeSingle();
+  if (error) throw error;
+  if (data) return toNumbers(data as unknown as Record<string, unknown>);
+
+  // A trigger should normally create this row at signup. If it did not,
+  // repair the profile here and let the database defaults populate all fields.
+  const displayName =
+    ((user.user_metadata as Record<string, unknown> | undefined)?.["display_name"] as
+      | string
+      | undefined) ??
+    user.email?.split("@")[0] ??
+    null;
+
+  const { data: repaired, error: repairError } = await supabase
+    .from("profiles")
+    .upsert({ id: user.id, display_name: displayName }, { onConflict: "id" })
+    .select(COLUMNS)
+    .single();
+
+  if (repairError) throw repairError;
+  return toNumbers(repaired as unknown as Record<string, unknown>);
+}
+
 export function useProfile() {
   return useQuery({
     queryKey: ["profile"],
-    queryFn: async (): Promise<Profile | null> => {
-      const { data, error } = await supabase.from("profiles").select(COLUMNS).maybeSingle();
-      if (error) throw error;
-      return data ? toNumbers(data as unknown as Record<string, unknown>) : null;
-    },
+    queryFn: getOrCreateProfile,
   });
 }
 
@@ -102,7 +132,11 @@ export function useUpdateProfile() {
       const { data: auth } = await supabase.auth.getUser();
       const id = auth.user?.id;
       if (!id) throw new Error("Not signed in");
-      const { error } = await supabase.from("profiles").update(patch).eq("id", id);
+
+      const { error } = await supabase
+        .from("profiles")
+        .upsert({ id, ...patch }, { onConflict: "id" });
+
       if (error) throw error;
     },
     onSuccess: () => {
