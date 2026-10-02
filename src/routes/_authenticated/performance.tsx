@@ -34,7 +34,9 @@ import {
   contributionFlows,
   dateGrid,
   fxOn,
+  includeStartFlowsForInterval,
   portfolioValueSeries,
+  twrSubperiodReturn,
   type BenchmarkChoice,
   type SeriesMap,
 } from "@/lib/benchmark";
@@ -385,7 +387,14 @@ function PerformancePage() {
           }
           const previous = series[i - 1] ?? 0;
           const current = series[i] ?? 0;
-          const periodReturn = twrSubperiodReturn(previous, current, flows, grid[i - 1]!, grid[i]!);
+          const periodReturn = twrSubperiodReturn(
+            previous,
+            current,
+            flows,
+            grid[i - 1]!,
+            grid[i]!,
+            includeStartFlowsForInterval(grid, series, start, i),
+          );
           if (periodReturn != null) chain *= 1 + periodReturn;
           out.push(Math.round((chain - 1) * 10000) / 100);
         }
@@ -422,6 +431,8 @@ function PerformancePage() {
             let units = initial / basePrice;
             let lastDate = grid[base]!;
             let flowIndex = flows.findIndex((flow) => flow.date > lastDate);
+            // No later flows: without this the loop below reads flows[-1] and throws.
+            if (flowIndex === -1) flowIndex = flows.length;
             for (let i = base; i < grid.length; i++) {
               const date = grid[i]!;
               if (i > base && annualYield > 0) {
@@ -477,7 +488,14 @@ function PerformancePage() {
         }
         const prev = values[i - 1] ?? 0;
         const cur = values[i] ?? 0;
-        const periodReturn = twrSubperiodReturn(prev, cur, flows, grid[i - 1]!, grid[i]!);
+        const periodReturn = twrSubperiodReturn(
+          prev,
+          cur,
+          flows,
+          grid[i - 1]!,
+          grid[i]!,
+          includeStartFlowsForInterval(grid, values, start, i),
+        );
         if (periodReturn != null) chain *= 1 + periodReturn;
         out.push(Math.round((chain - 1) * 10000) / 100);
       }
@@ -584,6 +602,7 @@ function PerformancePage() {
         flows,
         comparison.grid[i - 1]!,
         comparison.grid[i]!,
+        includeStartFlowsForInterval(comparison.grid, values, start, i),
       );
       if (periodReturn != null) chain *= 1 + periodReturn;
     }
@@ -949,29 +968,7 @@ function PerformancePage() {
   );
 }
 
-/** Modified Dietz return for snapshot intervals without an exact valuation on every cash-flow date. */
-function twrSubperiodReturn(
-  startValue: number,
-  endValue: number,
-  flows: { date: string; amount: number }[],
-  startDate: string,
-  endDate: string,
-): number | null {
-  const spanDays = (Date.parse(endDate) - Date.parse(startDate)) / 86_400_000;
-  if (spanDays <= 0) return null;
-  let totalFlows = 0;
-  let weightedFlows = 0;
-  for (const flow of flows) {
-    if (flow.date <= startDate || flow.date > endDate) continue;
-    const weight = (Date.parse(endDate) - Date.parse(flow.date)) / (spanDays * 86_400_000);
-    totalFlows += flow.amount;
-    weightedFlows += flow.amount * weight;
-  }
-  const denominator = startValue + weightedFlows;
-  if (denominator > 0) return (endValue - startValue - totalFlows) / denominator;
-  if (startValue <= 0 && totalFlows > 0) return endValue / totalFlows - 1;
-  return null;
-}
+
 
 function StatCard({
   icon,
