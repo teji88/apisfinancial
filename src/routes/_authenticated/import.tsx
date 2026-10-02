@@ -356,6 +356,16 @@ function ImportPage() {
     return !row.type || !row.date || !hasValue;
   }
 
+  /**
+   * Total derivable from a row's own numbers (units × price). Pure arithmetic
+   * on what the file showed — nothing guessed — so it is safe to display and
+   * to use when the reader left the amount blank.
+   */
+  function derivedAmount(row: Pick<Row, "quantity" | "price">): number | null {
+    if (row.quantity == null || row.price == null) return null;
+    return Math.round(row.quantity * row.price * 100) / 100;
+  }
+
   async function commit() {
     if (rows.length === 0) return;
     const missing = rows.filter((r) => !r.accountId);
@@ -395,7 +405,7 @@ function ImportPage() {
         const rowCurrency = row.currency ?? "CAD";
         const units = row.quantity ?? 0;
         const price = row.price ?? 0;
-        const cashAmount = row.amount ?? 0;
+        const cashAmount = row.amount ?? derivedAmount(row) ?? 0;
         await addTransaction.mutateAsync({
           accountId: row.accountId,
           symbol: row.symbol ?? "",
@@ -686,6 +696,10 @@ function ImportPage() {
                 {pagedRows.map((row) => {
                   const low = row.confidence < 0.8;
                   const incomplete = isRowIncomplete(row);
+                  // Show the derivable total when the reader left amount blank;
+                  // anything the user types replaces it.
+                  const derived = row.amount == null ? derivedAmount(row) : null;
+                  const amountValue = row.amount ?? derived;
                   return (
                     <TableRow
                       key={row.rowId}
@@ -783,7 +797,12 @@ function ImportPage() {
                       <TableCell>
                         <Input
                           className="num h-8 w-24 text-right"
-                          value={row.amount ?? ""}
+                          value={amountValue ?? ""}
+                          title={
+                            derived != null
+                              ? `Computed: ${row.quantity} × ${row.price}`
+                              : undefined
+                          }
                           onChange={(e) =>
                             update(row.rowId, { amount: Number(e.target.value) || 0 })
                           }
