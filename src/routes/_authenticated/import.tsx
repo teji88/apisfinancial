@@ -301,18 +301,19 @@ function ImportPage() {
         try {
           result = parseCsvText(text, file.name, learnedProfiles);
         } catch (parseError) {
-          // The deterministic parser could not read this layout. Offer the
-          // one-time AI mapping (Pro) instead of failing outright.
+          // The deterministic parser could not read this layout. Pro users
+          // get it learned automatically in the background; free users are
+          // pointed at the upgrade.
           const message = parseError instanceof Error ? parseError.message : "";
           if (/header row/i.test(message)) {
             if (!isPro) {
               setUpgradeReason(
-                "That CSV's layout is unfamiliar. Pro can learn its columns with AI — once learned, the layout imports free forever.",
+                "That CSV's layout is unfamiliar. Pro learns its columns automatically — once learned, the layout imports free forever.",
               );
               setUpgradeOpen(true);
               return;
             }
-            setLearnCandidate({ fileName: file.name, text });
+            await runLearnLayout({ fileName: file.name, text });
             return;
           }
           throw parseError;
@@ -410,22 +411,23 @@ function ImportPage() {
   /**
    * Ask the AI to map an unfamiliar CSV's columns, save the layout on this
    * device, and re-parse deterministically. One paid call; every future
-   * import of the same format is free.
+   * import of the same format is free. Runs automatically for Pro users;
+   * the retry card appears only if the automatic attempt fails.
    */
-  async function handleLearnLayout() {
-    if (!learnCandidate || learning) return;
+  async function runLearnLayout(candidate: { fileName: string; text: string }) {
+    if (learning) return;
     setLearning(true);
     try {
-      const sample = learnCandidate.text.split("\n").slice(0, 30).join("\n");
+      const sample = candidate.text.split("\n").slice(0, 30).join("\n");
       const learned = await learnMappingFn({
-        data: { fileName: learnCandidate.fileName, sample },
+        data: { fileName: candidate.fileName, sample },
       });
       // Fingerprint against the live header row so the saved layout matches
       // exactly what the parser will see: the row containing the mapped date
       // column wins.
       const { parseCsvTable } = await import("@/lib/csv-parse");
       const { normalizeHeader } = await import("@/lib/institution-profiles");
-      const table = parseCsvTable(learnCandidate.text);
+      const table = parseCsvTable(candidate.text);
       const dateHeader = normalizeHeader(learned.columns.date);
       const headerRow = table
         .slice(0, 25)
@@ -443,7 +445,7 @@ function ImportPage() {
       });
       const next = saveLearnedProfile(profile);
       setLearnedProfiles(next);
-      const result = parseCsvText(learnCandidate.text, learnCandidate.fileName, next);
+      const result = parseCsvText(candidate.text, candidate.fileName, next);
       setBroker(`${result.broker} · layout learned, no AI credits used from here on`);
       setRows(
         result.transactions.map((t, i) => ({
@@ -473,10 +475,11 @@ function ImportPage() {
         `Learned the "${profile.name}" layout — saved on this device. Future files in this format import automatically.`,
       );
     } catch (error) {
+      // Leave the retry card up so the user can try again manually.
+      setLearnCandidate(candidate);
       toast.error(error instanceof Error ? error.message : "Could not learn that layout.");
     } finally {
       setLearning(false);
-      setBusy(false);
     }
   }
 
@@ -606,9 +609,13 @@ function ImportPage() {
         {busy ? (
           <>
             <Loader2 className="h-7 w-7 animate-spin text-primary" />
-            <p className="text-sm font-medium">Reading your statement…</p>
+            <p className="text-sm font-medium">
+              {learning ? "Learning this CSV's layout…" : "Reading your statement…"}
+            </p>
             <p className="text-xs text-muted-foreground">
-              This can take up to a minute for long PDFs.
+              {learning
+                ? "One quick AI look at the columns — then it's saved and free forever."
+                : "This can take up to a minute for long PDFs."}
             </p>
           </>
         ) : (
@@ -656,26 +663,29 @@ function ImportPage() {
         )}
       </div>
 
-      {learnCandidate && !busy ? (
+      {learnCandidate && !busy && !learning ? (
         <div className="panel flex flex-col items-center gap-3 p-8 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
             <Wand2 className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-sm font-medium">This CSV's layout is new to us</p>
+            <p className="text-sm font-medium">Couldn't learn this layout automatically</p>
             <p className="mt-1 max-w-md text-xs text-muted-foreground">
-              {learnCandidate.fileName} doesn't match any known format. AI can learn its columns
-              once — the layout is then saved on this device and every future file in this format
-              imports free, with no AI.
+              The automatic attempt for {learnCandidate.fileName} failed. You can try again — once
+              the layout is learned it is saved on this device and future files import free.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <Button size="sm" disabled={learning} onClick={() => void handleLearnLayout()}>
+            <Button
+              size="sm"
+              disabled={learning}
+              onClick={() => void runLearnLayout(learnCandidate)}
+            >
               {learning ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-              {learning ? "Learning the layout…" : "Learn this layout with AI"}
+              {learning ? "Learning the layout…" : "Try learning again"}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setLearnCandidate(null)}>
-              Not now
+              Dismiss
             </Button>
           </div>
         </div>
