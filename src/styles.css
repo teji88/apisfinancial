@@ -304,3 +304,130 @@
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 14px -8px rgba(180, 83, 9, 0.35);
 }
+
+
+/* Refined hero brand moment: the bee tends the reserve instead of simply flying past it. */
+.apis-hive-scene {
+  position: relative;
+  width: 15rem;
+  height: 6rem;
+  margin-inline: auto;
+}
+
+.apis-hive-art {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.apis-hive-cell {
+  fill: rgba(245, 158, 11, 0.035);
+  stroke: rgba(180, 83, 9, 0.24);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.apis-hive-honey {
+  opacity: 0;
+  animation: apis-honey-arrives 8s ease-in-out infinite;
+}
+
+.apis-honey-fill-cell {
+  fill: url(#apis-honey-fill);
+  stroke: rgba(180, 83, 9, 0.3);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.apis-honey-glow-cell {
+  fill: rgba(245, 158, 11, 0.24);
+  filter: url(#apis-honey-glow);
+}
+
+.apis-bee {
+  transform: translate(17px, 37px);
+  animation: apis-bee-journey 8s cubic-bezier(0.42, 0, 0.2, 1) infinite;
+  transform-origin: 0 0;
+}
+
+.apis-bee-body {
+  fill: #2a1c05;
+  stroke: #b45309;
+  stroke-width: 1;
+}
+
+.apis-bee-wing {
+  fill: rgba(255, 253, 246, 0.78);
+  stroke: rgba(180, 83, 9, 0.25);
+  stroke-width: 0.7;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: apis-wing-beat 180ms ease-in-out infinite alternate;
+}
+
+.apis-bee-wing-right {
+  animation-delay: -90ms;
+}
+
+.apis-bee-stripe {
+  stroke: #f59e0b;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.apis-bee-eye {
+  fill: #fffdf6;
+}
+
+@keyframes apis-bee-journey {
+  0%, 7% { transform: translate(17px, 37px) rotate(-7deg); }
+  18%, 31% { transform: translate(64px, 19px) rotate(3deg); }
+  38%, 51% { transform: translate(88px, 33px) rotate(-2deg); }
+  58%, 67% { transform: translate(88px, 33px) rotate(4deg) scale(0.98); }
+  76%, 88% { transform: translate(118px, 47px) rotate(7deg); }
+  100% { transform: translate(17px, 37px) rotate(-7deg); }
+}
+
+@keyframes apis-honey-arrives {
+  0%, 42% { opacity: 0; }
+  48%, 70% { opacity: 1; }
+  82%, 100% { opacity: 0.82; }
+}
+
+@keyframes apis-wing-beat {
+  from { transform: scaleY(0.78) rotate(-8deg); }
+  to { transform: scaleY(1.05) rotate(8deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apis-hive-art * {
+    animation: none !important;
+  }
+
+  .apis-bee {
+    transform: translate(88px, 33px);
+  }
+
+  .apis-hive-honey {
+    opacity: 1;
+  }
+}
+
+/* Hand-built honeycomb cells used for the brand story. */
+.honey-story-cell {
+  display: block;
+  aspect-ratio: 1 / 1;
+  clip-path: polygon(25% 6.7%, 75% 6.7%, 100% 50%, 75% 93.3%, 25% 93.3%, 0 50%);
+  background: rgba(245, 158, 11, 0.07);
+  border: 1px solid rgba(180, 83, 9, 0.2);
+  transition: transform 220ms ease, background-color 220ms ease;
+}
+.honey-story-cell-full {
+  background: radial-gradient(circle at 50% 55%, rgba(245, 158, 11, 0.65) 0 24%, rgba(245, 158, 11, 0.15) 25% 100%);
+}
+.honey-card:hover .honey-story-cell-full {
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .honey-story-cell { transition: none; }
+}
