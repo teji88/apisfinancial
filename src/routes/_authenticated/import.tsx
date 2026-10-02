@@ -12,7 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { ParseResult, ParsedTransaction } from "@/lib/import.functions";
+import type { ParsedTransaction } from "@/lib/import.functions";
 import { parseCsvText, type CsvPortfolio } from "@/lib/csv-import";
 import { getFxRateOn } from "@/lib/history.functions";
 import { useAccounts, useHoldings, useAddTransaction, createAccount } from "@/lib/portfolio";
@@ -69,6 +69,21 @@ type Row = ParsedTransaction & {
   portfolio?: string;
   /** Trade-date exchange rate already present in the file. */
   fx?: number;
+};
+
+type DocumentParseResult = {
+  detectedFormat: string;
+  institution: string | null;
+  accountType: string | null;
+  columnsFound: string[];
+  records: Array<{
+    date: string | null;
+    nameOrTicker: string | null;
+    action: string;
+    quantity: number | null;
+    price: number | null;
+    totalAmount: number | null;
+  }>;
 };
 
 /** How each portfolio found in a file should land in Apis Financial. */
@@ -276,35 +291,65 @@ function ImportPage() {
         }
         return;
       }
+      const requestBody =
+        text !== null
+          ? { fileContent: text, mimeType: file.type || "text/plain" }
+          : dataUrl
+            ? { fileBase64: dataUrl, mimeType: file.type || "application/octet-stream" }
+            : null;
+      if (!requestBody) throw new Error("Could not read that file.");
+
       const response = await fetch("/api/parse-document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          mimeType: file.type || "application/octet-stream",
-          dataUrl,
-          text,
-        }),
+        body: JSON.stringify(requestBody),
       });
-      const result = (await response.json()) as ParseResult & {
+      const result = (await response.json()) as DocumentParseResult & {
         error?: string;
         message?: string;
       };
       if (!response.ok) {
         throw new Error(result.error ?? result.message ?? "Reading that statement failed.");
       }
-      setBroker(result.broker);
-      setRows(
-        result.transactions.map((t, i) => ({
-          ...t,
-          rowId: `${Date.now()}-${i}`,
-          accountId: matchAccount(t),
-        })),
+      setBroker(
+        result.institution
+          ? `${result.institution} · ${result.detectedFormat}`
+          : `AI · ${result.detectedFormat}`,
       );
-      if (result.transactions.length === 0) {
+      const extractedRows = result.records.map((record, i): Row => {
+        const action = record.action.trim().toUpperCase();
+        const recognizedAction = ["BUY", "SELL", "DIVIDEND", "DEPOSIT"].includes(action);
+        const accountType = result.accountType || "Non-Registered";
+        const accountId = matchAccount({ account_type: accountType });
+        const notes = ["AI-extracted; verify against the statement."];
+        if (!record.date) notes.push("Date not detected.");
+        if (action === "TRANSFER") {
+          notes.push("Transfer direction is unclear; adjust the transaction type.");
+        } else if (!recognizedAction) notes.push(`Unrecognized action: ${record.action}.`);
+
+        return {
+          account_type: accountType,
+          account_hint: null,
+          date: record.date ?? "",
+          type: recognizedAction ? action : "DEPOSIT",
+          symbol: record.nameOrTicker,
+          name: null,
+          quantity: record.quantity,
+          price: record.price,
+          amount: record.totalAmount,
+          currency: accountList.find((account) => account.id === accountId)?.currency ?? "CAD",
+          fee: 0,
+          confidence: !record.date || !recognizedAction ? 0.5 : 0.75,
+          note: notes.join(" "),
+          rowId: `${Date.now()}-${i}`,
+          accountId,
+        };
+      });
+      setRows(extractedRows);
+      if (extractedRows.length === 0) {
         toast.warning("No transactions found in that file.");
       } else {
-        toast.success(`Found ${result.transactions.length} transactions — review them below.`);
+        toast.success(`Found ${extractedRows.length} transactions — review them below.`);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Import failed.");
