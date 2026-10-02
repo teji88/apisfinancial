@@ -307,23 +307,31 @@ function ImportPage() {
         },
       });
       setBroker(result.broker ? `${result.broker} · read by AI` : "Read by AI");
-      const extractedRows = result.transactions.map((t, i): Row => ({
-        account_type: t.account_type,
-        account_hint: t.account_hint,
-        date: t.date,
-        type: t.type,
-        symbol: t.symbol,
-        name: t.name,
-        quantity: t.quantity,
-        price: t.price,
-        amount: t.amount,
-        currency: t.currency,
-        fee: t.fee,
-        confidence: t.confidence,
-        note: t.note,
-        rowId: `ai-${i}`,
-        accountId: matchAccount(t),
-      }));
+      const extractedRows = result.transactions.map((t, i): Row => {
+        const accountId = matchAccount(t);
+        const accountCurrency = accountList.find((a) => a.id === accountId)?.currency;
+        const currencyNote =
+          !t.currency && accountCurrency
+            ? "Currency not shown on the statement; using the account's currency — verify."
+            : null;
+        return {
+          account_type: t.account_type,
+          account_hint: t.account_hint,
+          date: t.date,
+          type: t.type,
+          symbol: t.symbol,
+          name: t.name,
+          quantity: t.quantity,
+          price: t.price,
+          amount: t.amount,
+          currency: t.currency ?? accountCurrency ?? "CAD",
+          fee: t.fee ?? 0,
+          confidence: t.confidence,
+          note: [t.note, currencyNote].filter(Boolean).join(" ") || null,
+          rowId: `ai-${i}`,
+          accountId,
+        };
+      });
       setRows(extractedRows);
       if (extractedRows.length === 0) {
         toast.warning("No transactions found in that file.");
@@ -341,11 +349,25 @@ function ImportPage() {
     setRows((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, ...patch } : r)));
   }
 
+  /** A row is committable when it has a type, a date, and some value to record. */
+  function isRowIncomplete(row: Row): boolean {
+    const hasValue =
+      row.amount != null || (row.quantity != null && row.price != null);
+    return !row.type || !row.date || !hasValue;
+  }
+
   async function commit() {
     if (rows.length === 0) return;
     const missing = rows.filter((r) => !r.accountId);
     if (missing.length > 0) {
       toast.error("Pick an account for every row first.");
+      return;
+    }
+    const incomplete = rows.filter(isRowIncomplete);
+    if (incomplete.length > 0) {
+      toast.error(
+        `${incomplete.length} row${incomplete.length === 1 ? " is" : "s are"} missing a type, date, or value. Fill in the highlighted rows first.`,
+      );
       return;
     }
 
@@ -367,6 +389,10 @@ function ImportPage() {
     };
     try {
       for (const row of rows) {
+        // Guarded by the incomplete-rows check above; the assertions keep the types honest.
+        const rowType = row.type!;
+        const rowDate = row.date!;
+        const rowCurrency = row.currency ?? "CAD";
         const units = row.quantity ?? 0;
         const price = row.price ?? 0;
         const cashAmount = row.amount ?? 0;
@@ -375,16 +401,16 @@ function ImportPage() {
           symbol: row.symbol ?? "",
           name: row.name,
           assetType: "Stock",
-          transactionType: row.type,
+          transactionType: rowType,
           units,
           pricePerUnit: price,
-          amount: ["DIVIDEND", "DEPOSIT", "WITHDRAWAL", "FEE"].includes(row.type)
+          amount: ["DIVIDEND", "DEPOSIT", "WITHDRAWAL", "FEE"].includes(rowType)
             ? cashAmount
             : null,
-          currency: row.currency,
-          fxRate: await rateFor(row.currency, row.date, row.fx),
+          currency: rowCurrency,
+          fxRate: await rateFor(rowCurrency, rowDate, row.fx),
           fee: row.fee ?? 0,
-          date: row.date,
+          date: rowDate,
         });
         saved += 1;
         if (saved % 25 === 0 || saved === rows.length) setProgress(saved);
@@ -659,8 +685,12 @@ function ImportPage() {
               <TableBody>
                 {pagedRows.map((row) => {
                   const low = row.confidence < 0.8;
+                  const incomplete = isRowIncomplete(row);
                   return (
-                    <TableRow key={row.rowId} className={low ? "bg-primary/5" : undefined}>
+                    <TableRow
+                      key={row.rowId}
+                      className={incomplete ? "bg-amber-500/10" : low ? "bg-primary/5" : undefined}
+                    >
                       <TableCell className="whitespace-nowrap">
                         {low ? (
                           <span
@@ -702,17 +732,17 @@ function ImportPage() {
                         <Input
                           type="date"
                           className="h-8 w-36"
-                          value={row.date}
+                          value={row.date ?? ""}
                           onChange={(e) => update(row.rowId, { date: e.target.value })}
                         />
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={row.type}
+                          value={row.type ?? ""}
                           onValueChange={(v) => update(row.rowId, { type: v })}
                         >
                           <SelectTrigger className="h-8 w-32">
-                            <SelectValue />
+                            <SelectValue placeholder="Pick type" />
                           </SelectTrigger>
                           <SelectContent>
                             {TRANSACTION_TYPES.map((t) => (
