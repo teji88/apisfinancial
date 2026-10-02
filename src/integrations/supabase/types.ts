@@ -335,10 +335,6 @@ export type Database = {
           desired_income: number
           display_name: string | null
           growth_rate: number
-          working_growth_rate: number
-          retirement_growth_rate: number
-          working_growth_rate: number
-          retirement_growth_rate: number
           id: string
           inflation_rate: number
           life_expectancy: number
