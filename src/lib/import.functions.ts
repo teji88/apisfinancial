@@ -1,29 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import {
+  DEFAULT_GEMINI_MODEL,
+  STATEMENT_SYSTEM_PROMPT,
+  parseGeminiResponse,
+} from "./gemini-parse";
 
-export const ParsedTransaction = z.object({
-  account_type: z.string(),
-  account_hint: z.string().nullable(),
-  date: z.string(),
-  type: z.string(),
-  symbol: z.string().nullable(),
-  name: z.string().nullable(),
-  quantity: z.number().nullable(),
-  price: z.number().nullable(),
-  amount: z.number().nullable(),
-  currency: z.string(),
-  fee: z.number().nullable(),
-  confidence: z.number(),
-  note: z.string().nullable(),
-});
-export type ParsedTransaction = z.infer<typeof ParsedTransaction>;
-
-const ParseResult = z.object({
-  broker: z.string().nullable(),
-  transactions: z.array(ParsedTransaction),
-});
-export type ParseResult = z.infer<typeof ParseResult>;
+// The canonical schemas live in ./gemini-parse (pure, unit-tested). They are
+// re-exported here so existing imports from "@/lib/import.functions" — the
+// import page's ParsedTransaction type — keep working unchanged.
+export { ParsedTransaction } from "./gemini-parse";
+export type { ParsedTransaction, ParseResult } from "./gemini-parse";
+import type { ParseResult } from "./gemini-parse";
 
 const Input = z.object({
   fileName: z.string(),
@@ -33,26 +22,6 @@ const Input = z.object({
   /** Plain text for CSV / pasted statements. */
   text: z.string().nullable(),
 });
-
-const SYSTEM = `You extract investment transactions from Canadian brokerage statements
-(Questrade, Wealthsimple, TD Direct Investing, RBC Direct Investing, Interactive Brokers,
-BMO InvestorLine, Scotia iTRADE, CIBC Investor's Edge and similar).
-
-Rules:
-- Output one row per transaction actually shown in the document. Never invent rows.
-- type must be exactly one of: BUY, SELL, DIVIDEND, DRIP, DEPOSIT, WITHDRAWAL, FEE.
-- date must be ISO YYYY-MM-DD.
-- account_type must be one of: TFSA, RRSP, Spousal RRSP, LIRA, LRSP, RESP, RDSP, FHSA,
-  Non-Registered, Corporate. Infer it from the statement; if truly unknown use Non-Registered
-  and lower the confidence.
-- account_hint: the account label/number printed on the statement, or null.
-- currency must be CAD or USD.
-- For BUY/SELL/DRIP give quantity and price per unit; amount may be null.
-- For DIVIDEND/DEPOSIT/WITHDRAWAL/FEE give amount (positive number); quantity and price null.
-- symbol: the ticker in uppercase, with the .TO suffix for TSX listings. Null for cash rows.
-- fee: commission charged on that row, 0 when none shown.
-- confidence: 0 to 1, how certain you are of the whole row. Flag anything you had to guess
-  below 0.8 and explain briefly in note.`;
 
 /**
  * Statements carry pages of legal boilerplate, marketing and blank filler that
@@ -98,78 +67,63 @@ export const parseStatement = createServerFn({ method: "POST" })
       throw new Error("Reading statements with AI is part of Pro. Upgrade to use file upload.");
     }
 
-    const key = process.env["LOVABLE_API_KEY"];
-    if (!key) throw new Error("AI is not configured for this app.");
+    const apiKey = process.env["GEMINI_API_KEY"];
+    if (!apiKey) throw new Error("AI is not configured for this app.");
 
-    const { streamText, Output, NoObjectGeneratedError } = await import("ai");
-    const { createOpenAI } = await import("@ai-sdk/openai");
-    const { createLovableAiGatewayRunIdFetch } = await import("./ai-gateway.server");
-
-    const runIdFetch = createLovableAiGatewayRunIdFetch();
-    const lovable = createOpenAI({
-      baseURL: "https://ai.gateway.lovable.dev/v1",
-      apiKey: key,
-      headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
-      fetch: runIdFetch.fetch,
+    const { GoogleGenerativeAI } = await import("@google/generative-ai");
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: process.env["GEMINI_MODEL"] ?? DEFAULT_GEMINI_MODEL,
+      generationConfig: { responseMimeType: "application/json" },
+      systemInstruction: STATEMENT_SYSTEM_PROMPT,
     });
 
-    const parts: Array<Record<string, unknown>> = [
-      {
-        type: "text",
-        text: `Extract every transaction from this file (${data.fileName}). Today is ${new Date()
-          .toISOString()
-          .slice(0, 10)}.`,
-      },
-    ];
+    const intro = {
+      text: `Extract every transaction from this file (${data.fileName}). Today is ${new Date()
+        .toISOString()
+        .slice(0, 10)}.`,
+    };
 
+    type Part = { text: string } | { inlineData: { data: string; mimeType: string } };
+    let parts: Part[];
     if (data.text) {
-      parts.push({ type: "text", text: condenseStatement(data.text) });
+      parts = [intro, { text: condenseStatement(data.text) }];
     } else if (data.dataUrl) {
-      if (data.mimeType.startsWith("image/")) {
-        parts.push({ type: "image", image: data.dataUrl });
-      } else {
-        parts.push({
-          type: "file",
-          data: data.dataUrl,
-          mediaType: data.mimeType || "application/pdf",
-          filename: data.fileName,
-        });
-      }
+      parts = [
+        intro,
+        {
+          inlineData: {
+            data: data.dataUrl.replace(/^data:[^;]+;base64,/, ""),
+            mimeType: data.mimeType || "application/pdf",
+          },
+        },
+      ];
     } else {
       throw new Error("Nothing to read in that file.");
     }
 
+    let rawText: string;
     try {
-      const result = streamText({
-        model: lovable.responses("openai/gpt-6-astra"),
-        system: SYSTEM,
-        messages: [{ role: "user", content: parts as never }],
-        output: Output.object({ schema: ParseResult }),
-        providerOptions: {
-          openai: {
-            forceReasoning: true,
-            reasoningEffort: "low",
-            reasoningSummary: "auto",
-            store: false,
-            include: ["reasoning.encrypted_content"],
-          },
-        },
-      });
-      const output = await result.output;
-      return ParseResult.parse(output);
+      const result = await model.generateContent(parts);
+      rawText = result.response.text();
     } catch (error) {
-      if (NoObjectGeneratedError.isInstance(error)) {
-        console.error(`[import] model returned unusable output: ${error.text?.slice(0, 500)}`);
-        throw new Error("Could not read any transactions from that file. Try a clearer file.");
-      }
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[import] parse failed: ${message}`);
-      if (message.includes("402")) {
-        throw new Error("The workspace is out of AI credits. Add credits in Lovable to continue.");
-      }
-      if (message.includes("429")) {
+      console.error(`[import] Gemini parse failed: ${message}`);
+      if (message.includes("429") || message.includes("RESOURCE_EXHAUSTED")) {
         throw new Error("AI is busy right now. Wait a moment and try again.");
+      }
+      if (
+        message.includes("403") ||
+        message.includes("PERMISSION_DENIED") ||
+        message.includes("API_KEY_INVALID") ||
+        message.includes("API key")
+      ) {
+        throw new Error("The Gemini API key was rejected. Check GEMINI_API_KEY on the server.");
       }
       throw new Error("Reading that statement failed. Please try again.");
     }
+
+    // Validation errors from parseGeminiResponse are already user-friendly;
+    // let them propagate untouched.
+    return parseGeminiResponse(rawText);
   });
