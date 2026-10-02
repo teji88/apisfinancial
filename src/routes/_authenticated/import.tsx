@@ -12,8 +12,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { ParsedTransaction } from "@/lib/import.functions";
+import { parseStatement, type ParsedTransaction } from "@/lib/import.functions";
 import { parseCsvText, type CsvPortfolio } from "@/lib/csv-import";
+import { classifyFile } from "@/lib/file-kind";
 import { getFxRateOn } from "@/lib/history.functions";
 import { useAccounts, useHoldings, useAddTransaction, createAccount } from "@/lib/portfolio";
 import { useEntitlement } from "@/lib/entitlement";
@@ -71,21 +72,6 @@ type Row = ParsedTransaction & {
   fx?: number;
 };
 
-type DocumentParseResult = {
-  detectedFormat: string;
-  institution: string | null;
-  accountType: string | null;
-  columnsFound: string[];
-  records: Array<{
-    date: string | null;
-    nameOrTicker: string | null;
-    action: string;
-    quantity: number | null;
-    price: number | null;
-    totalAmount: number | null;
-  }>;
-};
-
 /** How each portfolio found in a file should land in Apis Financial. */
 type Mapping = {
   /** An existing account id, or "new" to create one. */
@@ -100,23 +86,27 @@ const ACCEPT = ".csv,.txt,.pdf,.png,.jpg,.jpeg";
 const PAGE_SIZE = 50;
 const SAVE_BATCH = 250;
 
-function readFile(file: File): Promise<{ dataUrl: string | null; text: string | null }> {
-  const isText =
-    file.type.startsWith("text/") ||
-    file.name.toLowerCase().endsWith(".csv") ||
-    file.name.toLowerCase().endsWith(".txt");
+function readAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Could not read that file."));
-    reader.onload = () =>
-      resolve(
-        isText
-          ? { dataUrl: null, text: String(reader.result ?? "") }
-          : { dataUrl: String(reader.result ?? ""), text: null },
-      );
-    if (isText) reader.readAsText(file);
-    else reader.readAsDataURL(file);
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.readAsText(file);
   });
+}
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read that file."));
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** First bytes of the file — enough for content-based classification. */
+async function readHeaderBytes(file: File): Promise<Uint8Array> {
+  return new Uint8Array(await file.slice(0, 8192).arrayBuffer());
 }
 
 function ImportPage() {
@@ -125,6 +115,7 @@ function ImportPage() {
   const { entitlement } = useEntitlement();
   const addTransaction = useAddTransaction();
   const fxOnDate = useServerFn(getFxRateOn);
+  const parseStatementFn = useServerFn(parseStatement);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [dragging, setDragging] = useState(false);
@@ -242,10 +233,23 @@ function ImportPage() {
       toast.error("That file is larger than 20 MB.");
       return;
     }
-    const isCsv = /\.(csv|tsv)$/i.test(file.name);
-    // Spreadsheets are already structured, so they are read directly here:
-    // no AI, no size ceiling, no credits, and every row comes through.
-    if (!isCsv && !isPro) {
+    // Route on the file's actual content, not its name: spreadsheets are
+    // already structured, so they are read directly here — no AI, no size
+    // ceiling, no credits, and every row comes through.
+    let kind: ReturnType<typeof classifyFile>;
+    try {
+      kind = classifyFile(await readHeaderBytes(file), file.name, file.type);
+    } catch {
+      toast.error("Could not read that file.");
+      return;
+    }
+    if (kind === "unknown") {
+      toast.error(
+        "That file does not look like a CSV, PDF or photo of a statement. Try one of those.",
+      );
+      return;
+    }
+    if (kind !== "csv-text" && !isPro) {
       setUpgradeReason(
         "Reading PDFs and screenshots with AI is the one paid feature — $10 a year. CSV files and hand entry are always free.",
       );
@@ -255,9 +259,8 @@ function ImportPage() {
     setBusy(true);
     setPage(0);
     try {
-      const { dataUrl, text } = await readFile(file);
-      if (isCsv) {
-        const result = parseCsvText(text ?? "", file.name);
+      if (kind === "csv-text") {
+        const result = parseCsvText(await readAsText(file), file.name);
         setBroker(`${result.broker} · read directly, no AI credits used`);
         setRows(
           result.transactions.map((t, i) => ({
@@ -291,60 +294,36 @@ function ImportPage() {
         }
         return;
       }
-      const requestBody =
-        text !== null
-          ? { fileContent: text, mimeType: file.type || "text/plain" }
-          : dataUrl
-            ? { fileBase64: dataUrl, mimeType: file.type || "application/octet-stream" }
-            : null;
-      if (!requestBody) throw new Error("Could not read that file.");
-
-      const response = await fetch("/api/parse-document", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
+      // PDFs and photos go to the Gemini-backed server function, which is
+      // authenticated and enforces the Pro plan on the server. Rows arrive
+      // in the canonical ParsedTransaction shape and map 1:1 — no coercion:
+      // types, fees and confidences are exactly what the reader returned.
+      const result = await parseStatementFn({
+        data: {
+          fileName: file.name,
+          mimeType: file.type || (kind === "pdf" ? "application/pdf" : "image/png"),
+          dataUrl: await readAsDataUrl(file),
+          text: null,
+        },
       });
-      const result = (await response.json()) as DocumentParseResult & {
-        error?: string;
-        message?: string;
-      };
-      if (!response.ok) {
-        throw new Error(result.error ?? result.message ?? "Reading that statement failed.");
-      }
-      setBroker(
-        result.institution
-          ? `${result.institution} · ${result.detectedFormat}`
-          : `AI · ${result.detectedFormat}`,
-      );
-      const extractedRows = result.records.map((record, i): Row => {
-        const action = record.action.trim().toUpperCase();
-        const recognizedAction = ["BUY", "SELL", "DIVIDEND", "DEPOSIT"].includes(action);
-        const accountType = result.accountType || "Non-Registered";
-        const accountId = matchAccount({ account_type: accountType });
-        const notes = ["AI-extracted; verify against the statement."];
-        if (!record.date) notes.push("Date not detected.");
-        if (action === "TRANSFER") {
-          notes.push("Transfer direction is unclear; adjust the transaction type.");
-        } else if (!recognizedAction) notes.push(`Unrecognized action: ${record.action}.`);
-
-        return {
-          account_type: accountType,
-          account_hint: null,
-          date: record.date ?? "",
-          type: recognizedAction ? action : "DEPOSIT",
-          symbol: record.nameOrTicker,
-          name: null,
-          quantity: record.quantity,
-          price: record.price,
-          amount: record.totalAmount,
-          currency: accountList.find((account) => account.id === accountId)?.currency ?? "CAD",
-          fee: 0,
-          confidence: !record.date || !recognizedAction ? 0.5 : 0.75,
-          note: notes.join(" "),
-          rowId: `${Date.now()}-${i}`,
-          accountId,
-        };
-      });
+      setBroker(result.broker ? `${result.broker} · read by AI` : "Read by AI");
+      const extractedRows = result.transactions.map((t, i): Row => ({
+        account_type: t.account_type,
+        account_hint: t.account_hint,
+        date: t.date,
+        type: t.type,
+        symbol: t.symbol,
+        name: t.name,
+        quantity: t.quantity,
+        price: t.price,
+        amount: t.amount,
+        currency: t.currency,
+        fee: t.fee,
+        confidence: t.confidence,
+        note: t.note,
+        rowId: `ai-${i}`,
+        accountId: matchAccount(t),
+      }));
       setRows(extractedRows);
       if (extractedRows.length === 0) {
         toast.warning("No transactions found in that file.");
