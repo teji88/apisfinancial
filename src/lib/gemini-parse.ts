@@ -14,19 +14,24 @@ import { z } from "zod";
 export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 export const ParsedTransaction = z.object({
-  account_type: z.string(),
-  account_hint: z.string().nullable(),
-  date: z.string(),
-  type: z.string(),
-  symbol: z.string().nullable(),
+  account_type: z.string().optional().default("Non-Registered"),
+  account_hint: z.string().nullable().optional().default(null),
+  date: z.string().nullable().optional().default(null),
+  type: z.string().nullable().optional().default(null),
+  symbol: z.string().nullable().optional().default(null),
   name: z.string().nullable().optional().default(null),
-  quantity: z.number().nullable(),
-  price: z.number().nullable(),
-  amount: z.number().nullable(),
-  currency: z.string(),
-  fee: z.number().nullable(),
-  confidence: z.number(),
-  note: z.string().nullable(),
+  quantity: z.number().nullable().optional().default(null),
+  price: z.number().nullable().optional().default(null),
+  amount: z.number().nullable().optional().default(null),
+  currency: z.string().nullable().optional().default(null),
+  // A null fee means "not shown", which the prompt defines as 0.
+  fee: z
+    .number()
+    .nullable()
+    .optional()
+    .transform((v) => v ?? 0),
+  confidence: z.number().optional().default(0.5),
+  note: z.string().nullable().optional().default(null),
 });
 export type ParsedTransaction = z.infer<typeof ParsedTransaction>;
 
@@ -43,6 +48,15 @@ of portfolio-tracking apps.
 
 Rules:
 - Output one row per transaction actually shown in the document. Never invent rows.
+- Extract what you can see; use null for anything you cannot determine. NEVER invent
+  or guess a value to fill a gap.
+- If a value can be computed from other values on the SAME row, compute and fill it.
+  The only computations allowed: amount = quantity × price, and price = amount ÷ quantity
+  (when quantity is not zero). When you compute a value, say so in note
+  (e.g. "amount computed as 10 × 10.2").
+- If the transaction type cannot be determined from the row, leave type null — do not guess.
+- Leave currency null if the document does not show it; never assume CAD or USD.
+- Dates written with dots (05.02.2014) are day.month.year: the first number is always the day.
 - broker: the institution named on the statement, or null if it is not shown.
 - type must be exactly one of: BUY, SELL, DIVIDEND, DRIP, DEPOSIT, WITHDRAWAL, FEE.
 - Statements and apps abbreviate actions: Dep = DEPOSIT, Out = WITHDRAWAL, Div = DIVIDEND,
