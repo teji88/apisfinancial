@@ -22,13 +22,9 @@ import {
 } from "recharts";
 import {
   Calculator,
-  CalendarClock,
   Coins,
   Landmark,
-  PiggyBank,
-  ShieldCheck,
   Wallet,
-  TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePortfolio } from "@/lib/portfolio";
@@ -672,113 +668,84 @@ function RetirementPage() {
         </div>
       </div>
 
-      <div className={`sticky top-14 z-20 -mx-4 border-b border-border/60 bg-background/95 px-4 shadow-sm backdrop-blur md:-mx-6 md:px-6 ${scrolled ? "py-1.5" : "py-3"}`}>
-        {scrolled ? (
-          /* Compact bar: headings + numbers only, no explanations */
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-            <span className="font-medium">
-              Retire{" "}
-              <span className={earliest && earliest <= inputs.retirementAge ? "text-green-600" : "text-amber-600"}>
-                {earliestLoading ? "…" : earliest ? `at ${earliest}` : "—"}
-              </span>
-            </span>
-            <span className="text-muted-foreground">
-              At {inputs.retirementAge}:{" "}
-              <span className="font-medium text-foreground">{formatCad(startBalance)}</span>
-            </span>
-            <span className="text-muted-foreground">
-              Outcome:{" "}
-              <span className={`font-medium ${projection?.success ? "text-green-600" : "text-amber-600"}`}>
-                {projection?.success ? "Fully funded" : `Short at ${projection?.depletionAge}`}
-              </span>
-            </span>
-            <span className="text-muted-foreground">
-              Lifetime tax: <span className="font-medium text-foreground">{formatCad(totalTaxes)}</span>
-            </span>
-            <span className="text-muted-foreground">
-              Estate tax: <span className="font-medium text-foreground">{formatCad(projection?.estateTax ?? 0)}</span>
-            </span>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard
-          icon={<CalendarClock className="h-4 w-4" />}
-          label="Earliest sustainable retirement"
-          value={earliestLoading ? "Calculating…" : earliest ? `Age ${earliest}` : "Not calculated"}
-          hint={
-            earliestLoading ? (
-              earliestProgress
-                ? `Testing… ${earliestProgress.completed}/${earliestProgress.total} checks`
-                : "Testing retirement ages in the background…"
-            ) : earliest ? (
+      <GlanceBar
+        compact={scrolled}
+        stats={[
+          {
+            key: "outcome",
+            label: "Outcome",
+            value: projection?.success ? "Fully funded" : `Short at ${projection?.depletionAge ?? "—"}`,
+            tone: projection?.success ? "good" : "warn",
+            dimmed: projecting,
+            detail: <>Ending balance {formatCad(endingBalance)} {moneyNote}</>,
+          },
+          {
+            key: "earliest",
+            label: "Retire",
+            value: earliestLoading ? "…" : earliest ? `at ${earliest}` : "—",
+            tone: earliest && earliest <= inputs.retirementAge ? "good" : "warn",
+            detail: (
               <>
-                {earliest <= inputs.retirementAge
-                  ? `Your target of ${inputs.retirementAge} works`
-                  : `Your target of ${inputs.retirementAge} runs short`}
-                {(() => {
-                  const displayAge = earliest <= inputs.retirementAge ? inputs.retirementAge : earliest;
-                  const cppStart = p.cpp_start_age ?? 65;
-                  const oasStart = p.oas_start_age ?? 65;
-                  const firstBenefit = Math.min(cppStart, oasStart);
-                  const bridgeYears = firstBenefit - displayAge;
-                  return bridgeYears > 0 ? (
-                    <span className="block mt-1 text-amber-600">
-                      {bridgeYears}-year bridge: portfolio funds everything until benefits start at {firstBenefit}
-                    </span>
-                  ) : null;
-                })()}
+                {earliestLoading ? (
+                  earliestProgress
+                    ? `Testing… ${earliestProgress.completed}/${earliestProgress.total} checks`
+                    : "Testing retirement ages in the background…"
+                ) : earliest ? (
+                  <>
+                    {earliest <= inputs.retirementAge
+                      ? `Your target of ${inputs.retirementAge} works`
+                      : `Your target of ${inputs.retirementAge} runs short`}
+                    {(() => {
+                      const displayAge = earliest <= inputs.retirementAge ? inputs.retirementAge : earliest;
+                      const cppStart = p.cpp_start_age ?? 65;
+                      const oasStart = p.oas_start_age ?? 65;
+                      const firstBenefit = Math.min(cppStart, oasStart);
+                      const bridgeYears = firstBenefit - displayAge;
+                      return bridgeYears > 0 ? (
+                        <span className="mt-1 block text-amber-600">
+                          {bridgeYears}-year bridge: portfolio funds everything until benefits start at {firstBenefit}
+                        </span>
+                      ) : null;
+                    })()}
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => inputs && runEarliest(inputs)}
+                    className="text-primary hover:underline"
+                  >
+                    Calculate earliest age
+                  </button>
+                )}
               </>
-            ) : (
-              <button
-                type="button"
-                onClick={() => inputs && runEarliest(inputs)}
-                className="text-primary hover:underline"
-              >
-                Calculate earliest age
-              </button>
-            )
-          }
-          tone={earliest && earliest <= inputs.retirementAge ? "good" : "warn"}
-        />
-        <StatCard
-          icon={<PiggyBank className="h-4 w-4" />}
-          label={`Projected at retirement (age ${inputs.retirementAge})`}
-          value={formatCad(startBalance)}
-          hint="All figures in today’s purchasing power (adjusted for inflation)."
-        />
-        <StatCard
-          icon={<ShieldCheck className="h-4 w-4" />}
-          label="Plan outcome"
-          value={
-            projection?.success
-              ? "Fully funded"
-              : `Runs short at ${projection?.depletionAge}`
-          }
-          hint={`Ending balance ${formatCad(endingBalance)} ${moneyNote}`}
-          tone={projection?.success ? "good" : "warn"}
-          dimmed={projecting}
-        />
-        <StatCard
-          icon={<TriangleAlert className="h-4 w-4" />}
-          label="Lifetime tax & clawback"
-          value={formatCad(totalTaxes)}
-          hint={
-            totalClawback > 1
-              ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
-              : "No OAS clawback in this plan"
-          }
-          tone={totalClawback > 1 ? "warn" : "good"}
-        />
-        <StatCard
-          icon={<Landmark className="h-4 w-4" />}
-          label="Tax owed by your estate"
-          value={formatCad(projection?.estateTax ?? 0)}
-          hint={`${formatCad(projection?.estateRegistered ?? 0)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`}
-          tone={(projection?.estateTax ?? 0) > 1 ? "warn" : "good"}
-        />
-          </div>
-        )}
-      </div>
+            ),
+          },
+          {
+            key: "balance",
+            label: `At ${inputs.retirementAge}`,
+            value: formatCad(startBalance),
+            tone: "neutral",
+            detail: "All figures in today’s purchasing power (adjusted for inflation).",
+          },
+          {
+            key: "tax",
+            label: "Lifetime tax",
+            value: formatCad(totalTaxes),
+            tone: totalClawback > 1 ? "warn" : "good",
+            detail:
+              totalClawback > 1
+                ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
+                : "No OAS clawback in this plan",
+          },
+          {
+            key: "estate",
+            label: "Estate tax",
+            value: formatCad(projection?.estateTax ?? 0),
+            tone: (projection?.estateTax ?? 0) > 1 ? "warn" : "good",
+            detail: `${formatCad(projection?.estateRegistered ?? 0)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`,
+          },
+        ]}
+      />
 
       <Tabs defaultValue="plan">
         <TabsList>
@@ -1692,38 +1659,97 @@ function BenefitCard({
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  hint,
-  subhint,
-  tone,
-  dimmed,
-}: {
-  icon: React.ReactNode;
+interface GlanceStat {
+  key: string;
   label: string;
-  value: string;
-  hint: React.ReactNode;
-  subhint?: string;
-  tone?: "good" | "warn";
+  value: React.ReactNode;
+  tone: "good" | "warn" | "neutral";
+  detail: React.ReactNode;
   dimmed?: boolean;
+}
+
+/**
+ * The Glance Bar: a single sticky strip showing the 5 key retirement numbers.
+ * Same structure on every screen size — desktop shows all 5 in a row,
+ * phone gets a horizontal swipe strip. Tap any stat for its details.
+ * Scrolling only tightens padding; the layout never morphs.
+ */
+function GlanceBar({
+  stats,
+  compact,
+}: {
+  stats: GlanceStat[];
+  compact: boolean;
 }) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const openStat = stats.find((s) => s.key === openKey);
+
   return (
-    <div className={`panel min-h-[6.5rem] p-5 transition-opacity ${dimmed ? "opacity-60" : ""}`}>
-      <div className="flex flex-wrap items-center gap-2 text-xs leading-snug break-words text-muted-foreground">
-        {icon}
-        {label}
-      </div>
-      <p
-        className={`num mt-2 text-xl font-semibold ${
-          tone === "warn" ? "text-destructive" : tone === "good" ? "text-emerald-600" : ""
-        }`}
+    <div
+      className={`sticky top-14 z-20 -mx-4 border-b border-border/60 bg-background/95 px-4 backdrop-blur transition-all duration-200 md:-mx-6 md:px-6 ${
+        compact ? "py-1.5 shadow-sm" : "py-2.5 shadow-sm"
+      }`}
+    >
+      <div
+        className="flex flex-nowrap items-center gap-1 overflow-x-auto scrollbar-none"
+        role="list"
+        aria-label="Key retirement figures"
       >
-        {value}
-      </p>
-      <p className="mt-1 text-xs leading-snug break-words text-muted-foreground">{hint}</p>
-      {subhint ? <p className="mt-1 text-[11px] leading-snug break-words text-muted-foreground">{subhint}</p> : null}
+        {stats.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            role="listitem"
+            onClick={() => setOpenKey(openKey === s.key ? null : s.key)}
+            aria-expanded={openKey === s.key}
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 transition-colors hover:bg-accent/60 ${
+              compact ? "py-1" : "py-1.5"
+            } ${s.dimmed ? "opacity-60" : ""}`}
+          >
+            <span
+              aria-hidden
+              className={`h-2 w-2 shrink-0 rounded-full ${
+                s.tone === "good"
+                  ? "bg-emerald-500"
+                  : s.tone === "warn"
+                    ? "bg-amber-500"
+                    : "bg-muted-foreground/40"
+              }`}
+            />
+            <span className="whitespace-nowrap text-xs text-muted-foreground">{s.label}</span>
+            <span
+              className={`num whitespace-nowrap font-semibold ${
+                compact ? "text-xs" : "text-sm"
+              } ${
+                s.tone === "warn"
+                  ? "text-amber-600"
+                  : s.tone === "good"
+                    ? "text-emerald-600"
+                    : "text-foreground"
+              }`}
+            >
+              {s.value}
+            </span>
+          </button>
+        ))}
+      </div>
+      {openStat && (
+        <>
+          <button
+            type="button"
+            aria-label="Close details"
+            className="fixed inset-0 z-30 cursor-default bg-transparent"
+            onClick={() => setOpenKey(null)}
+          />
+          <div className="absolute left-4 right-4 top-full z-40 mt-1 rounded-lg border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-lg md:left-6 md:right-auto md:max-w-sm">
+            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {openStat.label}
+            </p>
+            {openStat.detail}
+          </div>
+        </>
+      )}
     </div>
   );
 }
+
