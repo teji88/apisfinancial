@@ -51,6 +51,7 @@ function RetirementPage() {
   const [stressResults, setStressResults] = useState<ScenarioStressTestResult | null>(null);
   const [optimization, setOptimization] = useState<OptimizationResult | null>(null);
   const [optimizing, setOptimizing] = useState(false);
+  const [showTodaysDollars, setShowTodaysDollars] = useState(false);
 
   const portfolio = useMemo(() => {
     const byType: Record<string, number> = {};
@@ -115,7 +116,7 @@ function RetirementPage() {
       });
     if (changed) setScenario({ ...scenario, accounts: nextAccounts });
   }, [accounts, portfolio.accountValues, scenario]);
-  const overview = buildRetirementOverview(result, activeScenario);
+  const overview = buildRetirementOverview(result, activeScenario, { inTodaysDollars: showTodaysDollars });
 
   const runOptimization = async () => {
     setOptimizing(true);
@@ -220,6 +221,8 @@ function RetirementPage() {
           running={running}
           stressResults={stressResults}
           onScenarios={() => setSection("scenarios")}
+          showTodaysDollars={showTodaysDollars}
+          onToggleDollars={() => setShowTodaysDollars((v) => !v)}
         />
       )}
       {section === "plan" && (
@@ -252,6 +255,8 @@ function Overview({
   running,
   stressResults,
   onScenarios,
+  showTodaysDollars,
+  onToggleDollars,
 }: {
   overview: ReturnType<typeof buildRetirementOverview>;
   portfolioTotal: number;
@@ -263,6 +268,8 @@ function Overview({
   running: boolean;
   stressResults: ScenarioStressTestResult | null;
   onScenarios: () => void;
+  showTodaysDollars: boolean;
+  onToggleDollars: () => void;
 }) {
   return (
     <div className="space-y-5">
@@ -273,7 +280,25 @@ function Overview({
             <h2 className="mt-2 font-display text-2xl font-semibold">{overview.headline}</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{overview.explanation}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex rounded-lg border border-border overflow-hidden" role="group" aria-label="Dollar basis">
+              <button
+                type="button"
+                onClick={() => showTodaysDollars && onToggleDollars()}
+                className={`px-3 py-2 text-sm font-medium transition-colors ${!showTodaysDollars ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                aria-pressed={!showTodaysDollars}
+              >
+                Nominal $
+              </button>
+              <button
+                type="button"
+                onClick={() => !showTodaysDollars && onToggleDollars()}
+                className={`px-3 py-2 text-sm font-medium transition-colors ${showTodaysDollars ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                aria-pressed={showTodaysDollars}
+              >
+                Today's $
+              </button>
+            </div>
             <Button variant="outline" onClick={onPlan}>Edit plan</Button>
             <Button variant="outline" onClick={onOptimize} disabled={running || optimizing}>
               {optimizing ? "Analyzing strategies…" : "Analyze strategies"}
