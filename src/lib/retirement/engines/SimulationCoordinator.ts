@@ -3,6 +3,7 @@ import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
 import { calculateBasicTax, calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
 import { planWithdrawalSequence } from "./WithdrawalEngine";
+import { CANADA_2026_PARAMETERS } from "../rules/canada2026";
 import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, withdrawNonRegistered, estimateNonRegisteredMonthlyIncome, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 import { validateRetirementScenario } from "../validation/RetirementValidation";
 import { createDebtState, accrueDebtMonth, type DebtState } from "./DebtEngine";
@@ -508,6 +509,12 @@ export function runRetirementSimulation(
       spouseAge: ages.PARTNER,
       pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
       priority: sequencePriority,
+      // TAX_TARGETED: cap registered meltdown at the OAS clawback ceiling (+ tolerance)
+      applyClawbackCeiling: scenario.strategy.withdrawalPolicy === "TAX_TARGETED",
+      oasClawbackThreshold: CANADA_2026_PARAMETERS.oasRecovery.startIncome *
+        Math.pow(1 + Math.max(0, scenario.assumptions.inflationRate) / 100, Math.max(0, calendarYear - 2026)),
+      clawbackTolerance: (scenario.strategy.clawbackTolerance ?? 0) *
+        Math.pow(1 + Math.max(0, scenario.assumptions.inflationRate) / 100, Math.max(0, calendarYear - 2026)),
       owners: accounts
         .filter((account) => account.balance > 0)
         .map((account) => ({

@@ -98,6 +98,8 @@ export interface StrategyPreferences {
   objective: "MAX_SUSTAINABLE_SPENDING" | "MAX_LIFETIME_AFTER_TAX_CASH" | "MAX_ESTATE" | "MIN_DEPLETION_RISK" | "MIN_TAX" | "MIN_RETIREMENT_AGE" | "CUSTOM";
   taxableIncomeTarget?: Money;
   pensionSplitPercent?: number;
+  /** Allowed overshoot above the OAS clawback threshold when melting down registered accounts (today's dollars). */
+  clawbackTolerance?: Money;
   cashReserve?: Money;
   estateTarget?: Money;
 }

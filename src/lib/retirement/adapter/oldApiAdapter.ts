@@ -92,6 +92,8 @@ export type PlannerInputs = {
   annualSavings: number;
   savingsSplit: SavingsSplit;
   clawbackTolerance?: number;
+  /** Percent of eligible pension income to split with spouse (0-50). */
+  pensionSplitPercent?: number;
   withdrawalPolicy?: WithdrawalPolicy;
   self: PersonSpec;
   spouse: PersonSpec | null;
@@ -243,6 +245,12 @@ export function plannerInputsToScenario(
   // Strategy
   if (input.withdrawalPolicy) {
     scenario.strategy.withdrawalPolicy = input.withdrawalPolicy;
+  }
+  if (input.clawbackTolerance !== undefined && input.clawbackTolerance > 0) {
+    scenario.strategy.clawbackTolerance = input.clawbackTolerance;
+  }
+  if (input.pensionSplitPercent !== undefined && input.pensionSplitPercent > 0) {
+    scenario.strategy.pensionSplitPercent = Math.min(50, Math.max(0, input.pensionSplitPercent));
   }
 
   // Build real accounts from the per-person balances so the engine sees
