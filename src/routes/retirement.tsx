@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, FileText, Settings2, ShieldCheck, WalletCards } from "lucide-react";
+import { CppHistoryEditor } from "./CppHistoryEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -444,6 +445,17 @@ function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
                 const people = scenario.household.people.map((p, i) => i === index ? { ...p, cppAt65: v === undefined ? undefined : Math.max(0, v) } : p);
                 onChange({ household: { ...scenario.household, people } });
               }} />
+              <div className="sm:col-span-2 lg:col-span-3">
+                <CppHistoryEditor
+                  member={member}
+                  onChange={(updates) => {
+                    const people = scenario.household.people.map((p, i) =>
+                      i === index ? { ...p, ...updates } : p,
+                    );
+                    onChange({ household: { ...scenario.household, people } });
+                  }}
+                />
+              </div>
               <Field label="CPP/QPP start"><Select value={String(member.cppStartAge)} onValueChange={(v) => {
                 const people = scenario.household.people.map((p, i) => i === index ? { ...p, cppStartAge: v === "OPTIMIZE" ? "OPTIMIZE" as const : Number(v) } : p);
                 onChange({ household: { ...scenario.household, people } });
@@ -535,7 +547,7 @@ function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
 
       <Section title="Strategy" subtitle="Withdrawal policies and optimization objectives are explicit inputs.">
         <Field label="Withdrawal policy"><Select value={scenario.strategy.withdrawalPolicy} onValueChange={(v) => onChange({ strategy: { ...scenario.strategy, withdrawalPolicy: v as RetirementScenario["strategy"]["withdrawalPolicy"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["OPTIMIZE","USER_DEFINED","TAX_TARGETED","REGISTERED_FIRST","TFSA_FIRST","NON_REGISTERED_FIRST"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
-        <Field label="Optimization objective"><Select value={scenario.strategy.objective} onValueChange={(v) => onChange({ strategy: { ...scenario.strategy, objective: v as RetirementScenario["strategy"]["objective"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["MAX_SUSTAINABLE_SPENDING","MAX_LIFETIME_AFTER_TAX_CASH","MAX_ESTATE","MIN_DEPLETION_RISK","MIN_TAX","MIN_RETIREMENT_AGE","CUSTOM"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Optimization objective"><Select value={scenario.strategy.objective} onValueChange={(v) => onChange({ strategy: { ...scenario.strategy, objective: v as RetirementScenario["strategy"]["objective"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["MAX_SUSTAINABLE_SPENDING","MAX_LIFETIME_AFTER_TAX_CASH","MAX_ESTATE","MIN_DEPLETION_RISK","MIN_TAX","CUSTOM"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
         <NumberField label="Minimum cash reserve" value={scenario.strategy.cashReserve} min={0} onChange={(v) => onChange({ strategy: { ...scenario.strategy, cashReserve: Math.max(0, v ?? 0) } })} />
         <NumberField label="Target taxable income" value={scenario.strategy.taxableIncomeTarget} min={0} onChange={(v) => onChange({ strategy: { ...scenario.strategy, taxableIncomeTarget: v === undefined ? undefined : Math.max(0, v) } })} />
         <NumberField label="Pension split %" value={scenario.strategy.pensionSplitPercent ?? 0} min={0} max={50} onChange={(v) => onChange({ strategy: { ...scenario.strategy, pensionSplitPercent: v === undefined ? undefined : Math.min(50, Math.max(0, v)) } })} />

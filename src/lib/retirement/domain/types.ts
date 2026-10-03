@@ -42,6 +42,16 @@ export interface PersonScenario {
   otherIncome?: Money;
   deathAge?: number;
   survivorCppPercent?: number;
+  /**
+   * CPP contributory earnings history by year, for calculating CPP from
+   * actual earnings instead of using a manual cppAt65 estimate.
+   * When provided, cppAt65 is auto-calculated (manual value is ignored).
+   */
+  cppEarningsHistory?: Array<{ year: number; earnings: number }>;
+  /** Expected annual earnings for future years (used with cppEarningsHistory). */
+  cppFutureEarnings?: Money;
+  /** Years eligible for CPP child-rearing dropout. */
+  cppChildRearingYears?: number[];
 }
 
 export interface AccountScenario {
@@ -81,7 +91,7 @@ export interface ScenarioAssumptions {
 
 export interface StrategyPreferences {
   withdrawalPolicy: "OPTIMIZE" | "USER_DEFINED" | "TAX_TARGETED" | "REGISTERED_FIRST" | "TFSA_FIRST" | "NON_REGISTERED_FIRST";
-  objective: "MAX_SUSTAINABLE_SPENDING" | "MAX_LIFETIME_AFTER_TAX_CASH" | "MAX_ESTATE" | "MIN_DEPLETION_RISK" | "MIN_TAX" | "MIN_RETIREMENT_AGE" | "CUSTOM";
+  objective: "MAX_SUSTAINABLE_SPENDING" | "MAX_LIFETIME_AFTER_TAX_CASH" | "MAX_ESTATE" | "MIN_DEPLETION_RISK" | "MIN_TAX" | "CUSTOM";
   taxableIncomeTarget?: Money;
   pensionSplitPercent?: number;
   cashReserve?: Money;
