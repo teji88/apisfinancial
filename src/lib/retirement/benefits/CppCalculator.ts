@@ -7,14 +7,19 @@
  * 3. Earnings ratio = pensionable earnings / YMPE for that year
  * 4. General dropout: exclude lowest 17% of years
  * 5. Child-rearing dropout: exclude eligible low-earning years
- * 6. Average remaining ratios × 25% × average YMPE = annual benefit at 65
- * 7. Divide by 12 for monthly
- *
- * Note: This calculates base CPP (25%) plus the 2019+ enhancement (8.33% on
- * post-2018 earnings, pro-rated). CPP2 (YAMPE second tier, 2024+) is not yet modeled.
+ * 6. Average remaining ratios × 25% × average YMPE = annual base benefit at 65
+ * 7. First additional (2019+): 8.33% × ratio × YMPE × phase-in factor per year
+ * 8. Second additional / CPP2 (2024+): 33.33% × band ratio × (YAMPE - YMPE) per year
+ * 9. Divide by 12 for monthly
  */
 
 import { getYmpe, getAverageYmpe } from "./ympeTable";
+import {
+  getYampe,
+  getFirstAdditionalPhaseIn,
+  FIRST_ADDITIONAL_RATE,
+  SECOND_ADDITIONAL_RATE,
+} from "./yampeTable";
 
 export interface YearlyEarnings {
   year: number;
@@ -45,6 +50,12 @@ export interface CppCalculationResult {
   cppAt65Monthly: number;
   /** Annual CPP benefit at age 65. */
   cppAt65Annual: number;
+  /** Annual base CPP (25%) at 65. */
+  baseAnnual: number;
+  /** Annual first additional enhancement (8.33%, phased 2019-2023). */
+  firstAdditionalAnnual: number;
+  /** Annual second additional / CPP2 (33.33% on YMPE-YAMPE band, 2024+). */
+  secondAdditionalAnnual: number;
   /** Monthly post-retirement benefits (0 if not working while collecting). */
   prbMonthly: number;
   /** Annual post-retirement benefits. */
@@ -77,9 +88,6 @@ export interface CppCalculationResult {
 
 const GENERAL_DROPOUT_RATE = 0.17;
 const BASE_REPLACEMENT_RATE = 0.25;
-/** CPP enhancement: additional replacement rate on post-2018 earnings (phased in 2019-2023, full from 2023). */
-const ENHANCEMENT_REPLACEMENT_RATE = 0.0833;
-const ENHANCEMENT_START_YEAR = 2019;
 const CPP_START_YEAR = 1966;
 
 export function calculateCppBenefit(input: CppCalculationInput): CppCalculationResult {
@@ -179,12 +187,37 @@ export function calculateCppBenefit(input: CppCalculationInput): CppCalculationR
   const averageYmpe = getAverageYmpe(calculationYear);
   const baseAnnualBenefit = averageEarningsRatio * BASE_REPLACEMENT_RATE * averageYmpe;
 
-  // CPP enhancement (2019+): 8.33% additional on post-2018 earnings.
-  // Pro-rated by the fraction of included years in the enhancement period.
-  // Note: CPP2 (YAMPE tier, 2024+) is not yet modeled.
-  const enhancementYears = included.filter((y) => y.year >= ENHANCEMENT_START_YEAR);
-  const enhancementYearFraction = included.length > 0 ? enhancementYears.length / included.length : 0;
-  const enhancementAnnualBenefit = averageEarningsRatio * enhancementYearFraction * ENHANCEMENT_REPLACEMENT_RATE * averageYmpe;
+  // CPP enhancement: two components calculated per-year over the same
+  // contributory period and dropouts as the base benefit.
+  //
+  // First additional (2019+): 8.33% × earnings ratio × YMPE × phase-in factor.
+  // Phase-in: 15% (2019), 30% (2020), 50% (2021), 75% (2022), 100% (2023+).
+  let firstAdditionalTotal = 0;
+  for (const y of included) {
+    const phaseIn = getFirstAdditionalPhaseIn(y.year);
+    if (phaseIn > 0) {
+      firstAdditionalTotal += y.ratio * FIRST_ADDITIONAL_RATE * y.ympe * phaseIn;
+    }
+  }
+  const firstAdditionalAnnual = included.length > 0 ? firstAdditionalTotal / included.length : 0;
+
+  // Second additional / CPP2 (2024+): 33.33% on earnings in the YMPE–YAMPE band.
+  // Uses uncapped earnings (y.earnings), not pensionable earnings.
+  let secondAdditionalTotal = 0;
+  for (const y of included) {
+    if (y.year >= 2024) {
+      const yampe = getYampe(y.year);
+      const bandWidth = yampe - y.ympe;
+      if (bandWidth > 0 && y.earnings > y.ympe) {
+        const earningsInBand = Math.min(y.earnings - y.ympe, bandWidth);
+        const bandRatio = earningsInBand / bandWidth;
+        secondAdditionalTotal += bandRatio * SECOND_ADDITIONAL_RATE * bandWidth;
+      }
+    }
+  }
+  const secondAdditionalAnnual = included.length > 0 ? secondAdditionalTotal / included.length : 0;
+
+  const enhancementAnnualBenefit = firstAdditionalAnnual + secondAdditionalAnnual;
 
   const annualBenefit = baseAnnualBenefit + enhancementAnnualBenefit;
   const monthlyBenefit = annualBenefit / 12;
@@ -195,7 +228,7 @@ export function calculateCppBenefit(input: CppCalculationInput): CppCalculationR
   const prbYears: number[] = [];
   let prbAnnual = 0;
   if (retirementAge !== undefined && retirementAge > cppStartAge) {
-    const maxCppAnnual = averageYmpe * (BASE_REPLACEMENT_RATE + ENHANCEMENT_REPLACEMENT_RATE);
+    const maxCppAnnual = averageYmpe * (BASE_REPLACEMENT_RATE + FIRST_ADDITIONAL_RATE);
     for (let year = birthYear + cppStartAge; year < birthYear + Math.min(retirementAge, 70); year++) {
       const yearData = years.find((y) => y.year === year);
       if (!yearData || yearData.ratio <= 0) continue;
@@ -224,6 +257,9 @@ export function calculateCppBenefit(input: CppCalculationInput): CppCalculationR
   return {
     cppAt65Monthly: Math.max(0, monthlyBenefit),
     cppAt65Annual: Math.max(0, annualBenefit),
+    baseAnnual: Math.max(0, baseAnnualBenefit),
+    firstAdditionalAnnual: Math.max(0, firstAdditionalAnnual),
+    secondAdditionalAnnual: Math.max(0, secondAdditionalAnnual),
     prbMonthly: Math.max(0, prbAnnual / 12),
     prbAnnual: Math.max(0, prbAnnual),
     prbYears,
