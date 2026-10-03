@@ -66,7 +66,7 @@ function bracketsForProvince(province: ProvinceCode): readonly TaxBracket[] {
   return (CANADA_2026_PARAMETERS.tax.provincialBrackets[province] ?? []) as readonly TaxBracket[];
 }
 
-function provincialBasicPersonalAmount(province: ProvinceCode): number {
+function provincialBasicPersonalAmount(province: ProvinceCode, indexFactor = 1): number {
   const amounts: Partial<Record<ProvinceCode, number>> = {
     AB: 22_769,
     BC: 13_216,
@@ -80,29 +80,29 @@ function provincialBasicPersonalAmount(province: ProvinceCode): number {
     PE: 15_000,
     SK: 20_381,
   };
-  return amounts[province] ?? 0;
+  return (amounts[province] ?? 0) * indexFactor;
 }
 
-function federalBasicPersonalAmount(netIncome: number): number {
-  const maximum = CANADA_2026_PARAMETERS.tax.federalBasicPersonalAmount;
-  const minimum = CANADA_2026_PARAMETERS.tax.federalMinimumBasicPersonalAmount ?? maximum;
-  const phaseOutStart = 181_440;
-  const phaseOutEnd = 258_482;
+function federalBasicPersonalAmount(netIncome: number, indexFactor = 1): number {
+  const maximum = CANADA_2026_PARAMETERS.tax.federalBasicPersonalAmount * indexFactor;
+  const minimum = (CANADA_2026_PARAMETERS.tax.federalMinimumBasicPersonalAmount ?? CANADA_2026_PARAMETERS.tax.federalBasicPersonalAmount) * indexFactor;
+  const phaseOutStart = 181_440 * indexFactor;
+  const phaseOutEnd = 258_482 * indexFactor;
   if (netIncome <= phaseOutStart) return maximum;
   if (netIncome >= phaseOutEnd) return minimum;
   return maximum - (netIncome - phaseOutStart) * (maximum - minimum) / (phaseOutEnd - phaseOutStart);
 }
 
-function federalBasicCredit(netIncome: number): number {
-  return federalBasicPersonalAmount(netIncome) * 0.14;
+function federalBasicCredit(netIncome: number, indexFactor = 1): number {
+  return federalBasicPersonalAmount(netIncome, indexFactor) * 0.14;
 }
 
 function provincialBasicCreditRate(province: ProvinceCode): number {
   return marginalBracketRate(0, bracketsForProvince(province));
 }
 
-function provincialBasicCredit(province: ProvinceCode): number {
-  return provincialBasicPersonalAmount(province) * provincialBasicCreditRate(province);
+function provincialBasicCredit(province: ProvinceCode, indexFactor = 1): number {
+  return provincialBasicPersonalAmount(province, indexFactor) * provincialBasicCreditRate(province);
 }
 
 function normalizeIncome(components: TaxIncomeComponents): Required<TaxIncomeComponents> {
@@ -176,11 +176,11 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
   };
 }
 
-function oasRecoveryForIncome(income: number, age: number, oasReceived = 0): number {
-  const threshold = CANADA_2026_PARAMETERS.oasRecovery.startIncome;
+function oasRecoveryForIncome(income: number, age: number, oasReceived = 0, indexFactor = 1): number {
+  const threshold = CANADA_2026_PARAMETERS.oasRecovery.startIncome * indexFactor;
   const upper = age >= 75
-    ? CANADA_2026_PARAMETERS.oasRecovery.upperIncome75Plus
-    : CANADA_2026_PARAMETERS.oasRecovery.upperIncomeUnder75;
+    ? CANADA_2026_PARAMETERS.oasRecovery.upperIncome75Plus * indexFactor
+    : CANADA_2026_PARAMETERS.oasRecovery.upperIncomeUnder75 * indexFactor;
   const incomeBasedRecovery = Math.max(
     0,
     Math.min(
@@ -197,33 +197,52 @@ export function calculateTaxFromIncome(
   components: TaxIncomeComponents,
   province: ProvinceCode = "AB",
   age = 65,
+  taxYear = 2026,
+  inflationRate = 2,
 ): TaxResult {
   const ledgers = buildTaxIncome(components);
-  const federalBrackets = CANADA_2026_PARAMETERS.tax.federalBrackets as readonly TaxBracket[];
-  const provincialBrackets = bracketsForProvince(province);
+  // Index brackets and thresholds to the tax year (2026 = base year)
+  const indexFactor = Math.pow(1 + Math.max(0, inflationRate) / 100, Math.max(0, taxYear - 2026));
+  const scaleBrackets = (brackets: readonly TaxBracket[]): TaxBracket[] =>
+    brackets.map(([low, high, rate]) => [
+      low * indexFactor,
+      high === Infinity ? Infinity : high * indexFactor,
+      rate,
+    ] as TaxBracket);
+  const federalBrackets = scaleBrackets(CANADA_2026_PARAMETERS.tax.federalBrackets as readonly TaxBracket[]);
+  const provincialBrackets = scaleBrackets(bracketsForProvince(province));
   const federalGross = taxFromBrackets(ledgers.taxableIncome, federalBrackets);
   const provincialGross = taxFromBrackets(ledgers.taxableIncome, provincialBrackets);
   const federalDividendCredit =
     ledgers.eligibleDividendGrossUp * CANADA_2026_PARAMETERS.tax.eligibleDividendFederalCreditRate +
     ledgers.nonEligibleDividendGrossUp * CANADA_2026_PARAMETERS.tax.nonEligibleDividendFederalCreditRate;
   const pensionIncomeCreditBase = Math.max(0, ledgers.pensionIncomeCreditBase);
-  const federalPensionIncomeCredit = pensionIncomeCreditBase * CANADA_2026_PARAMETERS.tax.federalPensionIncomeCreditRate;
+  const federalPensionIncomeCredit = Math.min(pensionIncomeCreditBase, 2000 * indexFactor) * CANADA_2026_PARAMETERS.tax.federalPensionIncomeCreditRate;
   const provincialPensionIncomeCreditBase = Math.min(
     pensionIncomeCreditBase,
-    CANADA_2026_PARAMETERS.tax.provincialPensionIncomeAmount[province] ?? 0,
+    (CANADA_2026_PARAMETERS.tax.provincialPensionIncomeAmount[province] ?? 0) * indexFactor,
   );
   const provincialPensionIncomeCredit = provincialPensionIncomeCreditBase * provincialBasicCreditRate(province);
+  // Federal age credit: 65+, indexed amount reduced by 15% of net income above threshold
+  const ageAmountBase = (CANADA_2026_PARAMETERS.tax.federalAgeAmount ?? 0) * indexFactor;
+  const ageThreshold = (CANADA_2026_PARAMETERS.tax.federalAgeAmountReductionThreshold ?? 0) * indexFactor;
+  const ageReductionRate = CANADA_2026_PARAMETERS.tax.federalAgeAmountReductionRate ?? 0.15;
+  const ageAmount = age >= 65
+    ? Math.max(0, ageAmountBase - Math.max(0, ledgers.netIncome - ageThreshold) * ageReductionRate)
+    : 0;
+  const federalAgeCredit = ageAmount * CANADA_2026_PARAMETERS.tax.federalPensionIncomeCreditRate;
   const credits =
-    federalBasicCredit(ledgers.netIncome) +
-    provincialBasicCredit(province) +
+    federalBasicCredit(ledgers.netIncome, indexFactor) +
+    provincialBasicCredit(province, indexFactor) +
     federalDividendCredit +
     federalPensionIncomeCredit +
-    provincialPensionIncomeCredit;
-  const federalTax = Math.max(0, federalGross - federalBasicCredit(ledgers.netIncome) - federalDividendCredit - federalPensionIncomeCredit);
-  const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province) - provincialPensionIncomeCredit);
+    provincialPensionIncomeCredit +
+    federalAgeCredit;
+  const federalTax = Math.max(0, federalGross - federalBasicCredit(ledgers.netIncome, indexFactor) - federalDividendCredit - federalPensionIncomeCredit - federalAgeCredit);
+  const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province, indexFactor) - provincialPensionIncomeCredit);
   // OAS is included in net income for the recovery tax calculation.
   const oasRecoveryIncome = ledgers.netIncome;
-  const oasRecovery = oasRecoveryForIncome(oasRecoveryIncome, age, ledgers.oas);
+  const oasRecovery = oasRecoveryForIncome(oasRecoveryIncome, age, ledgers.oas, indexFactor);
   const foreignIncome = Math.max(0, ledgers.foreignIncome);
   // V1 FTC model: the federal and provincial credits are each limited by
   // the Canadian tax otherwise attributable to the foreign income. CRA's
@@ -265,8 +284,8 @@ export function calculateTaxFromIncome(
   };
 }
 
-export function calculateBasicTax(taxableIncome: number, province: ProvinceCode = "AB", age = 65): TaxResult {
-  return calculateTaxFromIncome({ rrspRrif: taxableIncome }, province, age);
+export function calculateBasicTax(taxableIncome: number, province: ProvinceCode = "AB", age = 65, taxYear = 2026, inflationRate = 2): TaxResult {
+  return calculateTaxFromIncome({ rrspRrif: taxableIncome }, province, age, taxYear, inflationRate);
 }
 
 export function calculateIncrementalTax(
@@ -299,6 +318,10 @@ export interface HouseholdTaxInput {
   payerAge?: number;
   spouseAge?: number;
   pensionSplitPercent?: number;
+  /** Tax year for indexing brackets/thresholds (defaults to 2026). */
+  taxYear?: number;
+  /** Inflation rate for indexing (percent, e.g. 2 for 2%). */
+  inflationRate?: number;
 }
 
 export interface HouseholdTaxResult {
@@ -308,6 +331,8 @@ export interface HouseholdTaxResult {
   householdNetIncome: number;
   householdTax: number;
   pensionSplit: number;
+  /** Total OAS recovery tax (clawback) for the household. */
+  oasRecovery: number;
 }
 
 /**
@@ -339,8 +364,10 @@ export function calculateHouseholdTax(input: HouseholdTaxInput): HouseholdTaxRes
     pensionSplitPercent: 0,
   };
 
-  const payerTax = calculateTaxFromIncome(payerComponents, input.province ?? "AB", payerAge);
-  const spouseTax = calculateTaxFromIncome(spouseComponents, input.province ?? "AB", spouseAge);
+  const taxYear = input.taxYear ?? 2026;
+  const inflationRate = input.inflationRate ?? 2;
+  const payerTax = calculateTaxFromIncome(payerComponents, input.province ?? "AB", payerAge, taxYear, inflationRate);
+  const spouseTax = calculateTaxFromIncome(spouseComponents, input.province ?? "AB", spouseAge, taxYear, inflationRate);
 
   return {
     payer: payerTax,
@@ -349,5 +376,6 @@ export function calculateHouseholdTax(input: HouseholdTaxInput): HouseholdTaxRes
     householdNetIncome: payerTax.netIncome + spouseTax.netIncome,
     householdTax: payerTax.totalTax + spouseTax.totalTax,
     pensionSplit,
+    oasRecovery: payerTax.oasRecovery + spouseTax.oasRecovery,
   };
 }

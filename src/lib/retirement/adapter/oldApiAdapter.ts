@@ -20,6 +20,8 @@ import { optimizeRetirementPlan } from "../optimization/RetirementOptimizer";
 import { calculateCppBenefit } from "../benefits/CppCalculator";
 import { createDefaultRetirementScenario } from "../scenario/defaults";
 import type {
+  AccountScenario,
+  PersonRole,
   RetirementScenario,
   SimulationResult,
 } from "../domain/types";
@@ -82,10 +84,16 @@ export type PlannerInputs = {
   workingGrowth?: number;
   retirementGrowth?: number;
   growth?: number;
+  /** Year-specific return overrides: calendar year -> annual return %. For sequence-of-returns stress tests. */
+  annualReturnOverrides?: Record<number, number>;
+  /** Quick mode: simplified withdrawal for fast estimates. */
+  quick?: boolean;
   desiredIncome: number;
   annualSavings: number;
   savingsSplit: SavingsSplit;
   clawbackTolerance?: number;
+  /** Percent of eligible pension income to split with spouse (0-50). */
+  pensionSplitPercent?: number;
   withdrawalPolicy?: WithdrawalPolicy;
   self: PersonSpec;
   spouse: PersonSpec | null;
@@ -188,8 +196,20 @@ export function plannerInputsToScenario(
 
   // Assumptions
   scenario.assumptions.inflationRate = input.inflation;
-  const growth = input.retirementGrowth ?? input.workingGrowth ?? input.growth ?? 5;
-  scenario.assumptions.investmentReturn = growth;
+  // Use separate working/retirement growth rates when provided; the engine
+  // switches at retirement. Falls back to a single rate for both phases.
+  const retirementGrowth = input.retirementGrowth ?? input.growth ?? 5;
+  const workingGrowth = input.workingGrowth ?? retirementGrowth;
+  scenario.assumptions.investmentReturn = retirementGrowth;
+  if (workingGrowth !== retirementGrowth) {
+    scenario.assumptions.workingInvestmentReturn = workingGrowth;
+  }
+  if (input.annualReturnOverrides) {
+    scenario.assumptions.annualReturnOverrides = input.annualReturnOverrides;
+  }
+  if (input.quick) {
+    scenario.quick = true;
+  }
 
   // Province
   scenario.household.province = input.province;
@@ -226,10 +246,115 @@ export function plannerInputsToScenario(
   if (input.withdrawalPolicy) {
     scenario.strategy.withdrawalPolicy = input.withdrawalPolicy;
   }
+  if (input.clawbackTolerance !== undefined && input.clawbackTolerance > 0) {
+    scenario.strategy.clawbackTolerance = input.clawbackTolerance;
+  }
+  if (input.pensionSplitPercent !== undefined && input.pensionSplitPercent > 0) {
+    scenario.strategy.pensionSplitPercent = Math.min(50, Math.max(0, input.pensionSplitPercent));
+  }
 
-  scenario.accounts = [];
+  // Build real accounts from the per-person balances so the engine sees
+  // RRSP/LIRA/TFSA/non-registered separately (not one lump sum).
+  // Household annual savings are split across the main user's accounts
+  // per savingsSplit, contributed until their retirement age.
+  scenario.accounts = buildHouseholdAccounts(input);
 
   return scenario;
+}
+
+/**
+ * Normalize a savings split to fractions (accepts 0-100 percentages or 0-1 fractions).
+ */
+function normalizeSplit(split: SavingsSplit): { rrsp: number; tfsa: number; nonreg: number } {
+  const total = (split.rrsp ?? 0) + (split.tfsa ?? 0) + (split.nonreg ?? 0);
+  if (total <= 0) return { rrsp: 0, tfsa: 0, nonreg: 0 };
+  const divisor = total > 1 ? 100 : 1;
+  return {
+    rrsp: Math.max(0, (split.rrsp ?? 0) / divisor),
+    tfsa: Math.max(0, (split.tfsa ?? 0) / divisor),
+    nonreg: Math.max(0, (split.nonreg ?? 0) / divisor),
+  };
+}
+
+function buildHouseholdAccounts(input: PlannerInputs): AccountScenario[] {
+  const accounts: AccountScenario[] = [];
+  const split = normalizeSplit(input.savingsSplit ?? { rrsp: 0, tfsa: 0, nonreg: 0 });
+  const annualSavings = Math.max(0, input.annualSavings ?? 0);
+
+  const addPersonAccounts = (spec: PersonSpec, role: PersonRole, isMain: boolean) => {
+    const balances = spec.balances;
+    const untilAge = spec.retirementAge;
+    // Only the main user gets the household savings contributions (v1 simplification).
+    const contribFor = (fraction: number): AccountScenario["contribution"] | undefined => {
+      if (!isMain || annualSavings <= 0 || fraction <= 0) return undefined;
+      return { annualAmount: annualSavings * fraction, untilAge };
+    };
+    const withContribution = (
+      base: Omit<AccountScenario, "contribution">,
+      fraction: number,
+    ): AccountScenario => {
+      const c = contribFor(fraction);
+      return c ? { ...base, contribution: c } : base;
+    };
+    if (balances.tfsa > 0 || (contribFor(split.tfsa)?.annualAmount ?? 0) > 0) {
+      accounts.push(
+        withContribution(
+          {
+            id: `${role}-tfsa`,
+            owner: role,
+            type: "TFSA",
+            valuation: { mode: "SNAPSHOT", linkedValue: Math.max(0, balances.tfsa) },
+          },
+          split.tfsa,
+        ),
+      );
+    }
+    if (balances.rrsp > 0 || (contribFor(split.rrsp)?.annualAmount ?? 0) > 0) {
+      accounts.push(
+        withContribution(
+          {
+            id: `${role}-rrsp`,
+            owner: role,
+            type: "RRSP",
+            valuation: { mode: "SNAPSHOT", linkedValue: Math.max(0, balances.rrsp) },
+          },
+          split.rrsp,
+        ),
+      );
+    }
+    if (balances.lira > 0) {
+      // Locked-in: no contributions possible.
+      accounts.push({
+        id: `${role}-lira`,
+        owner: role,
+        type: "LIRA",
+        valuation: { mode: "SNAPSHOT", linkedValue: Math.max(0, balances.lira) },
+      });
+    }
+    if (balances.nonreg > 0 || (contribFor(split.nonreg)?.annualAmount ?? 0) > 0) {
+      const value = Math.max(0, balances.nonreg);
+      // Derive ACB from the gain ratio when available (gainRatio = unrealized gain / market value).
+      const gainRatio = Math.min(1, Math.max(0, spec.nonregGainRatio ?? 0));
+      accounts.push(
+        withContribution(
+          {
+            id: `${role}-nonreg`,
+            owner: role,
+            type: "NON_REGISTERED",
+            valuation: { mode: "SNAPSHOT", linkedValue: value },
+            nonRegisteredAcb: value * (1 - gainRatio),
+          },
+          split.nonreg,
+        ),
+      );
+    }
+  };
+
+  addPersonAccounts(input.self, "MAIN_USER", true);
+  if (input.spouse) {
+    addPersonAccounts(input.spouse, "PARTNER", false);
+  }
+  return accounts;
 }
 
 /**
@@ -244,7 +369,7 @@ function simulationToProjection(
     rrifDraw: number; lifDraw: number; nonregDraw: number; tfsaDraw: number;
     cpp: number; oas: number; oasClawback: number; otherIncome: number;
     taxes: number; spending: number; shortfall: number;
-    endingPortfolio: number; endingTfsa: number; endingRegistered: number; endingNonReg: number;
+    endingPortfolio: number; endingTfsa: number; endingRegistered: number; endingLira: number; endingNonReg: number;
   }>();
 
   for (const m of result.monthly) {
@@ -255,18 +380,20 @@ function simulationToProjection(
         rrifDraw: 0, lifDraw: 0, nonregDraw: 0, tfsaDraw: 0,
         cpp: 0, oas: 0, oasClawback: 0, otherIncome: 0,
         taxes: 0, spending: 0, shortfall: 0,
-        endingPortfolio: 0, endingTfsa: 0, endingRegistered: 0, endingNonReg: 0,
+        endingPortfolio: 0, endingTfsa: 0, endingRegistered: 0, endingLira: 0, endingNonReg: 0,
       };
       yearlyMap.set(year, y);
     }
     const ws = m.withdrawalSources;
     if (ws) {
       y.rrifDraw += ws.registered;
+      y.lifDraw += ws.lira ?? 0;
       y.nonregDraw += ws.nonRegistered;
       y.tfsaDraw += ws.tfsa;
     }
     y.cpp += m.benefitSources?.cpp ?? 0;
     y.oas += (m.benefitSources?.oas ?? 0) + (m.benefitSources?.gis ?? 0);
+    y.oasClawback += m.oasRecovery ?? 0;
     y.taxes += m.taxes;
     y.spending += m.spending;
     y.shortfall = Math.max(y.shortfall, m.shortfall);
@@ -275,39 +402,46 @@ function simulationToProjection(
     y.endingPortfolio = m.portfolio;
     y.endingTfsa = m.tfsa;
     y.endingRegistered = m.registered;
+    y.endingLira = m.lira ?? 0;
     y.endingNonReg = m.nonRegistered;
   }
 
   const sortedYears = Array.from(yearlyMap.keys()).sort((a, b) => a - b);
   const currentYear2 = new Date().getFullYear();
   const birthYear2 = currentYear2 - input.self.age;
+  // The engine simulates in nominal dollars (correct for tax brackets, YMPE,
+  // OAS thresholds which all inflate). Deflate to today's dollars for display
+  // so the spending line stays flat and all values show real purchasing power.
+  const inflationRate = (input.inflation ?? 2) / 100;
+  const deflatorFor = (year: number) => Math.pow(1 + inflationRate, year - currentYear2);
   const rows: YearRow[] = sortedYears.map((year) => {
     const y = yearlyMap.get(year)!;
     const age = year - birthYear2;
+    const d = deflatorFor(year);
     return {
       age,
       year,
-      rrifDraw: y.rrifDraw,
-      lifDraw: y.lifDraw,
-      nonregDraw: y.nonregDraw,
-      tfsaDraw: y.tfsaDraw,
-      cpp: y.cpp,
-      oas: y.oas,
-      oasClawback: y.oasClawback,
-      otherIncome: y.otherIncome,
-      taxes: y.taxes,
-      spending: y.spending,
-      shortfall: y.shortfall,
+      rrifDraw: y.rrifDraw / d,
+      lifDraw: y.lifDraw / d,
+      nonregDraw: y.nonregDraw / d,
+      tfsaDraw: y.tfsaDraw / d,
+      cpp: y.cpp / d,
+      oas: y.oas / d,
+      oasClawback: y.oasClawback / d,
+      otherIncome: y.otherIncome / d,
+      taxes: y.taxes / d,
+      spending: y.spending / d,
+      shortfall: y.shortfall / d,
       pensionSplit: 0,
       effectiveCeiling: 0,
       meltdownFlag: false,
       people: [],
       balances: {
-        tfsa: y.endingTfsa,
-        rrsp: y.endingRegistered,
-        lira: 0,
-        nonreg: y.endingNonReg,
-        total: y.endingPortfolio,
+        tfsa: y.endingTfsa / d,
+        rrsp: y.endingRegistered / d,
+        lira: y.endingLira / d,
+        nonreg: y.endingNonReg / d,
+        total: y.endingPortfolio / d,
       },
     };
   });
@@ -320,15 +454,28 @@ function simulationToProjection(
     depletionAge = new Date(metrics.depletionDate).getFullYear() - birthYear;
   }
 
+  // Summary figures are also in today's dollars. Lifetime tax is the sum of
+  // the already-deflated yearly taxes (not the deflated nominal total).
+  const deflatedTotalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
+  const deflatedTotalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
+  const lastYear = sortedYears.length ? sortedYears[sortedYears.length - 1]! : currentYear;
+  const endDeflator = deflatorFor(lastYear);
+  const lastRow = rows.length ? rows[rows.length - 1]! : null;
+
+  // A shortfall under $500/yr (today's dollars) is numerical noise from tax
+  // gross-up estimation, not a real planning failure. Don't flip the whole
+  // plan to "cannot retire" over a rounding error.
+  const maxDeflatedShortfall = rows.reduce((m, r) => Math.max(m, r.shortfall), 0);
+  const MATERIAL_SHORTFALL_TODAYS = 500;
   return {
     rows,
     depletionAge,
-    success: metrics.maximumSpendingShortfall <= 0 && !metrics.depletionDate,
-    endingBalance: metrics.endingPortfolio,
-    totalTaxes: metrics.lifetimeTax,
-    totalClawback: 0,
-    estateTax: metrics.estateTax ?? 0,
-    estateRegistered: metrics.endingPortfolio,
+    success: maxDeflatedShortfall <= MATERIAL_SHORTFALL_TODAYS && !metrics.depletionDate,
+    endingBalance: metrics.endingPortfolio / endDeflator,
+    totalTaxes: deflatedTotalTaxes,
+    totalClawback: deflatedTotalClawback,
+    estateTax: (metrics.estateTax ?? 0) / endDeflator,
+    estateRegistered: (lastRow?.balances.rrsp ?? 0) + (lastRow?.balances.lira ?? 0),
   };
 }
 
@@ -350,9 +497,20 @@ export function projectRetirement(input: PlannerInputs): Projection {
 }
 
 /**
+ * Fast projection for quick estimates: simplified withdrawal (no tax optimization).
+ * Use for immediate UI feedback; follow with full projectRetirement for accuracy.
+ */
+export function projectQuick(input: PlannerInputs): Projection {
+  return projectRetirement({ ...input, quick: true });
+}
+
+/**
  * Find the earliest retirement age using the new optimizer.
  */
-export function earliestRetirementAge(input: PlannerInputs): number | null {
+export function earliestRetirementAge(
+  input: PlannerInputs,
+  onProgress?: (current: number, total: number) => void,
+): number | null {
   const portfolioTotal = input.self.balances.tfsa + input.self.balances.rrsp +
     input.self.balances.lira + input.self.balances.nonreg +
     (input.spouse ? input.spouse.balances.tfsa + input.spouse.balances.rrsp +
@@ -363,6 +521,7 @@ export function earliestRetirementAge(input: PlannerInputs): number | null {
     startingPortfolio: portfolioTotal,
     startYear: new Date().getFullYear(),
     objective: "MIN_RETIREMENT_AGE",
+    onProgress,
   });
   if (result.selectedCandidate) {
     return result.selectedCandidate.scenario.goals.retirementAge;
@@ -399,6 +558,7 @@ export function cppFromDetailedHistory(
   earningsHistory: Array<{ year: number; earnings: number }>,
   futureAnnualEarnings: number = 0,
   childRearingYears: number[] = [],
+  retirementAge?: number,
 ): number {
   if (earningsHistory.length === 0) return 0;
   const result = calculateCppBenefit({
@@ -406,10 +566,38 @@ export function cppFromDetailedHistory(
     birthMonth: 6,
     earningsHistory,
     futureAnnualEarnings,
+    ...(retirementAge !== undefined ? { retirementAge } : {}),
     childRearingYears,
     cppStartAge: 65,
   });
   return result.cppAt65Monthly;
+}
+
+/**
+ * Post-retirement benefit info for someone working while collecting CPP.
+ * Returns monthly PRB amount and the years that earned PRBs.
+ */
+export function cppPrbInfo(
+  birthYear: number,
+  earningsHistory: Array<{ year: number; earnings: number }>,
+  futureAnnualEarnings: number = 0,
+  childRearingYears: number[] = [],
+  retirementAge?: number,
+  cppStartAge: number = 65,
+): { monthly: number; annual: number; years: number[] } {
+  if (earningsHistory.length === 0 || retirementAge === undefined || retirementAge <= cppStartAge) {
+    return { monthly: 0, annual: 0, years: [] };
+  }
+  const result = calculateCppBenefit({
+    birthYear,
+    birthMonth: 6,
+    earningsHistory,
+    futureAnnualEarnings,
+    retirementAge,
+    childRearingYears,
+    cppStartAge,
+  });
+  return { monthly: result.prbMonthly, annual: result.prbAnnual, years: result.prbYears };
 }
 
 /**
@@ -480,4 +668,116 @@ export function compareWithdrawalStrategies(
 
   const best = [...results].sort((a, b) => score(b) - score(a))[0];
   return { results, best: best?.policy ?? "TAX_TARGETED" };
+}
+
+export type StressSeverity = "mild" | "moderate" | "severe";
+
+export interface StressScenario {
+  id: "crash" | "lowReturn" | "highInflation" | "longLife";
+  label: string;
+  description: string;
+  severities: Record<StressSeverity, { label: string; value: number }>;
+}
+
+export const STRESS_SCENARIOS: StressScenario[] = [
+  {
+    id: "crash",
+    label: "Market crash early",
+    description: "Portfolio drops in year 2 of retirement",
+    severities: {
+      mild: { label: "-15%", value: 0.15 },
+      moderate: { label: "-30%", value: 0.30 },
+      severe: { label: "-50%", value: 0.50 },
+    },
+  },
+  {
+    id: "lowReturn",
+    label: "Low returns",
+    description: "Annual return reduced for the whole plan",
+    severities: {
+      mild: { label: "-1%/yr", value: 1 },
+      moderate: { label: "-2%/yr", value: 2 },
+      severe: { label: "-3%/yr", value: 3 },
+    },
+  },
+  {
+    id: "highInflation",
+    label: "High inflation",
+    description: "Inflation higher for the whole plan",
+    severities: {
+      mild: { label: "+1%/yr", value: 1 },
+      moderate: { label: "+2%/yr", value: 2 },
+      severe: { label: "+3%/yr", value: 3 },
+    },
+  },
+  {
+    id: "longLife",
+    label: "Live longer",
+    description: "Life expectancy extended",
+    severities: {
+      mild: { label: "+3 yrs", value: 3 },
+      moderate: { label: "+5 yrs", value: 5 },
+      severe: { label: "+10 yrs", value: 10 },
+    },
+  },
+];
+
+export interface StressTestResult {
+  scenarioId: string;
+  severity: StressSeverity;
+  severityLabel: string;
+  passed: boolean;
+  depletionAge: number | null;
+  endingBalance: number;
+}
+
+/**
+ * Run a single stress test scenario against the base inputs.
+ * Returns pass/fail (fully funded?) plus details.
+ */
+export function runStressTest(
+  input: PlannerInputs,
+  scenarioId: StressScenario["id"],
+  severity: StressSeverity,
+): StressTestResult {
+  const scenario = STRESS_SCENARIOS.find((s) => s.id === scenarioId)!;
+  const severityValue = scenario.severities[severity].value;
+
+  // Clone inputs and apply the stress
+  const stressed = JSON.parse(JSON.stringify(input)) as PlannerInputs;
+
+  switch (scenarioId) {
+    case "crash": {
+      // True sequence-of-returns: bad returns in the first 3 years of retirement.
+      // The crash hits when the portfolio is largest and withdrawals have just started.
+      const retirementYear = new Date().getFullYear() + Math.max(0, (input.self.retirementAge ?? 65) - (input.self.age ?? 40));
+      const overrides: Record<number, number> = {};
+      // Year 1: full crash. Years 2-3: half the crash (partial recovery, still painful).
+      overrides[retirementYear] = -severityValue * 100;
+      overrides[retirementYear + 1] = (-severityValue * 100) / 2;
+      overrides[retirementYear + 2] = (-severityValue * 100) / 2;
+      stressed.annualReturnOverrides = overrides;
+      break;
+    }
+    case "lowReturn":
+      stressed.workingGrowth = (stressed.workingGrowth ?? 6) - severityValue;
+      stressed.retirementGrowth = (stressed.retirementGrowth ?? 6) - severityValue;
+      break;
+    case "highInflation":
+      stressed.inflation = (stressed.inflation ?? 2) + severityValue;
+      break;
+    case "longLife":
+      stressed.lifeExpectancy = (stressed.lifeExpectancy ?? 90) + severityValue;
+      break;
+  }
+
+  const result = projectRetirement(stressed);
+  return {
+    scenarioId,
+    severity,
+    severityLabel: scenario.severities[severity].label,
+    passed: result.success,
+    depletionAge: result.depletionAge,
+    endingBalance: result.endingBalance,
+  };
 }

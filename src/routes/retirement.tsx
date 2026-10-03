@@ -4,6 +4,7 @@ import { ApisLogo } from "@/components/brand/ApisLogo";
 import { AppHeader } from "@/routes/_authenticated/route";
 import { PENDING_PLAN_KEY } from "@/lib/pending-plan";
 import { OldUiCppHistoryEditor } from "./OldUiCppHistoryEditor";
+import { useSimulationWorker } from "@/lib/retirement/worker/useSimulationWorker";
 import { useMemo, useState, useEffect, useRef } from "react";
 import {
   Area,
@@ -20,30 +21,28 @@ import {
   YAxis,
 } from "recharts";
 import {
-  CalendarClock,
+  Calculator,
   Coins,
   Landmark,
-  PiggyBank,
-  ShieldCheck,
   Wallet,
-  TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePortfolio } from "@/lib/portfolio";
 import { useProfile, useUpdateProfile, type Profile } from "@/lib/profile";
 import { formatCad, summariseAccount } from "@/lib/finance";
 import {
-  earliestRetirementAge,
-  projectRetirement,
   cppPercentFromEarnings,
   cppFromDetailedHistory,
+  cppPrbInfo,
   oasFractionFromResidence,
   oasAt,
   CPP_MAX_MONTHLY_65,
-  compareWithdrawalStrategies,
   WITHDRAWAL_POLICIES,
+  STRESS_SCENARIOS,
   type WithdrawalPolicy,
   type StrategyObjective,
+  type StressScenario,
+  type StressSeverity,
   type PersonSpec,
   type PlannerInputs,
 } from "@/lib/retirement/adapter/oldApiAdapter";
@@ -264,6 +263,8 @@ function RetirementPage() {
   const [clawbackTolerance, setClawbackTolerance] = useState(0);
   const [policy, setPolicy] = useState<WithdrawalPolicy>("TAX_TARGETED");
   const [objective, setObjective] = useState<StrategyObjective>("MIN_TAX");
+  /** User override for non-registered gain ratio (0-1). Null = use portfolio ACB or estimate. */
+  const [gainRatioOverride, setGainRatioOverride] = useState<number | null>(null);
   /** True once the user scrolls — collapses the sticky summary to a compact bar. */
   const [scrolled, setScrolled] = useState(false);
 
@@ -301,6 +302,7 @@ function RetirementPage() {
 
   const byType = useMemo(() => {
     const sums: Record<string, number> = {};
+    const acbs: Record<string, number> = {};
     for (const a of accounts) {
       const s = summariseAccount(
         a,
@@ -311,14 +313,26 @@ function RetirementPage() {
       );
       const value = s.marketValue + Math.max(0, s.cash);
       sums[a.account_type] = (sums[a.account_type] ?? 0) + value;
+      // Track ACB for non-registered accounts to compute the gain ratio.
+      // Cash has no ACB (it's already after-tax), so only use the invested ACB.
+      acbs[a.account_type] = (acbs[a.account_type] ?? 0) + Math.max(0, s.acb);
     }
     const pick = (types: string[]) => types.reduce((t, k) => t + (sums[k] ?? 0), 0);
+    const pickAcb = (types: string[]) => types.reduce((t, k) => t + (acbs[k] ?? 0), 0);
+    const nonregValue = pick(NONREG_TYPES);
+    const nonregAcb = pickAcb(NONREG_TYPES);
+    // Gain ratio = unrealized gain / market value, clamped 0-1.
+    // Falls back to null when no ACB data (user can override or estimate).
+    const nonregGainRatio = nonregValue > 0 && nonregAcb > 0
+      ? Math.min(1, Math.max(0, (nonregValue - nonregAcb) / nonregValue))
+      : null;
     return {
       tfsa: pick(TFSA_TYPES),
       rrsp: pick(RRSP_TYPES),
       lira: pick(LIRA_TYPES),
       fhsa: pick(FHSA_TYPES),
-      nonreg: pick(NONREG_TYPES),
+      nonreg: nonregValue,
+      nonregGainRatio,
     };
   }, [accounts, transactions, holdings, quotes, fxUsdCad]);
 
@@ -373,6 +387,7 @@ function RetirementPage() {
         p.cpp_detailed_history,
         p.cpp_detailed_future_earnings ?? 0,
         p.cpp_detailed_child_rearing ?? [],
+        retireAge,
       );
       selfPct = Math.min(100, (monthly / CPP_MAX_MONTHLY_65) * 100);
     } else {
@@ -392,11 +407,24 @@ function RetirementPage() {
       futureYears: Math.max(0, Math.min(spouseRetire, 65) - spouseAge),
     });
     const annual = (pct: number) => (CPP_MAX_MONTHLY_65 * 12 * pct) / 100;
+    // PRB info: only when working while collecting CPP (retirement > CPP start)
+    let selfPrb = { monthly: 0, annual: 0, years: [] as number[] };
+    if (p.cpp_detailed_history && p.cpp_detailed_history.length > 0) {
+      selfPrb = cppPrbInfo(
+        (new Date().getFullYear() - currentAge),
+        p.cpp_detailed_history,
+        p.cpp_detailed_future_earnings ?? 0,
+        p.cpp_detailed_child_rearing ?? [],
+        retireAge,
+        p.cpp_start_age ?? 65,
+      );
+    }
     return {
       selfPct,
       spousePct,
       selfCpp65: annual(selfPct),
       spouseCpp65: annual(spousePct),
+      selfPrb,
       selfOasFraction: oasFractionFromResidence(p.oas_years_in_canada ?? 40),
       spouseOasFraction: oasFractionFromResidence(p.spouse_oas_years_in_canada ?? 40),
     };
@@ -421,7 +449,8 @@ function RetirementPage() {
       oasFraction: derived.selfOasFraction,
       otherIncome: 0,
       balances: { ...balances },
-      nonregGainRatio: 0.4,
+      // Use portfolio ACB if available, else user override, else 0.4 estimate.
+      nonregGainRatio: gainRatioOverride ?? byType.nonregGainRatio ?? 0.4,
     };
 
     const spouse: PersonSpec | null = married
@@ -459,26 +488,60 @@ function RetirementPage() {
         nonreg: p.save_pct_nonreg ?? 20,
       },
       clawbackTolerance,
+      pensionSplitPercent: p.pension_split_percent ?? 0,
       withdrawalPolicy: policy,
       self,
       spouse,
     };
   }, [p, derived, balances, clawbackTolerance, policy]);
 
-  const projection = useMemo(() => (inputs ? projectRetirement(inputs) : null), [inputs]);
-  /* Debounce the expensive optimizer calls (earliest age + strategy comparison)
-     so typing in "Your details" stays responsive — they run 600ms after the
-     user stops editing instead of on every keystroke. */
-  const [debouncedInputs, setDebouncedInputs] = useState(inputs);
+  /* All heavy engine work runs in a Web Worker — the UI thread never blocks.
+     The projection updates live (debounced); earliest-age and strategy
+     comparison only run when the user clicks their Calculate buttons. */
+  const {
+    projection,
+    projecting,
+    earliest,
+    earliestLoading,
+    earliestProgress,
+    runEarliest,
+    comparison,
+    comparing,
+    runCompare,
+    runProject,
+    runProjectQuick,
+    stressResults,
+    stressing,
+    runStress,
+    clearStress,
+    workerError,
+  } = useSimulationWorker();
+
+  // Stress test severity per scenario (user-adjustable)
+  const [stressSeverities, setStressSeverities] = useState<Record<string, StressSeverity>>({
+    crash: "moderate",
+    lowReturn: "moderate",
+    highInflation: "moderate",
+    longLife: "moderate",
+  });
+
+  // Clear stress results when inputs change (they're stale)
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedInputs(inputs), 600);
+    clearStress();
+  }, [inputs, clearStress]);
+
+  // Quick estimate runs immediately (no debounce) for instant feedback.
+  // Full projection follows after 400ms of inactivity and overwrites it.
+  useEffect(() => {
+    if (!inputs) return;
+    runProjectQuick(inputs);
+  }, [inputs, runProjectQuick]);
+
+  useEffect(() => {
+    if (!inputs) return;
+    const t = setTimeout(() => runProject(inputs), 400);
     return () => clearTimeout(t);
-  }, [inputs]);
-  const earliest = useMemo(() => (debouncedInputs ? earliestRetirementAge(debouncedInputs) : null), [debouncedInputs]);
-  const comparison = useMemo(
-    () => (debouncedInputs ? compareWithdrawalStrategies(debouncedInputs, objective) : null),
-    [debouncedInputs, objective],
-  );
+  }, [inputs, runProject]);
 
 
   if (!authLoading && !isGuest && profileQuery.isError) {
@@ -497,6 +560,17 @@ function RetirementPage() {
     !projection ||
     !derived
   ) {
+    if (workerError) {
+      return (
+        <div className="p-6 space-y-3">
+          <p className="text-sm font-medium text-destructive">Couldn't load your plan</p>
+          <p className="text-sm text-muted-foreground">{workerError}</p>
+          <p className="text-xs text-muted-foreground">
+            Try refreshing the page. If this keeps happening, please let us know.
+          </p>
+        </div>
+      );
+    }
     return <p className="p-6 text-sm text-muted-foreground">Loading your plan…</p>;
   }
 
@@ -518,7 +592,7 @@ function RetirementPage() {
   };
 
   // The engine models everything in 2026 dollars, so rows need no deflation.
-  const rows = projection.rows;
+  const rows = projection?.rows ?? [];
   const totalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
   const totalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
   const endingBalance = rows.length ? rows[rows.length - 1]!.balances.total : 0;
@@ -611,73 +685,84 @@ function RetirementPage() {
         </div>
       </div>
 
-      <div className={`sticky top-0 z-30 -mx-4 border-b border-border/60 bg-background/95 px-4 shadow-sm backdrop-blur md:-mx-6 md:px-6 ${scrolled ? "py-1.5" : "py-3"}`}>
-        {scrolled ? (
-          /* Compact bar: headings + numbers only, no explanations */
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-            <span className="font-medium">
-              Retire <span className={earliest && earliest <= inputs.retirementAge ? "text-green-600" : "text-amber-600"}>{earliest ? `at ${earliest}` : "after 80"}</span>
-            </span>
-            <span className="text-muted-foreground">
-              At {inputs.retirementAge}: <span className="font-medium text-foreground">{formatCad(startBalance)}</span>
-            </span>
-            <span className="text-muted-foreground">
-              Outcome: <span className={`font-medium ${projection.success ? "text-green-600" : "text-amber-600"}`}>{projection.success ? "Fully funded" : `Short at ${projection.depletionAge}`}</span>
-            </span>
-            <span className="text-muted-foreground">
-              Lifetime tax: <span className="font-medium text-foreground">{formatCad(totalTaxes)}</span>
-            </span>
-            <span className="text-muted-foreground">
-              Estate tax: <span className="font-medium text-foreground">{formatCad(projection.estateTax)}</span>
-            </span>
-          </div>
-        ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard
-          icon={<CalendarClock className="h-4 w-4" />}
-          label="Earliest sustainable retirement"
-          value={earliest ? `Age ${earliest}` : "Not before 80"}
-          hint={
-            earliest && earliest <= inputs.retirementAge
-              ? `Your target of ${inputs.retirementAge} works`
-              : `Your target of ${inputs.retirementAge} runs short`
-          }
-          tone={earliest && earliest <= inputs.retirementAge ? "good" : "warn"}
-        />
-        <StatCard
-          icon={<PiggyBank className="h-4 w-4" />}
-          label={`Projected at retirement (age ${inputs.retirementAge})`}
-          value={formatCad(startBalance)}
-          hint="All figures in today’s purchasing power (adjusted for inflation)."
-        />
-        <StatCard
-          icon={<ShieldCheck className="h-4 w-4" />}
-          label="Plan outcome"
-          value={projection.success ? "Fully funded" : `Runs short at ${projection.depletionAge}`}
-          hint={`Ending balance ${formatCad(endingBalance)} ${moneyNote}`}
-          tone={projection.success ? "good" : "warn"}
-        />
-        <StatCard
-          icon={<TriangleAlert className="h-4 w-4" />}
-          label="Lifetime tax & clawback"
-          value={formatCad(totalTaxes)}
-          hint={
-            totalClawback > 1
-              ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
-              : "No OAS clawback in this plan"
-          }
-          tone={totalClawback > 1 ? "warn" : "good"}
-        />
-        <StatCard
-          icon={<Landmark className="h-4 w-4" />}
-          label="Tax owed by your estate"
-          value={formatCad(projection.estateTax)}
-          hint={`${formatCad(projection.estateRegistered)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`}
-          tone={projection.estateTax > 1 ? "warn" : "good"}
-        />
-        </div>
-        )}
-      </div>
+      <GlanceBar
+        compact={scrolled}
+        stats={[
+          {
+            key: "outcome",
+            label: "Outcome",
+            value: projection?.success ? "Fully funded" : `Short at ${projection?.depletionAge ?? "—"}`,
+            tone: projection?.success ? "good" : "warn",
+            dimmed: projecting,
+            detail: <>Ending balance {formatCad(endingBalance)} {moneyNote}</>,
+          },
+          {
+            key: "earliest",
+            label: "Retire",
+            value: earliestLoading ? "…" : earliest ? `at ${earliest}` : "—",
+            tone: earliest && earliest <= inputs.retirementAge ? "good" : "warn",
+            detail: (
+              <>
+                {earliestLoading ? (
+                  earliestProgress
+                    ? `Testing… ${earliestProgress.completed}/${earliestProgress.total} checks`
+                    : "Testing retirement ages in the background…"
+                ) : earliest ? (
+                  <>
+                    {earliest <= inputs.retirementAge
+                      ? `Your target of ${inputs.retirementAge} works`
+                      : `Your target of ${inputs.retirementAge} runs short`}
+                    {(() => {
+                      const displayAge = earliest <= inputs.retirementAge ? inputs.retirementAge : earliest;
+                      const cppStart = p.cpp_start_age ?? 65;
+                      const oasStart = p.oas_start_age ?? 65;
+                      const firstBenefit = Math.min(cppStart, oasStart);
+                      const bridgeYears = firstBenefit - displayAge;
+                      return bridgeYears > 0 ? (
+                        <span className="mt-1 block text-amber-600">
+                          {bridgeYears}-year bridge: portfolio funds everything until benefits start at {firstBenefit}
+                        </span>
+                      ) : null;
+                    })()}
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => inputs && runEarliest(inputs)}
+                    className="text-primary hover:underline"
+                  >
+                    Calculate earliest age
+                  </button>
+                )}
+              </>
+            ),
+          },
+          {
+            key: "balance",
+            label: `At ${inputs.retirementAge}`,
+            value: formatCad(startBalance),
+            tone: "neutral",
+            detail: "All figures in today’s purchasing power (adjusted for inflation).",
+          },
+          {
+            key: "tax",
+            label: "Lifetime tax",
+            value: formatCad(totalTaxes),
+            tone: totalClawback > 1 ? "warn" : "good",
+            detail:
+              totalClawback > 1
+                ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
+                : "No OAS clawback in this plan",
+          },
+          {
+            key: "estate",
+            label: "Estate tax",
+            value: formatCad(projection?.estateTax ?? 0),
+            tone: (projection?.estateTax ?? 0) > 1 ? "warn" : "good",
+            detail: `${formatCad(projection?.estateRegistered ?? 0)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`,
+          },
+        ]}
+      />
 
       <Tabs defaultValue="plan">
         <TabsList>
@@ -688,6 +773,14 @@ function RetirementPage() {
 
         {/* --------------------------------- PLAN --------------------------------- */}
         <TabsContent value="plan" className="space-y-6 pt-4">
+          {!comparison && !comparing ? (
+            <Button size="sm" onClick={() => inputs && runCompare(inputs, objective)}>
+              Compare strategies
+            </Button>
+          ) : null}
+          {comparing && !comparison ? (
+            <p className="text-sm text-muted-foreground">Testing withdrawal strategies in the background…</p>
+          ) : null}
           {comparison ? (
             <div className="rounded-xl border bg-card p-4 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -760,6 +853,20 @@ function RetirementPage() {
                 })}
               </div>
 
+              {policy === "TAX_TARGETED" && (
+                <div className="rounded-lg border p-4 space-y-2">
+                  <Label className="text-sm font-medium">OAS clawback tolerance</Label>
+                  <p className="text-xs text-muted-foreground">
+                    How far above the OAS clawback threshold you're willing to go when melting down
+                    registered accounts. $0 means stay strictly under the line.
+                  </p>
+                  <NumInput
+                    value={clawbackTolerance}
+                    onCommit={(n) => setClawbackTolerance(Math.max(0, n))}
+                  />
+                </div>
+              )}
+
               <div className="max-h-[22rem] overflow-auto rounded-lg border">
                 <Table>
                   <TableHeader>
@@ -820,6 +927,9 @@ function RetirementPage() {
               oasStart={p.oas_start_age ?? 65}
               oasAnnual={selfOas}
               oasYears={p.oas_years_in_canada ?? 40}
+              prbAnnual={derived.selfPrb.annual}
+              prbYears={derived.selfPrb.years}
+              retirementAge={p.target_retirement_age ?? 65}
             />
             {married ? (
               <BenefitCard
@@ -940,6 +1050,79 @@ function RetirementPage() {
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* --------------------------- STRESS TESTS --------------------------- */}
+          <div className="rounded-xl border bg-card p-4 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold">Stress test your plan</h3>
+                <p className="text-sm text-muted-foreground">
+                  See if your plan holds up when things go wrong. Pick how harsh each
+                  scenario is, then run them.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!inputs) return;
+                  for (const s of STRESS_SCENARIOS) {
+                    runStress(inputs, s.id, stressSeverities[s.id] ?? "moderate");
+                  }
+                }}
+                disabled={stressing || !inputs}
+              >
+                {stressing ? "Testing…" : "Run stress tests"}
+              </Button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {STRESS_SCENARIOS.map((s) => {
+                const severity = stressSeverities[s.id] ?? "moderate";
+                const key = `${s.id}-${severity}`;
+                const result = stressResults[key];
+                return (
+                  <div key={s.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{s.label}</span>
+                      {result ? (
+                        result.passed ? (
+                          <span className="text-xs font-medium text-green-600">✓ Holds up</span>
+                        ) : (
+                          <span className="text-xs font-medium text-amber-600">
+                            Runs short at {result.depletionAge}
+                          </span>
+                        )
+                      ) : stressing ? (
+                        <span className="text-xs text-muted-foreground">Testing…</span>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{s.description}</p>
+                    <div className="flex gap-1">
+                      {(["mild", "moderate", "severe"] as StressSeverity[]).map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          onClick={() => setStressSeverities((prev) => ({ ...prev, [s.id]: level }))}
+                          className={`rounded px-2 py-1 text-xs transition ${
+                            severity === level
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                          }`}
+                        >
+                          {s.severities[level].label}
+                        </button>
+                      ))}
+                    </div>
+                    {result && !result.passed && (
+                      <p className="text-xs text-muted-foreground">
+                        Under this scenario ({result.severityLabel}), the money runs out at age{" "}
+                        {result.depletionAge}.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </TabsContent>
 
         {/* -------------------------------- INPUTS -------------------------------- */}
@@ -949,11 +1132,7 @@ function RetirementPage() {
             subtitle="The basics that set the length and shape of the plan."
           >
             <Field label="Your age">
-              <Input
-                type="number"
-                value={p.current_age ?? ""}
-                onChange={(e) => set({ current_age: num(e.target.value, 40) })}
-              />
+              <NumInput value={p.current_age} onCommit={(n) => set({ current_age: n })} />
             </Field>
             <Field label="Target retirement age" {...lockProps}>
               <RetirementAgeInput
@@ -962,11 +1141,7 @@ function RetirementPage() {
               />
             </Field>
             <Field label="Desired after-tax household income (today's $)">
-              <Input
-                type="number"
-                value={p.desired_income ?? 0}
-                onChange={(e) => set({ desired_income: num(e.target.value) })}
-              />
+              <NumInput value={p.desired_income} onCommit={(n) => set({ desired_income: n })} />
             </Field>
             <Field label="Province">
               <Select value={inputs.province} onValueChange={(v) => set({ province: v })}>
@@ -983,35 +1158,16 @@ function RetirementPage() {
               </Select>
             </Field>
             <Field label="Inflation %" {...lockProps}>
-              <Input
-                type="number"
-                step="0.1"
-                value={p.inflation_rate ?? 2.5}
-                onChange={(e) => set({ inflation_rate: num(e.target.value, 2.5) })}
-              />
+              <NumInput value={p.inflation_rate} onCommit={(n) => set({ inflation_rate: n })} step="0.1" />
             </Field>
             <Field label="Working years growth rate (%)" {...lockProps}>
-              <Input
-                type="number"
-                step="0.1"
-                value={p.working_growth_rate ?? 6}
-                onChange={(e) => set({ working_growth_rate: num(e.target.value, 6) })}
-              />
+              <NumInput value={p.working_growth_rate} onCommit={(n) => set({ working_growth_rate: n })} step="0.1" />
             </Field>
             <Field label="Retirement years growth rate (%)" {...lockProps}>
-              <Input
-                type="number"
-                step="0.1"
-                value={p.retirement_growth_rate ?? 4.5}
-                onChange={(e) => set({ retirement_growth_rate: num(e.target.value, 4.5) })}
-              />
+              <NumInput value={p.retirement_growth_rate} onCommit={(n) => set({ retirement_growth_rate: n })} step="0.1" />
             </Field>
             <Field label="Life expectancy" {...lockProps}>
-              <Input
-                type="number"
-                value={p.life_expectancy ?? 95}
-                onChange={(e) => set({ life_expectancy: num(e.target.value, 95) })}
-              />
+              <NumInput value={p.life_expectancy} onCommit={(n) => set({ life_expectancy: n })} />
             </Field>
             <Field label="Marital status" {...plusProps}>
               <Select
@@ -1034,25 +1190,13 @@ function RetirementPage() {
             subtitle={`We credit each year at your income divided by the yearly maximum, over the best 39 years. Estimated entitlement: ${derived.selfPct}% of the maximum.`}
           >
             <Field label="Typical income in past working years (today's $)">
-              <Input
-                type="number"
-                value={p.cpp_avg_income ?? 0}
-                onChange={(e) => set({ cpp_avg_income: num(e.target.value) })}
-              />
+              <NumInput value={p.cpp_avg_income} onCommit={(n) => set({ cpp_avg_income: n })} />
             </Field>
             <Field label="Years worked in Canada so far">
-              <Input
-                type="number"
-                value={p.cpp_years_worked ?? 0}
-                onChange={(e) => set({ cpp_years_worked: num(e.target.value) })}
-              />
+              <NumInput value={p.cpp_years_worked} onCommit={(n) => set({ cpp_years_worked: n })} />
             </Field>
             <Field label="Expected income until retirement (today's $)">
-              <Input
-                type="number"
-                value={p.cpp_future_income ?? 0}
-                onChange={(e) => set({ cpp_future_income: num(e.target.value) })}
-              />
+              <NumInput value={p.cpp_future_income} onCommit={(n) => set({ cpp_future_income: n })} />
             </Field>
             <Field label="CPP start age (60–70)" {...lockProps}>
               <AgeSelect
@@ -1062,11 +1206,7 @@ function RetirementPage() {
               />
             </Field>
             <Field label="Years living in Canada after age 18 (sets OAS)">
-              <Input
-                type="number"
-                value={p.oas_years_in_canada ?? 40}
-                onChange={(e) => set({ oas_years_in_canada: num(e.target.value, 40) })}
-              />
+              <NumInput value={p.oas_years_in_canada} onCommit={(n) => set({ oas_years_in_canada: n })} />
             </Field>
             <Field label="OAS start age (65–70)" {...lockProps}>
               <AgeSelect
@@ -1093,32 +1233,16 @@ function RetirementPage() {
             subtitle="Where each dollar you save lands changes the tax you pay later."
           >
             <Field label="Annual savings (today's $)">
-              <Input
-                type="number"
-                value={p.annual_savings ?? 0}
-                onChange={(e) => set({ annual_savings: num(e.target.value) })}
-              />
+              <NumInput value={p.annual_savings} onCommit={(n) => set({ annual_savings: n })} />
             </Field>
             <Field label="% to TFSA" {...plusProps}>
-              <Input
-                type="number"
-                value={p.save_pct_tfsa ?? 40}
-                onChange={(e) => set({ save_pct_tfsa: num(e.target.value) })}
-              />
+              <NumInput value={p.save_pct_tfsa} onCommit={(n) => set({ save_pct_tfsa: n })} />
             </Field>
             <Field label="% to RRSP / FHSA" {...plusProps}>
-              <Input
-                type="number"
-                value={p.save_pct_rrsp ?? 40}
-                onChange={(e) => set({ save_pct_rrsp: num(e.target.value) })}
-              />
+              <NumInput value={p.save_pct_rrsp} onCommit={(n) => set({ save_pct_rrsp: n })} />
             </Field>
             <Field label="% to non-registered" {...plusProps}>
-              <Input
-                type="number"
-                value={p.save_pct_nonreg ?? 20}
-                onChange={(e) => set({ save_pct_nonreg: num(e.target.value) })}
-              />
+              <NumInput value={p.save_pct_nonreg} onCommit={(n) => set({ save_pct_nonreg: n })} />
             </Field>
 
             <p className="col-span-full text-xs text-muted-foreground">
@@ -1133,11 +1257,7 @@ function RetirementPage() {
               subtitle={`Their CPP and OAS count towards the household income. Estimated CPP entitlement: ${derived.spousePct}% of the maximum.`}
             >
               <Field label="Spouse age">
-                <Input
-                  type="number"
-                  value={p.spouse_age ?? ""}
-                  onChange={(e) => set({ spouse_age: num(e.target.value, 40) })}
-                />
+                              <NumInput value={p.spouse_age} onCommit={(n) => set({ spouse_age: n })} />
               </Field>
               <Field label="Spouse retirement age">
                 <RetirementAgeInput
@@ -1146,32 +1266,16 @@ function RetirementPage() {
                 />
               </Field>
               <Field label="Spouse typical past income (today's $)">
-                <Input
-                  type="number"
-                  value={p.spouse_cpp_avg_income ?? 0}
-                  onChange={(e) => set({ spouse_cpp_avg_income: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_cpp_avg_income} onCommit={(n) => set({ spouse_cpp_avg_income: n })} />
               </Field>
               <Field label="Spouse years worked so far">
-                <Input
-                  type="number"
-                  value={p.spouse_cpp_years_worked ?? 0}
-                  onChange={(e) => set({ spouse_cpp_years_worked: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_cpp_years_worked} onCommit={(n) => set({ spouse_cpp_years_worked: n })} />
               </Field>
               <Field label="Spouse expected income until retirement">
-                <Input
-                  type="number"
-                  value={p.spouse_cpp_future_income ?? 0}
-                  onChange={(e) => set({ spouse_cpp_future_income: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_cpp_future_income} onCommit={(n) => set({ spouse_cpp_future_income: n })} />
               </Field>
               <Field label="Spouse years in Canada after 18">
-                <Input
-                  type="number"
-                  value={p.spouse_oas_years_in_canada ?? 40}
-                  onChange={(e) => set({ spouse_oas_years_in_canada: num(e.target.value, 40) })}
-                />
+                              <NumInput value={p.spouse_oas_years_in_canada} onCommit={(n) => set({ spouse_oas_years_in_canada: n })} />
               </Field>
               <Field label="Spouse CPP start age">
                 <AgeSelect
@@ -1189,39 +1293,28 @@ function RetirementPage() {
               </Field>
 
               <Field label="Spouse RRSP">
-                <Input
-                  type="number"
-                  value={p.spouse_rrsp ?? 0}
-                  onChange={(e) => set({ spouse_rrsp: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_rrsp} onCommit={(n) => set({ spouse_rrsp: n })} />
               </Field>
               <Field label="Spouse LIRA / LIF">
-                <Input
-                  type="number"
-                  value={p.spouse_lira ?? 0}
-                  onChange={(e) => set({ spouse_lira: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_lira} onCommit={(n) => set({ spouse_lira: n })} />
               </Field>
               <Field label="Spouse TFSA">
-                <Input
-                  type="number"
-                  value={p.spouse_tfsa ?? 0}
-                  onChange={(e) => set({ spouse_tfsa: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_tfsa} onCommit={(n) => set({ spouse_tfsa: n })} />
               </Field>
               <Field label="Spouse non-registered">
-                <Input
-                  type="number"
-                  value={p.spouse_nonreg ?? 0}
-                  onChange={(e) => set({ spouse_nonreg: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_nonreg} onCommit={(n) => set({ spouse_nonreg: n })} />
               </Field>
               <Field label="Spouse other pension income in retirement">
-                <Input
-                  type="number"
-                  value={p.spouse_income ?? 0}
-                  onChange={(e) => set({ spouse_income: num(e.target.value) })}
+                              <NumInput value={p.spouse_income} onCommit={(n) => set({ spouse_income: n })} />
+              </Field>
+              <Field label="Pension income split % (0-50)">
+                <NumInput
+                  value={p.pension_split_percent ?? 0}
+                  onCommit={(n) => set({ pension_split_percent: Math.min(50, Math.max(0, n)) } as Partial<Profile>)}
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Split eligible pension income with your spouse to reduce overall tax. Max 50%.
+                </p>
               </Field>
             </Section>
           )}
@@ -1264,12 +1357,27 @@ function RetirementPage() {
                 ] as const
               ).map(([label, key, synced]) => (
                 <Field key={key} label={label}>
-                  <Input
-                    type="number"
-                    disabled={!p.manual_override}
-                    value={p.manual_override ? ((p[key] as number) ?? 0) : Math.round(synced)}
-                    onChange={(e) => set({ [key]: num(e.target.value) } as Partial<Profile>)}
-                  />
+                  <NumInput value={p[key]} onCommit={(n) => set({ [key]: n } as Partial<Profile>)} />
+                  {key === "override_fhsa" && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Note: FHSA is modeled as RRSP for projection purposes (deductible contributions,
+                      taxable withdrawals). The tax-free first-home withdrawal benefit is not separately modeled.
+                    </p>
+                  )}
+                  {key === "override_nonreg" && (
+                    <div className="mt-2 space-y-1">
+                      <Label className="text-xs">Unrealized gain %</Label>
+                      <NumInput
+                        value={gainRatioOverride ?? (byType.nonregGainRatio != null ? Math.round(byType.nonregGainRatio * 100) : 40)}
+                        onCommit={(n) => setGainRatioOverride(Math.min(100, Math.max(0, n)) / 100)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {byType.nonregGainRatio != null
+                          ? `From your portfolio (ACB tracked): ${Math.round(byType.nonregGainRatio * 100)}% is gain. Override if needed.`
+                          : "No ACB data in portfolio. Using 40% estimate. Enter your actual % if you know it."}
+                      </p>
+                    </div>
+                  )}
                 </Field>
               ))}
             </div>
@@ -1420,6 +1528,23 @@ function RetirementPage() {
         onOpenChange={setProPromptOpen}
         reason={promptReason || PRO_REASON}
       />
+      {/* Floating calculate button — always reachable while scrolling the planner */}
+      {inputs ? (
+        <button
+          type="button"
+          onClick={() => runEarliest(inputs)}
+          disabled={earliestLoading}
+          title="Calculate earliest retirement age"
+          aria-label="Calculate earliest retirement age"
+          className="fixed bottom-6 right-6 z-40 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-70 shadow-lg transition hover:scale-105 hover:opacity-100 disabled:opacity-50"
+        >
+          {earliestLoading ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : (
+            <Calculator className="h-4 w-4" />
+          )}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1441,6 +1566,55 @@ function Section({
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{children}</div>
     </div>
+  );
+}
+
+/**
+ * Numeric input that lets the user clear the field while typing.
+ *
+ * Problem it solves: a directly-controlled `value={p.x}` input snaps back to
+ * the old number the moment the field is emptied (because `num("")` falls back
+ * to the previous value), so the user can never delete-to-retype.
+ *
+ * How it works: keeps local text state while editing. Commits to the profile
+ * on every parseable keystroke (so the plan stays live), but an empty or
+ * invalid field doesn't commit — and on blur the display reverts to the last
+ * committed value instead of getting stuck on "".
+ */
+function NumInput({
+  value,
+  onCommit,
+  step,
+  min,
+  max,
+  placeholder,
+}: {
+  value: number | null | undefined;
+  onCommit: (n: number) => void;
+  step?: string;
+  min?: string;
+  max?: string;
+  placeholder?: string;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const display = text ?? (value ?? "");
+
+  return (
+    <Input
+      type="number"
+      value={display}
+      step={step}
+      min={min}
+      max={max}
+      placeholder={placeholder}
+      onChange={(e) => {
+        const t = e.target.value;
+        setText(t);
+        const n = num(t, NaN);
+        if (Number.isFinite(n)) onCommit(n);
+      }}
+      onBlur={() => setText(null)}
+    />
   );
 }
 
@@ -1492,6 +1666,9 @@ function BenefitCard({
   oasStart,
   oasAnnual,
   oasYears,
+  prbAnnual,
+  prbYears,
+  retirementAge,
 }: {
   title: string;
   cppPct: number;
@@ -1500,6 +1677,9 @@ function BenefitCard({
   oasStart: number;
   oasAnnual: number;
   oasYears: number;
+  prbAnnual?: number;
+  prbYears?: number[];
+  retirementAge?: number;
 }) {
   return (
     <div className="panel space-y-3 p-5">
@@ -1521,41 +1701,115 @@ function BenefitCard({
         <p className="text-xs text-muted-foreground">
           {Math.min(40, Math.max(0, oasYears))} of 40 years of Canadian residence.
         </p>
+        {prbAnnual !== undefined && prbAnnual > 0 && prbYears && prbYears.length > 0 && (
+          <div className="mt-3 rounded-lg border border-accent/40 bg-accent/10 p-3 text-xs">
+            <p className="font-medium text-foreground">
+              Working while collecting CPP: +{formatCad(prbAnnual)}/yr in post-retirement benefits
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              You set CPP to start at {cppStart} but retirement at {retirementAge}. That means{" "}
+              {prbYears.length} year{prbYears.length > 1 ? "s" : ""} of contributions while receiving CPP,{" "}
+              each earning a post-retirement benefit that stacks on top of your base CPP for life.{" "}
+              We've added {formatCad(prbAnnual)}/yr to your projected CPP income.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  hint,
-  subhint,
-  tone,
-}: {
-  icon: React.ReactNode;
+interface GlanceStat {
+  key: string;
   label: string;
-  value: string;
-  hint: string;
-  subhint?: string;
-  tone?: "good" | "warn";
+  value: React.ReactNode;
+  tone: "good" | "warn" | "neutral";
+  detail: React.ReactNode;
+  dimmed?: boolean;
+}
+
+/**
+ * The Glance Bar: a single sticky strip showing the 5 key retirement numbers.
+ * Same structure on every screen size — desktop shows all 5 in a row,
+ * phone gets a horizontal swipe strip. Tap any stat for its details.
+ * Scrolling only tightens padding; the layout never morphs.
+ */
+function GlanceBar({
+  stats,
+  compact,
+}: {
+  stats: GlanceStat[];
+  compact: boolean;
 }) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const openStat = stats.find((s) => s.key === openKey);
+
   return (
-    <div className="panel min-h-[6.5rem] p-5">
-      <div className="flex flex-wrap items-center gap-2 text-xs leading-snug break-words text-muted-foreground">
-        {icon}
-        {label}
-      </div>
-      <p
-        className={`num mt-2 text-xl font-semibold ${
-          tone === "warn" ? "text-destructive" : tone === "good" ? "text-emerald-600" : ""
-        }`}
+    <div
+      className={`sticky top-14 z-20 -mx-4 border-b border-border/60 bg-background/95 px-4 backdrop-blur transition-all duration-200 md:-mx-6 md:px-6 ${
+        compact ? "py-1.5 shadow-sm" : "py-2.5 shadow-sm"
+      }`}
+    >
+      <div
+        className="flex flex-nowrap items-center gap-1 overflow-x-auto scrollbar-none"
+        role="list"
+        aria-label="Key retirement figures"
       >
-        {value}
-      </p>
-      <p className="mt-1 text-xs leading-snug break-words text-muted-foreground">{hint}</p>
-      {subhint ? <p className="mt-1 text-[11px] leading-snug break-words text-muted-foreground">{subhint}</p> : null}
+        {stats.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            role="listitem"
+            onClick={() => setOpenKey(openKey === s.key ? null : s.key)}
+            aria-expanded={openKey === s.key}
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 transition-colors hover:bg-accent/60 ${
+              compact ? "py-1" : "py-1.5"
+            } ${s.dimmed ? "opacity-60" : ""}`}
+          >
+            <span
+              aria-hidden
+              className={`h-2 w-2 shrink-0 rounded-full ${
+                s.tone === "good"
+                  ? "bg-emerald-500"
+                  : s.tone === "warn"
+                    ? "bg-amber-500"
+                    : "bg-muted-foreground/40"
+              }`}
+            />
+            <span className="whitespace-nowrap text-xs text-muted-foreground">{s.label}</span>
+            <span
+              className={`num whitespace-nowrap font-semibold ${
+                compact ? "text-xs" : "text-sm"
+              } ${
+                s.tone === "warn"
+                  ? "text-amber-600"
+                  : s.tone === "good"
+                    ? "text-emerald-600"
+                    : "text-foreground"
+              }`}
+            >
+              {s.value}
+            </span>
+          </button>
+        ))}
+      </div>
+      {openStat && (
+        <>
+          <button
+            type="button"
+            aria-label="Close details"
+            className="fixed inset-0 z-30 cursor-default bg-transparent"
+            onClick={() => setOpenKey(null)}
+          />
+          <div className="absolute left-4 right-4 top-full z-40 mt-1 rounded-lg border border-border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-lg md:left-6 md:right-auto md:max-w-sm">
+            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {openStat.label}
+            </p>
+            {openStat.detail}
+          </div>
+        </>
+      )}
     </div>
   );
 }
+
