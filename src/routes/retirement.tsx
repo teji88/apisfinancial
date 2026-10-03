@@ -19,6 +19,7 @@ import {
   summarizeStressTests,
   DEFAULT_STRESS_TESTS,
   scenarioStatusText,
+  scenarioPasses,
   buildRetirementReport,
   serializeRetirementReport,
   buildPrintableRetirementReport,
@@ -52,6 +53,8 @@ function RetirementPage() {
   const [stressResults, setStressResults] = useState<ScenarioStressTestResult | null>(null);
   const [optimization, setOptimization] = useState<OptimizationResult | null>(null);
   const [optimizing, setOptimizing] = useState(false);
+  // Default to today's dollars: all projections shown in 2026 purchasing power.
+  const [showTodaysDollars, setShowTodaysDollars] = useState(true);
 
   const portfolio = useMemo(() => {
     const byType: Record<string, number> = {};
@@ -116,7 +119,7 @@ function RetirementPage() {
       });
     if (changed) setScenario({ ...scenario, accounts: nextAccounts });
   }, [accounts, portfolio.accountValues, scenario]);
-  const overview = buildRetirementOverview(result, activeScenario);
+  const overview = buildRetirementOverview(result, activeScenario, { inTodaysDollars: showTodaysDollars });
 
   const runOptimization = async () => {
     setOptimizing(true);
@@ -158,21 +161,9 @@ function RetirementPage() {
     setSaved(false);
   };
 
-  // Auto-run the simulation when the scenario changes (debounced).
-  // This gives live feedback as users edit inputs, without requiring a manual "calculate" click.
-  const scenarioJson = JSON.stringify(activeScenario);
-  const isInitialMount = useRef(true);
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    const timer = setTimeout(() => {
-      runSimulation(activeScenario);
-    }, 800);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenarioJson]);
+  // Auto-run removed: it caused an infinite loop (runSimulation updates
+  // metadata.scenarioHash, which retriggered the effect). Users click
+  // "Run simulation" manually.
 
   const saveScenario = async () => {
     await retirementStore.saveScenario(activeScenario);
@@ -221,6 +212,8 @@ function RetirementPage() {
           running={running}
           stressResults={stressResults}
           onScenarios={() => setSection("scenarios")}
+          showTodaysDollars={showTodaysDollars}
+          onToggleDollars={() => setShowTodaysDollars((v) => !v)}
         />
       )}
       {section === "plan" && (
@@ -253,6 +246,8 @@ function Overview({
   running,
   stressResults,
   onScenarios,
+  showTodaysDollars,
+  onToggleDollars,
 }: {
   overview: ReturnType<typeof buildRetirementOverview>;
   portfolioTotal: number;
@@ -264,6 +259,8 @@ function Overview({
   running: boolean;
   stressResults: ScenarioStressTestResult | null;
   onScenarios: () => void;
+  showTodaysDollars: boolean;
+  onToggleDollars: () => void;
 }) {
   return (
     <div className="space-y-5">
@@ -274,7 +271,25 @@ function Overview({
             <h2 className="mt-2 font-display text-2xl font-semibold">{overview.headline}</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{overview.explanation}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex rounded-lg border border-border overflow-hidden" role="group" aria-label="Dollar basis">
+              <button
+                type="button"
+                onClick={() => showTodaysDollars && onToggleDollars()}
+                className={`px-3 py-2 text-sm font-medium transition-colors ${!showTodaysDollars ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                aria-pressed={!showTodaysDollars}
+              >
+                Nominal $
+              </button>
+              <button
+                type="button"
+                onClick={() => !showTodaysDollars && onToggleDollars()}
+                className={`px-3 py-2 text-sm font-medium transition-colors ${showTodaysDollars ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
+                aria-pressed={showTodaysDollars}
+              >
+                Today's $
+              </button>
+            </div>
             <Button variant="outline" onClick={onPlan}>Edit plan</Button>
             <Button variant="outline" onClick={onOptimize} disabled={running || optimizing}>
               {optimizing ? "Analyzing strategies…" : "Analyze strategies"}
@@ -286,9 +301,29 @@ function Overview({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Current tracked portfolio" value={formatCad(portfolioTotal)} />
-        <Metric label="Ending portfolio" value={overview.metrics[0] ? formatCad(Number(overview.metrics[0].value)) : "—"} />
-        <Metric label="Lifetime taxes" value={overview.metrics[2] ? formatCad(Number(overview.metrics[2].value)) : "—"} />
-        <Metric label="Government benefits" value={overview.metrics[3] ? formatCad(Number(overview.metrics[3].value)) : "—"} />
+        <Metric
+          label="Ending portfolio"
+          value={(() => {
+            const m = overview.metrics.find((x) => x.label === "Ending portfolio");
+            return m ? formatCad(Number(m.value)) : "—";
+          })()}
+        />
+        <Metric
+          label="Lifetime taxes"
+          value={(() => {
+            const m = overview.sections
+              .find((s) => s.title === "Taxes & government benefits")
+              ?.metrics.find((x) => x.label === "Lifetime tax");
+            return m ? formatCad(Number(m.value)) : "—";
+          })()}
+        />
+        <Metric
+          label="Government benefits"
+          value={(() => {
+            const m = overview.metrics.find((x) => x.label === "Government benefits");
+            return m ? formatCad(Number(m.value)) : "—";
+          })()}
+        />
       </div>
 
 
@@ -316,7 +351,21 @@ function Overview({
 
       {stressResults && <StressOverview stressResults={stressResults} onScenarios={onScenarios} />}
 
-      {optimization && (
+      {optimizing && (
+        <div className="panel p-5">
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <div>
+              <p className="font-medium">Analyzing strategies…</p>
+              <p className="text-sm text-muted-foreground">
+                Testing hundreds of combinations (spending, retirement age, CPP/OAS timing, withdrawal order).
+                This takes about a minute.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      {optimization && !optimizing && (
         <div className="panel p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -680,10 +729,19 @@ function ScenarioPanel({
 function StressOverview({ stressResults, onScenarios }: { stressResults: ScenarioStressTestResult; onScenarios: () => void }) {
   const summaries = summarizeStressTests(stressResults).filter(s => s.kind !== "BASE");
   const attention = summaries.filter(s => s.status === "DEPLETES" || s.status === "SHORTFALL").length;
-  return <div className="panel p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stress testing</p><h3 className="mt-1 font-display text-lg font-semibold">{attention === 0 ? "Base plan holds across the selected stress tests" : `${attention} stress scenario${attention === 1 ? "" : "s"} need attention`}</h3><p className="mt-1 text-sm text-muted-foreground">These are deterministic what-if cases, not probabilities.</p></div><Button variant="outline" onClick={onScenarios}>View scenarios</Button></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{summaries.slice(0,3).map(s => <div key={s.kind} className="rounded-lg border p-3"><p className="font-medium">{s.name}</p><p className="mt-1 text-xs text-muted-foreground">{scenarioStatusText(s)}</p></div>)}</div></div>;
+  return <div className="panel p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stress testing</p><h3 className="mt-1 font-display text-lg font-semibold">{attention === 0 ? "Base plan holds across the selected stress tests" : `${attention} stress scenario${attention === 1 ? "" : "s"} need attention`}</h3><p className="mt-1 text-sm text-muted-foreground">These are deterministic what-if cases, not probabilities.</p></div><Button variant="outline" onClick={onScenarios}>View scenarios</Button></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{summaries.slice(0,3).map(s => {
+    const passes = scenarioPasses(s);
+    const borderColor = passes === null ? "" : passes ? "border-green-500/40" : "border-red-500/40";
+    const textColor = passes === null ? "text-muted-foreground" : passes ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400";
+    return <div key={s.kind} className={`rounded-lg border p-3 ${borderColor}`}><p className="font-medium">{s.name}</p><p className={`mt-1 text-xs font-medium ${textColor}`}>{passes === null ? scenarioStatusText(s) : passes ? "✓ Passes" : "✗ Fails"}</p><p className="mt-1 text-xs text-muted-foreground">{scenarioStatusText(s)}</p></div>;
+  })}</div></div>;
 }
 function ScenarioResults({ summaries }: { summaries: ScenarioSummary[] }) {
-  return <div className="panel p-5"><h3 className="font-display text-lg font-semibold">Stress-test results</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2 pr-4">Scenario</th><th className="pb-2 pr-4">Result</th><th className="pb-2 pr-4">Ending portfolio</th><th className="pb-2 pr-4">Max shortfall</th><th className="pb-2">Change vs base</th></tr></thead><tbody>{summaries.map(s => <tr key={s.kind} className="border-b last:border-0"><td className="py-3 pr-4 font-medium">{s.name}</td><td className="py-3 pr-4">{scenarioStatusText(s)}</td><td className="py-3 pr-4 num">{formatCad(s.endingPortfolio)}</td><td className="py-3 pr-4 num">{formatCad(s.maximumShortfall)}</td><td className="py-3 num">{formatCad(s.deltaEndingPortfolio)}</td></tr>)}</tbody></table></div></div>;
+  return <div className="panel p-5"><h3 className="font-display text-lg font-semibold">Stress-test results</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2 pr-4">Scenario</th><th className="pb-2 pr-4">Result</th><th className="pb-2 pr-4">Ending portfolio</th><th className="pb-2 pr-4">Max shortfall</th><th className="pb-2">Change vs base</th></tr></thead><tbody>{summaries.map(s => {
+    const passes = scenarioPasses(s);
+    const resultColor = passes === null ? "text-muted-foreground" : passes ? "text-green-600 dark:text-green-400 font-medium" : "text-red-600 dark:text-red-400 font-medium";
+    return <tr key={s.kind} className="border-b last:border-0"><td className="py-3 pr-4 font-medium">{s.name}</td><td className={`py-3 pr-4 ${resultColor}`}>{passes === null ? scenarioStatusText(s) : passes ? "✓ Passes" : "✗ Fails"}<span className="block text-xs font-normal text-muted-foreground">{scenarioStatusText(s)}</span></td><td className="py-3 pr-4 num">{formatCad(s.endingPortfolio)}</td><td className="py-3 pr-4 num">{formatCad(s.maximumShortfall)}</td><td className="py-3 num">{formatCad(s.deltaEndingPortfolio)}</td></tr>;
+  })}</tbody></table></div></div>;
 }
 function Analysis({ result }: { result: SimulationResult | null }) {
   const analysis = buildRetirementAnalysis(result);
