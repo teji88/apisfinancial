@@ -12,14 +12,18 @@ import {
   projectRetirement,
   earliestRetirementAge,
   compareWithdrawalStrategies,
+  runStressTest,
   type PlannerInputs,
   type StrategyObjective,
+  type StressScenario,
+  type StressSeverity,
 } from "../adapter/oldApiAdapter";
 
 type Request =
   | { id: number; kind: "project"; inputs: PlannerInputs }
   | { id: number; kind: "earliest"; inputs: PlannerInputs }
-  | { id: number; kind: "compare"; inputs: PlannerInputs; objective: StrategyObjective };
+  | { id: number; kind: "compare"; inputs: PlannerInputs; objective: StrategyObjective }
+  | { id: number; kind: "stress"; inputs: PlannerInputs; scenarioId: StressScenario["id"]; severity: StressSeverity };
 
 type Response =
   | { id: number; kind: string; ok: true; result: unknown }
@@ -35,6 +39,8 @@ self.onmessage = (e: MessageEvent<Request>) => {
       result = earliestRetirementAge(inputs);
     } else if (kind === "compare") {
       result = compareWithdrawalStrategies(inputs, e.data.objective);
+    } else if (kind === "stress") {
+      result = runStressTest(inputs, e.data.scenarioId, e.data.severity);
     } else {
       throw new Error(`Unknown job kind: ${kind}`);
     }

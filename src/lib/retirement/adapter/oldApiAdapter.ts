@@ -525,3 +525,121 @@ export function compareWithdrawalStrategies(
   const best = [...results].sort((a, b) => score(b) - score(a))[0];
   return { results, best: best?.policy ?? "TAX_TARGETED" };
 }
+
+export type StressSeverity = "mild" | "moderate" | "severe";
+
+export interface StressScenario {
+  id: "crash" | "lowReturn" | "highInflation" | "longLife";
+  label: string;
+  description: string;
+  severities: Record<StressSeverity, { label: string; value: number }>;
+}
+
+export const STRESS_SCENARIOS: StressScenario[] = [
+  {
+    id: "crash",
+    label: "Market crash early",
+    description: "Portfolio drops in year 2 of retirement",
+    severities: {
+      mild: { label: "-15%", value: 0.15 },
+      moderate: { label: "-30%", value: 0.30 },
+      severe: { label: "-50%", value: 0.50 },
+    },
+  },
+  {
+    id: "lowReturn",
+    label: "Low returns",
+    description: "Annual return reduced for the whole plan",
+    severities: {
+      mild: { label: "-1%/yr", value: 1 },
+      moderate: { label: "-2%/yr", value: 2 },
+      severe: { label: "-3%/yr", value: 3 },
+    },
+  },
+  {
+    id: "highInflation",
+    label: "High inflation",
+    description: "Inflation higher for the whole plan",
+    severities: {
+      mild: { label: "+1%/yr", value: 1 },
+      moderate: { label: "+2%/yr", value: 2 },
+      severe: { label: "+3%/yr", value: 3 },
+    },
+  },
+  {
+    id: "longLife",
+    label: "Live longer",
+    description: "Life expectancy extended",
+    severities: {
+      mild: { label: "+3 yrs", value: 3 },
+      moderate: { label: "+5 yrs", value: 5 },
+      severe: { label: "+10 yrs", value: 10 },
+    },
+  },
+];
+
+export interface StressTestResult {
+  scenarioId: string;
+  severity: StressSeverity;
+  severityLabel: string;
+  passed: boolean;
+  depletionAge: number | null;
+  endingBalance: number;
+}
+
+/**
+ * Run a single stress test scenario against the base inputs.
+ * Returns pass/fail (fully funded?) plus details.
+ */
+export function runStressTest(
+  input: PlannerInputs,
+  scenarioId: StressScenario["id"],
+  severity: StressSeverity,
+): StressTestResult {
+  const scenario = STRESS_SCENARIOS.find((s) => s.id === scenarioId)!;
+  const severityValue = scenario.severities[severity].value;
+
+  // Clone inputs and apply the stress
+  const stressed = JSON.parse(JSON.stringify(input)) as PlannerInputs;
+
+  switch (scenarioId) {
+    case "crash": {
+      // Applied as a one-time portfolio reduction: we simulate by reducing
+      // starting balances. The crash happens in year 2, so we approximate
+      // by reducing balances by the crash amount compounded for 1 year of growth.
+      // Simpler: reduce all balances by the crash percentage directly.
+      const crashFactor = 1 - severityValue;
+      stressed.self.balances.tfsa *= crashFactor;
+      stressed.self.balances.rrsp *= crashFactor;
+      stressed.self.balances.lira *= crashFactor;
+      stressed.self.balances.nonreg *= crashFactor;
+      if (stressed.spouse) {
+        stressed.spouse.balances.tfsa *= crashFactor;
+        stressed.spouse.balances.rrsp *= crashFactor;
+        stressed.spouse.balances.lira *= crashFactor;
+        stressed.spouse.balances.nonreg *= crashFactor;
+      }
+      break;
+    }
+    case "lowReturn":
+      stressed.workingGrowth = (stressed.workingGrowth ?? 6) - severityValue;
+      stressed.retirementGrowth = (stressed.retirementGrowth ?? 6) - severityValue;
+      break;
+    case "highInflation":
+      stressed.inflation = (stressed.inflation ?? 2) + severityValue;
+      break;
+    case "longLife":
+      stressed.lifeExpectancy = (stressed.lifeExpectancy ?? 90) + severityValue;
+      break;
+  }
+
+  const result = projectRetirement(stressed);
+  return {
+    scenarioId,
+    severity,
+    severityLabel: scenario.severities[severity].label,
+    passed: result.success,
+    depletionAge: result.depletionAge,
+    endingBalance: result.endingBalance,
+  };
+}
