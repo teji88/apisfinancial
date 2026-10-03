@@ -281,33 +281,39 @@ function simulationToProjection(
   const sortedYears = Array.from(yearlyMap.keys()).sort((a, b) => a - b);
   const currentYear2 = new Date().getFullYear();
   const birthYear2 = currentYear2 - input.self.age;
+  // The engine simulates in nominal dollars (correct for tax brackets, YMPE,
+  // OAS thresholds which all inflate). Deflate to today's dollars for display
+  // so the spending line stays flat and all values show real purchasing power.
+  const inflationRate = (input.inflation ?? 2) / 100;
+  const deflatorFor = (year: number) => Math.pow(1 + inflationRate, year - currentYear2);
   const rows: YearRow[] = sortedYears.map((year) => {
     const y = yearlyMap.get(year)!;
     const age = year - birthYear2;
+    const d = deflatorFor(year);
     return {
       age,
       year,
-      rrifDraw: y.rrifDraw,
-      lifDraw: y.lifDraw,
-      nonregDraw: y.nonregDraw,
-      tfsaDraw: y.tfsaDraw,
-      cpp: y.cpp,
-      oas: y.oas,
-      oasClawback: y.oasClawback,
-      otherIncome: y.otherIncome,
-      taxes: y.taxes,
-      spending: y.spending,
-      shortfall: y.shortfall,
+      rrifDraw: y.rrifDraw / d,
+      lifDraw: y.lifDraw / d,
+      nonregDraw: y.nonregDraw / d,
+      tfsaDraw: y.tfsaDraw / d,
+      cpp: y.cpp / d,
+      oas: y.oas / d,
+      oasClawback: y.oasClawback / d,
+      otherIncome: y.otherIncome / d,
+      taxes: y.taxes / d,
+      spending: y.spending / d,
+      shortfall: y.shortfall / d,
       pensionSplit: 0,
       effectiveCeiling: 0,
       meltdownFlag: false,
       people: [],
       balances: {
-        tfsa: y.endingTfsa,
-        rrsp: y.endingRegistered,
+        tfsa: y.endingTfsa / d,
+        rrsp: y.endingRegistered / d,
         lira: 0,
-        nonreg: y.endingNonReg,
-        total: y.endingPortfolio,
+        nonreg: y.endingNonReg / d,
+        total: y.endingPortfolio / d,
       },
     };
   });
@@ -320,15 +326,22 @@ function simulationToProjection(
     depletionAge = new Date(metrics.depletionDate).getFullYear() - birthYear;
   }
 
+  // Summary figures are also in today's dollars. Lifetime tax is the sum of
+  // the already-deflated yearly taxes (not the deflated nominal total).
+  const deflatedTotalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
+  const lastYear = sortedYears.length ? sortedYears[sortedYears.length - 1]! : currentYear;
+  const endDeflator = deflatorFor(lastYear);
+  const lastRow = rows.length ? rows[rows.length - 1]! : null;
+
   return {
     rows,
     depletionAge,
     success: metrics.maximumSpendingShortfall <= 0 && !metrics.depletionDate,
-    endingBalance: metrics.endingPortfolio,
-    totalTaxes: metrics.lifetimeTax,
+    endingBalance: metrics.endingPortfolio / endDeflator,
+    totalTaxes: deflatedTotalTaxes,
     totalClawback: 0,
-    estateTax: metrics.estateTax ?? 0,
-    estateRegistered: metrics.endingPortfolio,
+    estateTax: (metrics.estateTax ?? 0) / endDeflator,
+    estateRegistered: lastRow?.balances.rrsp ?? 0,
   };
 }
 
