@@ -580,9 +580,12 @@ function RetirementPage() {
     longLife: "moderate",
   });
 
-  // Clear stress results when inputs change (they're stale)
+  // Clear stress results when inputs change (they're stale) — but never
+  // mid-run, or results get wiped just as they arrive.
+  const stressingRef = useRef(stressing);
+  stressingRef.current = stressing;
   useEffect(() => {
-    clearStress();
+    if (!stressingRef.current) clearStress();
   }, [inputs, clearStress]);
 
   // Quick estimate runs immediately (no debounce) for instant feedback.
@@ -750,25 +753,31 @@ function RetirementPage() {
             key: "outcome",
             label: "Outcome",
             value: projection?.success
-              ? "Fully funded"
+              ? `Funded to age ${p?.life_expectancy ?? 95}`
               : projection?.depletionAge != null
-                ? `Short at ${projection.depletionAge}`
-                : "Shortfall in some years",
+                ? `Money runs out at ${projection.depletionAge}`
+                : "Tight years — tap for details",
             tone: projection?.success ? "good" : "warn",
             dimmed: projecting,
             detail: (
               <>
                 <div>Ending balance {formatCad(endingBalance)} {moneyNote}</div>
-                {!projection?.success && projection?.rows && (
+                {!projection?.success && projection?.depletionAge != null && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    The portfolio is fully depleted at age {projection.depletionAge}. Spending after
+                    that age cannot be funded.
+                  </p>
+                )}
+                {!projection?.success && projection?.depletionAge == null && projection?.rows && (
                   <div className="mt-2">
-                    <div className="font-medium">Years with shortfalls:</div>
+                    <div className="font-medium">Years where cash came up short:</div>
                     <ul className="list-disc list-inside text-xs">
                       {projection.rows
                         .filter((r) => r.shortfall > 500)
                         .slice(0, 5)
                         .map((r) => (
                           <li key={r.age}>
-                            Age {r.age}: {formatCad(r.shortfall)} shortfall
+                            Age {r.age}: {formatCad(r.shortfall)} short of the plan
                           </li>
                         ))}
                       {projection.rows.filter((r) => r.shortfall > 500).length > 5 && (
@@ -776,8 +785,9 @@ function RetirementPage() {
                       )}
                     </ul>
                     <p className="text-xs text-muted-foreground mt-1">
-                      A shortfall means the planned spending couldn't be fully met that year,
-                      even if the overall portfolio recovers later.
+                      In these years the monthly cash didn't fully cover spending plus taxes.
+                      The portfolio recovers afterwards — this is a cash-flow squeeze, not
+                      running out of money.
                     </p>
                   </div>
                 )}
@@ -1058,7 +1068,12 @@ function RetirementPage() {
 
           <div className="panel space-y-3 p-5">
             <div>
-              <h2 className="font-display text-lg font-semibold">Where your income comes from</h2>
+              <h2 className="font-display text-lg font-semibold">
+                Where your income comes from
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  ({WITHDRAWAL_POLICIES.find((w) => w.key === policy)?.label})
+                </span>
+              </h2>
               <p className="text-sm text-muted-foreground">
                 Each bar is a retirement year: benefits and withdrawals stacked against the spending
                 line. The black line is the pre-tax need (spending + taxes); the red line is
