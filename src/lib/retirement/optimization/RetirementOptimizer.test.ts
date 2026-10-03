@@ -3,6 +3,9 @@ import { createDefaultRetirementScenario } from "../scenario/defaults";
 import { optimizeRetirementPlan } from "./RetirementOptimizer";
 
 describe("RetirementOptimizer", () => {
+  // These tests evaluate up to 288 full retirement simulations each.
+  // A single simulation takes ~60ms, so the optimizer needs well beyond
+  // vitest's 5s default timeout.
   it("evaluates a bounded deterministic candidate set", () => {
     const scenario = createDefaultRetirementScenario(new Date("2026-01-01T00:00:00Z"));
 
@@ -18,7 +21,7 @@ describe("RetirementOptimizer", () => {
     expect(result.selectedPlan).toBeDefined();
     expect(result.paretoCandidates.length).toBeGreaterThan(0);
     expect(result.selectedCandidate?.objectiveValue).toBeTypeOf("number");
-  });
+  }, 60_000);
 
   it("does not select a plan when every candidate violates a hard constraint", () => {
     const scenario = createDefaultRetirementScenario(new Date("2026-01-01T00:00:00Z"));
@@ -55,7 +58,7 @@ describe("RetirementOptimizer", () => {
     } else {
       expect(result.selectedPlan).toBeUndefined();
     }
-  });
+  }, 60_000);
 
   it("selects the earliest feasible retirement age for MIN_RETIREMENT_AGE", () => {
     const scenario = createDefaultRetirementScenario(new Date("2026-01-01T00:00:00Z"));
@@ -76,5 +79,5 @@ describe("RetirementOptimizer", () => {
     if (feasibleAges.length > 0) {
       expect(selectedAge).toBe(Math.min(...feasibleAges));
     }
-  });
+  }, 60_000);
 });
