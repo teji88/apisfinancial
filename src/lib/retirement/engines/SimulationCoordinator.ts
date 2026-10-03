@@ -300,6 +300,10 @@ export function runRetirementSimulation(
 
     let benefits = 0;
     const benefitSources = { cpp: 0, oas: 0, gis: 0, allowance: 0 };
+    const benefitsByPerson: Record<PersonRole, { cpp: number; oas: number; gis: number }> = {
+      MAIN_USER: { cpp: 0, oas: 0, gis: 0 },
+      PARTNER: { cpp: 0, oas: 0, gis: 0 },
+    };
     let taxableBenefits = 0;
     let otherIncome = 0;
     let nonRegisteredInvestmentIncome = 0;
@@ -393,6 +397,9 @@ export function runRetirementSimulation(
         benefitSources.oas += monthlyOas;
         benefitSources.gis += monthlyGis;
         benefitSources.allowance += monthlyAllowance;
+        benefitsByPerson[person.role].cpp += monthlyCpp;
+        benefitsByPerson[person.role].oas += monthlyOas;
+        benefitsByPerson[person.role].gis += monthlyGis;
         taxableBenefits += monthlyCpp + monthlyOas;
         monthlyTaxInputs[person.role].cpp = (monthlyTaxInputs[person.role].cpp ?? 0) + monthlyCpp;
         monthlyTaxInputs[person.role].oas = (monthlyTaxInputs[person.role].oas ?? 0) + monthlyOas;
@@ -457,6 +464,13 @@ export function runRetirementSimulation(
       nonRegistered: investmentIncomeDistributed,
       cash: 0,
     };
+    const withdrawalsByPerson: Record<PersonRole, { registered: number; lira: number; tfsa: number; nonRegistered: number }> = {
+      MAIN_USER: { registered: 0, lira: 0, tfsa: 0, nonRegistered: 0 },
+      PARTNER: { registered: 0, lira: 0, tfsa: 0, nonRegistered: 0 },
+    };
+    // Seed with mandatory withdrawals (tracked by owner)
+    withdrawalsByPerson.MAIN_USER.registered = mandatoryByOwner.MAIN_USER;
+    withdrawalsByPerson.PARTNER.registered = mandatoryByOwner.PARTNER;
     let taxableWithdrawals = taxableMandatory;
 
     const registeredWithdrawalsByOwner: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
@@ -583,14 +597,18 @@ export function runRetirementSimulation(
         withdrawalSources.registered += taken;
         taxableWithdrawals += taken;
         registeredWithdrawalsByOwner[account.owner] += taken;
+        withdrawalsByPerson[account.owner].registered += taken;
       } else if (step.bucket === "LIRA_LIF") {
         withdrawalSources.lira += taken;
         taxableWithdrawals += taken;
         registeredWithdrawalsByOwner[account.owner] += taken;
+        withdrawalsByPerson[account.owner].lira += taken;
       } else if (step.bucket === "TFSA") {
         withdrawalSources.tfsa += taken;
+        withdrawalsByPerson[account.owner].tfsa += taken;
       } else if (step.bucket === "NON_REGISTERED") {
         withdrawalSources.nonRegistered += taken;
+        withdrawalsByPerson[account.owner].nonRegistered += taken;
       } else if (step.bucket === "CASH") {
         withdrawalSources.cash += taken;
       }
@@ -777,8 +795,10 @@ export function runRetirementSimulation(
       grossIncome: benefits + otherIncome + withdrawals,
       benefits,
       benefitSources,
+      benefitsByPerson,
       withdrawals,
       withdrawalSources,
+      withdrawalsByPerson,
       taxes: currentTax + deathTax,
       oasRecovery: currentOasRecovery,
       spending: targetSpending,
