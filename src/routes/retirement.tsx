@@ -686,8 +686,10 @@ function RetirementPage() {
     "RRIF / LIF": Math.round(r.rrifDraw + r.lifDraw),
     "Non-Reg": Math.round(r.nonregDraw),
     TFSA: Math.round(r.tfsaDraw),
-    Taxes: -Math.round(r.taxes),
     Spending: Math.round(r.spending),
+    // Pre-tax line: what must be funded before tax (spending + tax bill).
+    // The gap between this (black) and Spending (red) is the year's tax.
+    "Pre-tax need": Math.round(r.spending + r.taxes),
   }));
 
   // oasAt expects *years* of residence, not the already-computed fraction.
@@ -1059,7 +1061,8 @@ function RetirementPage() {
               <h2 className="font-display text-lg font-semibold">Where your income comes from</h2>
               <p className="text-sm text-muted-foreground">
                 Each bar is a retirement year: benefits and withdrawals stacked against the spending
-                line, with tax shown below the axis. Amounts {moneyNote}.
+                line. The black line is the pre-tax need (spending + taxes); the red line is
+                after-tax spending — the gap between them is the year's tax bill. Amounts {moneyNote}.
               </p>
             </div>
             <div className="h-80 w-full">
@@ -1079,12 +1082,18 @@ function RetirementPage() {
                   <Bar dataKey="RRIF / LIF" stackId="i" fill="var(--series-3)" />
                   <Bar dataKey="Non-Reg" stackId="i" fill="var(--series-4)" />
                   <Bar dataKey="TFSA" stackId="i" fill="var(--series-5)" />
-                  <Bar dataKey="Taxes" stackId="i" fill="var(--series-6)" />
 
                   <Line
                     type="monotone"
-                    dataKey="Spending"
+                    dataKey="Pre-tax need"
                     stroke="var(--foreground)"
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Spending"
+                    stroke="#dc2626"
                     dot={false}
                     strokeWidth={2}
                   />
