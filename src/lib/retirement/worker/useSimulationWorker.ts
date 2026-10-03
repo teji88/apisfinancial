@@ -178,6 +178,11 @@ export function useSimulationWorker() {
     [post],
   );
 
+  /** Clear a stale comparison (inputs changed). */
+  const clearComparison = useCallback(() => {
+    setComparison(null);
+  }, []);
+
   /** On-demand: run a single stress test scenario. */
   const runStress = useCallback(
     (inputs: PlannerInputs, scenarioId: StressScenario["id"], severity: StressSeverity) => {
@@ -203,6 +208,7 @@ export function useSimulationWorker() {
     comparison,
     comparing,
     runCompare,
+    clearComparison,
     runProject,
     runProjectQuick,
     stressResults,

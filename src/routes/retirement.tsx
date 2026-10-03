@@ -563,6 +563,7 @@ function RetirementPage() {
     comparison,
     comparing,
     runCompare,
+    clearComparison,
     runProject,
     runProjectQuick,
     stressResults,
@@ -584,9 +585,12 @@ function RetirementPage() {
   // mid-run, or results get wiped just as they arrive.
   const stressingRef = useRef(stressing);
   stressingRef.current = stressing;
+  const comparingRef = useRef(comparing);
+  comparingRef.current = comparing;
   useEffect(() => {
     if (!stressingRef.current) clearStress();
-  }, [inputs, clearStress]);
+    if (!comparingRef.current) clearComparison();
+  }, [inputs, clearStress, clearComparison]);
 
   // Quick estimate runs immediately (no debounce) for instant feedback.
   // Full projection follows after 400ms of inactivity and overwrites it.
@@ -939,7 +943,7 @@ function RetirementPage() {
                         </div>
                         <div className="flex justify-between">
                           <dt className="text-muted-foreground">Left after tax</dt>
-                          <dd>{formatCad(r.estateAfterTax)}</dd>
+                          <dd>{r.depletionAge != null ? "Depleted" : formatCad(r.estateAfterTax)}</dd>
                         </div>
                         <div className="flex justify-between">
                           <dt className="text-muted-foreground">Money lasts</dt>
