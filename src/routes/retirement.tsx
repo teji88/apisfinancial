@@ -628,12 +628,12 @@ function RetirementPage() {
             </span>
             <span className="text-muted-foreground">
               At {inputs.retirementAge}:{" "}
-              <span className="font-medium text-foreground">{projecting ? "…" : formatCad(startBalance)}</span>
+              <span className="font-medium text-foreground">{formatCad(startBalance)}</span>
             </span>
             <span className="text-muted-foreground">
               Outcome:{" "}
               <span className={`font-medium ${projection?.success ? "text-green-600" : "text-amber-600"}`}>
-                {projecting ? "…" : projection?.success ? "Fully funded" : `Short at ${projection?.depletionAge}`}
+                {projection?.success ? "Fully funded" : `Short at ${projection?.depletionAge}`}
               </span>
             </span>
             <span className="text-muted-foreground">
@@ -678,14 +678,13 @@ function RetirementPage() {
           icon={<ShieldCheck className="h-4 w-4" />}
           label="Plan outcome"
           value={
-            projecting
-              ? "Calculating…"
-              : projection?.success
-                ? "Fully funded"
-                : `Runs short at ${projection?.depletionAge}`
+            projection?.success
+              ? "Fully funded"
+              : `Runs short at ${projection?.depletionAge}`
           }
           hint={`Ending balance ${formatCad(endingBalance)} ${moneyNote}`}
           tone={projection?.success ? "good" : "warn"}
+          dimmed={projecting}
         />
         <StatCard
           icon={<TriangleAlert className="h-4 w-4" />}
@@ -1588,6 +1587,7 @@ function StatCard({
   hint,
   subhint,
   tone,
+  dimmed,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -1595,9 +1595,10 @@ function StatCard({
   hint: React.ReactNode;
   subhint?: string;
   tone?: "good" | "warn";
+  dimmed?: boolean;
 }) {
   return (
-    <div className="panel min-h-[6.5rem] p-5">
+    <div className={`panel min-h-[6.5rem] p-5 transition-opacity ${dimmed ? "opacity-60" : ""}`}>
       <div className="flex flex-wrap items-center gap-2 text-xs leading-snug break-words text-muted-foreground">
         {icon}
         {label}
