@@ -263,6 +263,8 @@ function RetirementPage() {
   const [clawbackTolerance, setClawbackTolerance] = useState(0);
   const [policy, setPolicy] = useState<WithdrawalPolicy>("TAX_TARGETED");
   const [objective, setObjective] = useState<StrategyObjective>("MIN_TAX");
+  /** User override for non-registered gain ratio (0-1). Null = use portfolio ACB or estimate. */
+  const [gainRatioOverride, setGainRatioOverride] = useState<number | null>(null);
   /** True once the user scrolls — collapses the sticky summary to a compact bar. */
   const [scrolled, setScrolled] = useState(false);
 
@@ -300,6 +302,7 @@ function RetirementPage() {
 
   const byType = useMemo(() => {
     const sums: Record<string, number> = {};
+    const acbs: Record<string, number> = {};
     for (const a of accounts) {
       const s = summariseAccount(
         a,
@@ -310,14 +313,26 @@ function RetirementPage() {
       );
       const value = s.marketValue + Math.max(0, s.cash);
       sums[a.account_type] = (sums[a.account_type] ?? 0) + value;
+      // Track ACB for non-registered accounts to compute the gain ratio.
+      // Cash has no ACB (it's already after-tax), so only use the invested ACB.
+      acbs[a.account_type] = (acbs[a.account_type] ?? 0) + Math.max(0, s.acb);
     }
     const pick = (types: string[]) => types.reduce((t, k) => t + (sums[k] ?? 0), 0);
+    const pickAcb = (types: string[]) => types.reduce((t, k) => t + (acbs[k] ?? 0), 0);
+    const nonregValue = pick(NONREG_TYPES);
+    const nonregAcb = pickAcb(NONREG_TYPES);
+    // Gain ratio = unrealized gain / market value, clamped 0-1.
+    // Falls back to null when no ACB data (user can override or estimate).
+    const nonregGainRatio = nonregValue > 0 && nonregAcb > 0
+      ? Math.min(1, Math.max(0, (nonregValue - nonregAcb) / nonregValue))
+      : null;
     return {
       tfsa: pick(TFSA_TYPES),
       rrsp: pick(RRSP_TYPES),
       lira: pick(LIRA_TYPES),
       fhsa: pick(FHSA_TYPES),
-      nonreg: pick(NONREG_TYPES),
+      nonreg: nonregValue,
+      nonregGainRatio,
     };
   }, [accounts, transactions, holdings, quotes, fxUsdCad]);
 
@@ -434,7 +449,8 @@ function RetirementPage() {
       oasFraction: derived.selfOasFraction,
       otherIncome: 0,
       balances: { ...balances },
-      nonregGainRatio: 0.4,
+      // Use portfolio ACB if available, else user override, else 0.4 estimate.
+      nonregGainRatio: gainRatioOverride ?? byType.nonregGainRatio ?? 0.4,
     };
 
     const spouse: PersonSpec | null = married
@@ -472,6 +488,7 @@ function RetirementPage() {
         nonreg: p.save_pct_nonreg ?? 20,
       },
       clawbackTolerance,
+      pensionSplitPercent: p.pension_split_percent ?? 0,
       withdrawalPolicy: policy,
       self,
       spouse,
@@ -835,6 +852,20 @@ function RetirementPage() {
                   );
                 })}
               </div>
+
+              {policy === "TAX_TARGETED" && (
+                <div className="rounded-lg border p-4 space-y-2">
+                  <Label className="text-sm font-medium">OAS clawback tolerance</Label>
+                  <p className="text-xs text-muted-foreground">
+                    How far above the OAS clawback threshold you're willing to go when melting down
+                    registered accounts. $0 means stay strictly under the line.
+                  </p>
+                  <NumInput
+                    value={clawbackTolerance}
+                    onCommit={(n) => setClawbackTolerance(Math.max(0, n))}
+                  />
+                </div>
+              )}
 
               <div className="max-h-[22rem] overflow-auto rounded-lg border">
                 <Table>
@@ -1276,6 +1307,15 @@ function RetirementPage() {
               <Field label="Spouse other pension income in retirement">
                               <NumInput value={p.spouse_income} onCommit={(n) => set({ spouse_income: n })} />
               </Field>
+              <Field label="Pension income split % (0-50)">
+                <NumInput
+                  value={p.pension_split_percent ?? 0}
+                  onCommit={(n) => set({ pension_split_percent: Math.min(50, Math.max(0, n)) } as Partial<Profile>)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Split eligible pension income with your spouse to reduce overall tax. Max 50%.
+                </p>
+              </Field>
             </Section>
           )}
 
@@ -1318,6 +1358,26 @@ function RetirementPage() {
               ).map(([label, key, synced]) => (
                 <Field key={key} label={label}>
                   <NumInput value={p[key]} onCommit={(n) => set({ [key]: n } as Partial<Profile>)} />
+                  {key === "override_fhsa" && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Note: FHSA is modeled as RRSP for projection purposes (deductible contributions,
+                      taxable withdrawals). The tax-free first-home withdrawal benefit is not separately modeled.
+                    </p>
+                  )}
+                  {key === "override_nonreg" && (
+                    <div className="mt-2 space-y-1">
+                      <Label className="text-xs">Unrealized gain %</Label>
+                      <NumInput
+                        value={gainRatioOverride ?? (byType.nonregGainRatio != null ? Math.round(byType.nonregGainRatio * 100) : 40)}
+                        onCommit={(n) => setGainRatioOverride(Math.min(100, Math.max(0, n)) / 100)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {byType.nonregGainRatio != null
+                          ? `From your portfolio (ACB tracked): ${Math.round(byType.nonregGainRatio * 100)}% is gain. Override if needed.`
+                          : "No ACB data in portfolio. Using 40% estimate. Enter your actual % if you know it."}
+                      </p>
+                    </div>
+                  )}
                 </Field>
               ))}
             </div>
