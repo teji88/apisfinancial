@@ -10,8 +10,8 @@
  * 6. Average remaining ratios × 25% × average YMPE = annual benefit at 65
  * 7. Divide by 12 for monthly
  *
- * Note: This calculates the base CPP (25% replacement rate). The post-2019
- * CPP enhancement (additional ~8.33%) is not included in v1.
+ * Note: This calculates base CPP (25%) plus the 2019+ enhancement (8.33% on
+ * post-2018 earnings, pro-rated). CPP2 (YAMPE second tier, 2024+) is not yet modeled.
  */
 
 import { getYmpe, getAverageYmpe } from "./ympeTable";
@@ -29,6 +29,9 @@ export interface CppCalculationInput {
   earningsHistory: YearlyEarnings[];
   /** Expected annual earnings for future years not in history (before YMPE cap). */
   futureAnnualEarnings?: number;
+  /** Age at retirement — earnings are zero for years after this. If omitted,
+   *  future earnings continue until CPP start (legacy behavior). */
+  retirementAge?: number;
   /** Years eligible for child-rearing dropout (primary caregiver, child under 7). */
   childRearingYears?: number[];
   /** Age to start CPP (60-70). Used for contributory period end. */
@@ -68,6 +71,9 @@ export interface CppCalculationResult {
 
 const GENERAL_DROPOUT_RATE = 0.17;
 const BASE_REPLACEMENT_RATE = 0.25;
+/** CPP enhancement: additional replacement rate on post-2018 earnings (phased in 2019-2023, full from 2023). */
+const ENHANCEMENT_REPLACEMENT_RATE = 0.0833;
+const ENHANCEMENT_START_YEAR = 2019;
 const CPP_START_YEAR = 1966;
 
 export function calculateCppBenefit(input: CppCalculationInput): CppCalculationResult {
@@ -76,6 +82,7 @@ export function calculateCppBenefit(input: CppCalculationInput): CppCalculationR
     birthMonth,
     earningsHistory,
     futureAnnualEarnings = 0,
+    retirementAge,
     childRearingYears = [],
     cppStartAge = 65,
   } = input;
@@ -83,6 +90,10 @@ export function calculateCppBenefit(input: CppCalculationInput): CppCalculationR
   // Contributory period: from age 18 to min(70, CPP start age)
   const startYear = Math.max(birthYear + 18, CPP_START_YEAR);
   const endYear = Math.min(birthYear + Math.min(cppStartAge, 70), new Date().getFullYear() + 50);
+  // Last year with earnings: the year the person turns retirementAge.
+  // Years after retirement have zero earnings (they still count in the
+  // contributory period, subject to dropout rules).
+  const lastEarningYear = retirementAge !== undefined ? birthYear + retirementAge : endYear;
 
   const calculationYear = input.calculationYear ?? (birthYear + 65);
 
@@ -104,10 +115,13 @@ export function calculateCppBenefit(input: CppCalculationInput): CppCalculationR
 
   for (let year = startYear; year <= endYear; year++) {
     const ympe = getYmpe(year);
-    // Use historical earnings if available, otherwise future estimate
+    // Use historical earnings if available, otherwise future estimate.
+    // Years after retirement age have zero earnings.
     let earnings: number;
     if (earningsMap.has(year)) {
       earnings = earningsMap.get(year)!;
+    } else if (year > lastEarningYear) {
+      earnings = 0;
     } else if (year > new Date().getFullYear()) {
       earnings = futureAnnualEarnings;
     } else {
@@ -152,7 +166,16 @@ export function calculateCppBenefit(input: CppCalculationInput): CppCalculationR
 
   // Benefit = average ratio × 25% × average YMPE
   const averageYmpe = getAverageYmpe(calculationYear);
-  const annualBenefit = averageEarningsRatio * BASE_REPLACEMENT_RATE * averageYmpe;
+  const baseAnnualBenefit = averageEarningsRatio * BASE_REPLACEMENT_RATE * averageYmpe;
+
+  // CPP enhancement (2019+): 8.33% additional on post-2018 earnings.
+  // Pro-rated by the fraction of included years in the enhancement period.
+  // Note: CPP2 (YAMPE tier, 2024+) is not yet modeled.
+  const enhancementYears = included.filter((y) => y.year >= ENHANCEMENT_START_YEAR);
+  const enhancementYearFraction = included.length > 0 ? enhancementYears.length / included.length : 0;
+  const enhancementAnnualBenefit = averageEarningsRatio * enhancementYearFraction * ENHANCEMENT_REPLACEMENT_RATE * averageYmpe;
+
+  const annualBenefit = baseAnnualBenefit + enhancementAnnualBenefit;
   const monthlyBenefit = annualBenefit / 12;
 
   // Build breakdown

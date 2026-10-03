@@ -172,6 +172,7 @@ export function runRetirementSimulation(
   let yearTax = 0;
   let currentTax = 0;
   let cumulativeTaxLiability = 0;
+  let cumulativeOasRecovery = 0;
   const yearTaxInputs: Record<PersonRole, TaxIncomeComponents> = { MAIN_USER: {}, PARTNER: {} };
   let previousStage: "BOTH_ALIVE" | "SURVIVOR" | "ESTATE" = "BOTH_ALIVE";
 
@@ -240,7 +241,7 @@ export function runRetirementSimulation(
     totalDebtPayments += debtPayments;
 
     let benefits = 0;
-    const benefitSources = { cpp: 0, oas: 0, oasClawback: 0, gis: 0, allowance: 0 };
+    const benefitSources = { cpp: 0, oas: 0, gis: 0, allowance: 0 };
     let taxableBenefits = 0;
     let otherIncome = 0;
     let nonRegisteredInvestmentIncome = 0;
@@ -327,13 +328,11 @@ export function runRetirementSimulation(
         });
         const monthlyCpp = benefit.cpp / 12;
         const monthlyOas = benefit.oas / 12;
-        const monthlyOasClawback = (benefit.oasClawback ?? 0) / 12;
         const monthlyGis = benefit.gis / 12;
         const monthlyAllowance = benefit.allowance / 12;
         benefits += monthlyCpp + monthlyOas + monthlyGis + monthlyAllowance;
         benefitSources.cpp += monthlyCpp;
         benefitSources.oas += monthlyOas;
-        benefitSources.oasClawback += monthlyOasClawback;
         benefitSources.gis += monthlyGis;
         benefitSources.allowance += monthlyAllowance;
         taxableBenefits += monthlyCpp + monthlyOas;
@@ -552,6 +551,8 @@ export function runRetirementSimulation(
       payerAge: ages.MAIN_USER ?? 65,
       spouseAge: ages.PARTNER ?? 65,
       pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
+      taxYear: calendarYear,
+      inflationRate: scenario.assumptions.inflationRate,
     });
     // The household tax engine calculates liability on the income accumulated
     // so far in the current tax year. Cash-flow reporting must therefore use
@@ -560,6 +561,8 @@ export function runRetirementSimulation(
     const householdTaxLiability = householdTax.householdTax;
     currentTax = Math.max(0, householdTaxLiability - cumulativeTaxLiability);
     cumulativeTaxLiability = householdTaxLiability;
+    const currentOasRecovery = Math.max(0, (householdTax.oasRecovery ?? 0) - cumulativeOasRecovery);
+    cumulativeOasRecovery = householdTax.oasRecovery ?? 0;
 
     const yearEnd = date.getUTCMonth() === 11;
     if (yearEnd) {
@@ -573,6 +576,7 @@ export function runRetirementSimulation(
       yearTaxInputs.MAIN_USER = {};
       yearTaxInputs.PARTNER = {};
       cumulativeTaxLiability = 0;
+      cumulativeOasRecovery = 0;
     }
 
     if (stage === "SURVIVOR" && previousStage === "BOTH_ALIVE") {
@@ -655,6 +659,7 @@ export function runRetirementSimulation(
       grossIncome: benefits + otherIncome,
       withdrawals,
       taxes: currentTax + deathTax,
+      oasRecovery: currentOasRecovery,
       spending: targetSpending,
       debtPayments,
       endingPortfolio: portfolio,
@@ -667,6 +672,7 @@ export function runRetirementSimulation(
       grossIncome: benefits + otherIncome,
       withdrawals,
       taxes: currentTax + deathTax,
+      oasRecovery: currentOasRecovery,
       spending: targetSpending,
       debtPayments,
       debtPrincipal,
@@ -696,6 +702,7 @@ export function runRetirementSimulation(
       withdrawals,
       withdrawalSources,
       taxes: currentTax + deathTax,
+      oasRecovery: currentOasRecovery,
       spending: targetSpending,
       debtPayments,
       debtInterest,
@@ -709,6 +716,7 @@ export function runRetirementSimulation(
         grossIncome: benefits + otherIncome,
         grossWithdrawals: withdrawals,
         taxes: currentTax + deathTax,
+      oasRecovery: currentOasRecovery,
         spending: targetSpending,
         debtPayments,
         endingPortfolio: portfolio,

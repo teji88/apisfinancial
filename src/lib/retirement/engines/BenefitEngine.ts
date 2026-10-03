@@ -6,8 +6,6 @@ import { resolveCppAt65 } from "../benefits/resolveCpp";
 export interface BenefitEstimate {
   cpp: Money;
   oas: Money;
-  /** OAS recovery tax (clawback) — amount of OAS repaid due to high income. */
-  oasClawback: Money;
   gis: Money;
   allowance: Money;
 }
@@ -104,16 +102,6 @@ export function estimateGovernmentBenefits(
     ? baseOasMonthly * 12 * residenceFactor * oasDeferralFactor * indexFactor
     : 0;
 
-  // OAS recovery tax (clawback): 15% of net income above the threshold.
-  // Based on prior-year net income including OAS (CRA line 23400). The
-  // threshold is indexed to inflation like the OAS amounts themselves.
-  const oasRecoveryThreshold = CANADA_2026_PARAMETERS.oasRecovery.startIncome * indexFactor;
-  const incomeForClawback = Math.max(0, (context.previousYearIncome ?? incomeForBenefits)) + oasAnnual;
-  const oasClawbackAnnual = oasAnnual > 0
-    ? Math.min(oasAnnual, 0.15 * Math.max(0, incomeForClawback - oasRecoveryThreshold))
-    : 0;
-  const oasNetAnnual = oasAnnual - oasClawbackAnnual;
-
   // GIS/Allowance use the prior year's income for the July-to-June entitlement period.
   // OAS itself is excluded from GIS income. Employment/self-employment earnings
   // receive the statutory $5,000 full + next $10,000 at 50% exemption.
@@ -139,7 +127,7 @@ export function estimateGovernmentBenefits(
   const partnerCanReceiveAllowance = partnerAge >= 60 && partnerAge < 65 &&
     (context.partnerOasResidenceYears ?? 0) >= 10;
   const ownResidenceEligible = person.oasResidenceYears >= 10;
-  const gisEligible = age >= 65 && age >= oasStartAge && oasNetAnnual > 0 && ownResidenceEligible;
+  const gisEligible = age >= 65 && age >= oasStartAge && oasAnnual > 0 && ownResidenceEligible;
   const incomeAt2025Dollars = hasPartner ? combinedIncome / indexFactor : adjustedPriorYearIncome / indexFactor;
   const table = !hasPartner ? GIS_TABLES_2026_Q3.single
     : partnerCanReceiveAllowance ? GIS_TABLES_2026_Q3.allowanceCouple
@@ -159,8 +147,7 @@ export function estimateGovernmentBenefits(
 
   return {
     cpp: cppAnnual,
-    oas: oasNetAnnual,
-    oasClawback: oasClawbackAnnual,
+    oas: oasAnnual,
     gis: gisAnnual,
     allowance: allowanceAnnual,
   };
