@@ -86,6 +86,8 @@ export interface ScenarioAssumptions {
   investmentFeeRate: number;
   incomeYield?: number;
   capitalGrowthRate?: number;
+  /** Year-specific return overrides: calendar year -> annual return %. Used for sequence-of-returns stress tests. */
+  annualReturnOverrides?: Record<number, number>;
   futureRulesMode: "CURRENT_LAW" | "CURRENT_LAW_PLUS_INDEXING" | "CONSERVATIVE" | "CUSTOM";
 }
 

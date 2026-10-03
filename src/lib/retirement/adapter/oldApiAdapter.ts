@@ -82,6 +82,8 @@ export type PlannerInputs = {
   workingGrowth?: number;
   retirementGrowth?: number;
   growth?: number;
+  /** Year-specific return overrides: calendar year -> annual return %. For sequence-of-returns stress tests. */
+  annualReturnOverrides?: Record<number, number>;
   desiredIncome: number;
   annualSavings: number;
   savingsSplit: SavingsSplit;
@@ -190,6 +192,9 @@ export function plannerInputsToScenario(
   scenario.assumptions.inflationRate = input.inflation;
   const growth = input.retirementGrowth ?? input.workingGrowth ?? input.growth ?? 5;
   scenario.assumptions.investmentReturn = growth;
+  if (input.annualReturnOverrides) {
+    scenario.assumptions.annualReturnOverrides = input.annualReturnOverrides;
+  }
 
   // Province
   scenario.household.province = input.province;
@@ -604,21 +609,15 @@ export function runStressTest(
 
   switch (scenarioId) {
     case "crash": {
-      // Applied as a one-time portfolio reduction: we simulate by reducing
-      // starting balances. The crash happens in year 2, so we approximate
-      // by reducing balances by the crash amount compounded for 1 year of growth.
-      // Simpler: reduce all balances by the crash percentage directly.
-      const crashFactor = 1 - severityValue;
-      stressed.self.balances.tfsa *= crashFactor;
-      stressed.self.balances.rrsp *= crashFactor;
-      stressed.self.balances.lira *= crashFactor;
-      stressed.self.balances.nonreg *= crashFactor;
-      if (stressed.spouse) {
-        stressed.spouse.balances.tfsa *= crashFactor;
-        stressed.spouse.balances.rrsp *= crashFactor;
-        stressed.spouse.balances.lira *= crashFactor;
-        stressed.spouse.balances.nonreg *= crashFactor;
-      }
+      // True sequence-of-returns: bad returns in the first 3 years of retirement.
+      // The crash hits when the portfolio is largest and withdrawals have just started.
+      const retirementYear = new Date().getFullYear() + Math.max(0, (input.self.retirementAge ?? 65) - (input.self.age ?? 40));
+      const overrides: Record<number, number> = {};
+      // Year 1: full crash. Years 2-3: half the crash (partial recovery, still painful).
+      overrides[retirementYear] = -severityValue * 100;
+      overrides[retirementYear + 1] = (-severityValue * 100) / 2;
+      overrides[retirementYear + 2] = (-severityValue * 100) / 2;
+      stressed.annualReturnOverrides = overrides;
       break;
     }
     case "lowReturn":
