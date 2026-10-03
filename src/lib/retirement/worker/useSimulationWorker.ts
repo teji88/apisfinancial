@@ -1,0 +1,137 @@
+import { useEffect, useRef, useState, useCallback } from "react";
+import type {
+  PlannerInputs,
+  Projection,
+  StrategyComparison,
+  StrategyObjective,
+  WithdrawalPolicy,
+} from "@/lib/retirement/adapter/oldApiAdapter";
+
+type JobKind = "project" | "earliest" | "compare";
+
+/**
+ * Runs retirement engine jobs in a Web Worker so the UI thread never blocks.
+ *
+ * - `project` runs automatically (debounced) whenever inputs change — this is
+ *   the live preview the user watches while editing.
+ * - `earliest` and `compare` only run when explicitly requested via
+ *   `runEarliest()` / `runCompare()` (on-demand).
+ * - Stale responses are ignored: only the latest request per kind updates state.
+ */
+export function useSimulationWorker() {
+  const workerRef = useRef<Worker | null>(null);
+  const seqRef = useRef(0);
+  const latestRef = useRef<Record<JobKind, number>>({ project: 0, earliest: 0, compare: 0 });
+
+  const [projection, setProjection] = useState<Projection | null>(null);
+  const [projecting, setProjecting] = useState(false);
+  const [earliest, setEarliest] = useState<number | null>(null);
+  const [earliestLoading, setEarliestLoading] = useState(false);
+  const [comparison, setComparison] = useState<{
+    results: StrategyComparison[];
+    best: WithdrawalPolicy;
+  } | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [workerError, setWorkerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const worker = new Worker(new URL("./simulationWorker.ts", import.meta.url), {
+      type: "module",
+    });
+    workerRef.current = worker;
+
+    worker.onmessage = (e: MessageEvent) => {
+      const { id, kind, ok, result, error } = e.data as {
+        id: number;
+        kind: JobKind;
+        ok: boolean;
+        result?: unknown;
+        error?: string;
+      };
+      // Ignore stale responses — only the latest request per kind counts.
+      if (id !== latestRef.current[kind]) return;
+
+      if (!ok) {
+        setWorkerError(error ?? "Simulation failed");
+        if (kind === "project") setProjecting(false);
+        if (kind === "earliest") setEarliestLoading(false);
+        if (kind === "compare") setComparing(false);
+        return;
+      }
+
+      if (kind === "project") {
+        setProjection(result as Projection);
+        setProjecting(false);
+      } else if (kind === "earliest") {
+        setEarliest(result as number | null);
+        setEarliestLoading(false);
+      } else if (kind === "compare") {
+        setComparison(
+          result as { results: StrategyComparison[]; best: WithdrawalPolicy },
+        );
+        setComparing(false);
+      }
+    };
+
+    worker.onerror = (e) => {
+      setWorkerError(e.message || "Worker error");
+      setProjecting(false);
+      setEarliestLoading(false);
+      setComparing(false);
+    };
+
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, []);
+
+  const post = useCallback((kind: JobKind, inputs: PlannerInputs, objective?: StrategyObjective) => {
+    const worker = workerRef.current;
+    if (!worker) return;
+    const id = ++seqRef.current;
+    latestRef.current[kind] = id;
+    setWorkerError(null);
+    worker.postMessage({ id, kind, inputs, objective });
+  }, []);
+
+  /** Live projection — call on every input change (debounced by caller). */
+  const runProject = useCallback(
+    (inputs: PlannerInputs) => {
+      setProjecting(true);
+      post("project", inputs);
+    },
+    [post],
+  );
+
+  /** On-demand: find earliest sustainable retirement age. */
+  const runEarliest = useCallback(
+    (inputs: PlannerInputs) => {
+      setEarliestLoading(true);
+      post("earliest", inputs);
+    },
+    [post],
+  );
+
+  /** On-demand: compare withdrawal strategies. */
+  const runCompare = useCallback(
+    (inputs: PlannerInputs, objective: StrategyObjective) => {
+      setComparing(true);
+      post("compare", inputs, objective);
+    },
+    [post],
+  );
+
+  return {
+    projection,
+    projecting,
+    earliest,
+    earliestLoading,
+    runEarliest,
+    comparison,
+    comparing,
+    runCompare,
+    runProject,
+    workerError,
+  };
+}

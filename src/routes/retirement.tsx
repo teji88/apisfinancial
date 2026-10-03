@@ -4,6 +4,7 @@ import { ApisLogo } from "@/components/brand/ApisLogo";
 import { AppHeader } from "@/routes/_authenticated/route";
 import { PENDING_PLAN_KEY } from "@/lib/pending-plan";
 import { OldUiCppHistoryEditor } from "./OldUiCppHistoryEditor";
+import { useSimulationWorker } from "@/lib/retirement/worker/useSimulationWorker";
 import { useMemo, useState, useEffect, useRef } from "react";
 import {
   Area,
@@ -20,6 +21,7 @@ import {
   YAxis,
 } from "recharts";
 import {
+  Calculator,
   CalendarClock,
   Coins,
   Landmark,
@@ -33,14 +35,11 @@ import { usePortfolio } from "@/lib/portfolio";
 import { useProfile, useUpdateProfile, type Profile } from "@/lib/profile";
 import { formatCad, summariseAccount } from "@/lib/finance";
 import {
-  earliestRetirementAge,
-  projectRetirement,
   cppPercentFromEarnings,
   cppFromDetailedHistory,
   oasFractionFromResidence,
   oasAt,
   CPP_MAX_MONTHLY_65,
-  compareWithdrawalStrategies,
   WITHDRAWAL_POLICIES,
   type WithdrawalPolicy,
   type StrategyObjective,
@@ -465,20 +464,26 @@ function RetirementPage() {
     };
   }, [p, derived, balances, clawbackTolerance, policy]);
 
-  const projection = useMemo(() => (inputs ? projectRetirement(inputs) : null), [inputs]);
-  /* Debounce the expensive optimizer calls (earliest age + strategy comparison)
-     so typing in "Your details" stays responsive — they run 600ms after the
-     user stops editing instead of on every keystroke. */
-  const [debouncedInputs, setDebouncedInputs] = useState(inputs);
+  /* All heavy engine work runs in a Web Worker — the UI thread never blocks.
+     The projection updates live (debounced); earliest-age and strategy
+     comparison only run when the user clicks their Calculate buttons. */
+  const {
+    projection,
+    projecting,
+    earliest,
+    earliestLoading,
+    runEarliest,
+    comparison,
+    comparing,
+    runCompare,
+    runProject,
+  } = useSimulationWorker();
+
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedInputs(inputs), 600);
+    if (!inputs) return;
+    const t = setTimeout(() => runProject(inputs), 400);
     return () => clearTimeout(t);
-  }, [inputs]);
-  const earliest = useMemo(() => (debouncedInputs ? earliestRetirementAge(debouncedInputs) : null), [debouncedInputs]);
-  const comparison = useMemo(
-    () => (debouncedInputs ? compareWithdrawalStrategies(debouncedInputs, objective) : null),
-    [debouncedInputs, objective],
-  );
+  }, [inputs, runProject]);
 
 
   if (!authLoading && !isGuest && profileQuery.isError) {
@@ -518,7 +523,7 @@ function RetirementPage() {
   };
 
   // The engine models everything in 2026 dollars, so rows need no deflation.
-  const rows = projection.rows;
+  const rows = projection?.rows ?? [];
   const totalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
   const totalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
   const endingBalance = rows.length ? rows[rows.length - 1]!.balances.total : 0;
@@ -611,36 +616,55 @@ function RetirementPage() {
         </div>
       </div>
 
-      <div className={`sticky top-0 z-30 -mx-4 border-b border-border/60 bg-background/95 px-4 shadow-sm backdrop-blur md:-mx-6 md:px-6 ${scrolled ? "py-1.5" : "py-3"}`}>
+      <div className={`sticky top-14 z-20 -mx-4 border-b border-border/60 bg-background/95 px-4 shadow-sm backdrop-blur md:-mx-6 md:px-6 ${scrolled ? "py-1.5" : "py-3"}`}>
         {scrolled ? (
           /* Compact bar: headings + numbers only, no explanations */
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
             <span className="font-medium">
-              Retire <span className={earliest && earliest <= inputs.retirementAge ? "text-green-600" : "text-amber-600"}>{earliest ? `at ${earliest}` : "after 80"}</span>
+              Retire{" "}
+              <span className={earliest && earliest <= inputs.retirementAge ? "text-green-600" : "text-amber-600"}>
+                {earliestLoading ? "…" : earliest ? `at ${earliest}` : "—"}
+              </span>
             </span>
             <span className="text-muted-foreground">
-              At {inputs.retirementAge}: <span className="font-medium text-foreground">{formatCad(startBalance)}</span>
+              At {inputs.retirementAge}:{" "}
+              <span className="font-medium text-foreground">{projecting ? "…" : formatCad(startBalance)}</span>
             </span>
             <span className="text-muted-foreground">
-              Outcome: <span className={`font-medium ${projection.success ? "text-green-600" : "text-amber-600"}`}>{projection.success ? "Fully funded" : `Short at ${projection.depletionAge}`}</span>
+              Outcome:{" "}
+              <span className={`font-medium ${projection?.success ? "text-green-600" : "text-amber-600"}`}>
+                {projecting ? "…" : projection?.success ? "Fully funded" : `Short at ${projection?.depletionAge}`}
+              </span>
             </span>
             <span className="text-muted-foreground">
               Lifetime tax: <span className="font-medium text-foreground">{formatCad(totalTaxes)}</span>
             </span>
             <span className="text-muted-foreground">
-              Estate tax: <span className="font-medium text-foreground">{formatCad(projection.estateTax)}</span>
+              Estate tax: <span className="font-medium text-foreground">{formatCad(projection?.estateTax ?? 0)}</span>
             </span>
           </div>
         ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           icon={<CalendarClock className="h-4 w-4" />}
           label="Earliest sustainable retirement"
-          value={earliest ? `Age ${earliest}` : "Not before 80"}
+          value={earliestLoading ? "Calculating…" : earliest ? `Age ${earliest}` : "Not calculated"}
           hint={
-            earliest && earliest <= inputs.retirementAge
-              ? `Your target of ${inputs.retirementAge} works`
-              : `Your target of ${inputs.retirementAge} runs short`
+            earliestLoading ? (
+              "Testing retirement ages in the background…"
+            ) : earliest ? (
+              earliest <= inputs.retirementAge
+                ? `Your target of ${inputs.retirementAge} works`
+                : `Your target of ${inputs.retirementAge} runs short`
+            ) : (
+              <button
+                type="button"
+                onClick={() => inputs && runEarliest(inputs)}
+                className="text-primary hover:underline"
+              >
+                Calculate earliest age
+              </button>
+            )
           }
           tone={earliest && earliest <= inputs.retirementAge ? "good" : "warn"}
         />
@@ -653,9 +677,15 @@ function RetirementPage() {
         <StatCard
           icon={<ShieldCheck className="h-4 w-4" />}
           label="Plan outcome"
-          value={projection.success ? "Fully funded" : `Runs short at ${projection.depletionAge}`}
+          value={
+            projecting
+              ? "Calculating…"
+              : projection?.success
+                ? "Fully funded"
+                : `Runs short at ${projection?.depletionAge}`
+          }
           hint={`Ending balance ${formatCad(endingBalance)} ${moneyNote}`}
-          tone={projection.success ? "good" : "warn"}
+          tone={projection?.success ? "good" : "warn"}
         />
         <StatCard
           icon={<TriangleAlert className="h-4 w-4" />}
@@ -671,11 +701,11 @@ function RetirementPage() {
         <StatCard
           icon={<Landmark className="h-4 w-4" />}
           label="Tax owed by your estate"
-          value={formatCad(projection.estateTax)}
-          hint={`${formatCad(projection.estateRegistered)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`}
-          tone={projection.estateTax > 1 ? "warn" : "good"}
+          value={formatCad(projection?.estateTax ?? 0)}
+          hint={`${formatCad(projection?.estateRegistered ?? 0)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`}
+          tone={(projection?.estateTax ?? 0) > 1 ? "warn" : "good"}
         />
-        </div>
+          </div>
         )}
       </div>
 
@@ -688,6 +718,14 @@ function RetirementPage() {
 
         {/* --------------------------------- PLAN --------------------------------- */}
         <TabsContent value="plan" className="space-y-6 pt-4">
+          {!comparison && !comparing ? (
+            <Button size="sm" onClick={() => inputs && runCompare(inputs, objective)}>
+              Compare strategies
+            </Button>
+          ) : null}
+          {comparing && !comparison ? (
+            <p className="text-sm text-muted-foreground">Testing withdrawal strategies in the background…</p>
+          ) : null}
           {comparison ? (
             <div className="rounded-xl border bg-card p-4 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1420,6 +1458,23 @@ function RetirementPage() {
         onOpenChange={setProPromptOpen}
         reason={promptReason || PRO_REASON}
       />
+      {/* Floating calculate button — always reachable while scrolling the planner */}
+      {inputs ? (
+        <button
+          type="button"
+          onClick={() => runEarliest(inputs)}
+          disabled={earliestLoading}
+          title="Calculate earliest retirement age"
+          aria-label="Calculate earliest retirement age"
+          className="fixed bottom-6 right-6 z-40 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-70 shadow-lg transition hover:scale-105 hover:opacity-100 disabled:opacity-50"
+        >
+          {earliestLoading ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : (
+            <Calculator className="h-4 w-4" />
+          )}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1537,7 +1592,7 @@ function StatCard({
   icon: React.ReactNode;
   label: string;
   value: string;
-  hint: string;
+  hint: React.ReactNode;
   subhint?: string;
   tone?: "good" | "warn";
 }) {
