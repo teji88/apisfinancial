@@ -302,7 +302,7 @@ function Overview({
                   <div key={metric.label} className="rounded-lg border p-3">
                     <p className="text-xs text-muted-foreground">{metric.label}</p>
                     <p className={`num mt-1 font-semibold ${metric.tone === "warning" ? "text-amber-600 dark:text-amber-400" : ""}`}>
-                      {typeof metric.value === "number" ? formatCad(metric.value) : metric.value}
+                      {typeof metric.value === "number" ? (metric.format === "count" ? metric.value.toString() : formatCad(metric.value)) : metric.value}
                     </p>
                     {metric.note && <p className="mt-1 text-[11px] text-muted-foreground">{metric.note}</p>}
                   </div>

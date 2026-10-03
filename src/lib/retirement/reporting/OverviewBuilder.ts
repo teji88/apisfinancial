@@ -3,6 +3,7 @@ import type { RetirementScenario, SimulationResult } from "../domain/types";
 export interface RetirementOverviewMetric {
   label: string;
   value: number | string;
+  format?: "currency" | "count";
   note?: string;
   tone?: "positive" | "neutral" | "warning";
 }
@@ -113,9 +114,9 @@ export function buildRetirementOverview(
         title: "Retirement timing",
         summary: `The plan targets retirement at age ${scenario.goals.retirementAge} and models through age ${scenario.goals.planningAge}.`,
         metrics: [
-          { label: "Retirement age", value: scenario.goals.retirementAge },
-          { label: "Planning age", value: scenario.goals.planningAge },
-          { label: "Household members", value: scenario.household.people.length },
+          { label: "Retirement age", value: scenario.goals.retirementAge, format: "count" },
+          { label: "Planning age", value: scenario.goals.planningAge, format: "count" },
+          { label: "Household members", value: scenario.household.people.length, format: "count" },
         ],
       },
       {
@@ -145,7 +146,7 @@ export function buildRetirementOverview(
             tone: m.minimumPortfolio > 0 ? "positive" : "warning",
           },
           { label: "Ending portfolio", value: Math.round(m.endingPortfolio) },
-          { label: "Depletion age", value: depletionAge ?? "Not reached" },
+          { label: "Depletion age", value: depletionAge ?? "Not reached", format: "count" },
         ],
       },
       {
