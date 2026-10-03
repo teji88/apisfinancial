@@ -236,6 +236,16 @@ export function runRetirementSimulation(
     const allRetired = alivePeople.length > 0 && alivePeople.every((person) => (ages[person.role] ?? 0) >= person.retirementAge);
 
     const calendarYear = date.getUTCFullYear();
+    // At age 71, RRSP converts to RRIF and LIRA converts to LIF (mandatory
+    // minimums apply from 71). Without this, minimums never trigger.
+    for (const account of accounts) {
+      const ownerAge = ages[account.owner] ?? 0;
+      if (ownerAge >= 71 && account.type === "RRSP") {
+        account.type = "RRIF";
+      } else if (ownerAge >= 71 && account.type === "LIRA") {
+        account.type = "LIF";
+      }
+    }
     // Year-specific return override (sequence-of-returns stress tests)
     const overrideReturn = scenario.assumptions.annualReturnOverrides?.[calendarYear];
     // Use working-years return before retirement, retirement return after.
@@ -441,6 +451,7 @@ export function runRetirementSimulation(
     let withdrawals = mandatoryTaken + investmentIncomeDistributed;
     const withdrawalSources = {
       registered: mandatoryTaken,
+      lira: 0,
       tfsa: 0,
       nonRegistered: investmentIncomeDistributed,
       cash: 0,
@@ -561,8 +572,12 @@ export function runRetirementSimulation(
 
       if (taken <= 0) continue;
       withdrawals += taken;
-      if (step.bucket === "RRSP_RRIF" || step.bucket === "LIRA_LIF") {
+      if (step.bucket === "RRSP_RRIF") {
         withdrawalSources.registered += taken;
+        taxableWithdrawals += taken;
+        registeredWithdrawalsByOwner[account.owner] += taken;
+      } else if (step.bucket === "LIRA_LIF") {
+        withdrawalSources.lira += taken;
         taxableWithdrawals += taken;
         registeredWithdrawalsByOwner[account.owner] += taken;
       } else if (step.bucket === "TFSA") {
@@ -736,12 +751,16 @@ export function runRetirementSimulation(
       endingDebt: debtBalance,
     });
 
+    const liraBalance = accounts
+      .filter((a) => a.type === "LIRA" || a.type === "LIF")
+      .reduce((sum, a) => sum + a.balance, 0);
     monthly.push({
       date: date.toISOString(),
       ages,
       householdStage: stage,
       portfolio,
-      registered: sumBucket(accounts, "registered"),
+      registered: sumBucket(accounts, "registered") - liraBalance,
+      lira: liraBalance,
       tfsa: sumBucket(accounts, "tfsa"),
       nonRegistered: sumBucket(accounts, "nonRegistered"),
       cash: sumBucket(accounts, "cash"),

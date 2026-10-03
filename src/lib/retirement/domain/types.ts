@@ -141,6 +141,7 @@ export interface MonthlySnapshot {
   householdStage: HouseholdStage;
   portfolio: Money;
   registered: Money;
+  lira: Money;
   tfsa: Money;
   nonRegistered: Money;
   cash: Money;
@@ -159,6 +160,7 @@ export interface MonthlySnapshot {
   withdrawals: Money;
   withdrawalSources?: {
     registered: Money;
+    lira: Money;
     tfsa: Money;
     nonRegistered: Money;
     cash: Money;

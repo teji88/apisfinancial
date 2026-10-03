@@ -361,7 +361,7 @@ function simulationToProjection(
     rrifDraw: number; lifDraw: number; nonregDraw: number; tfsaDraw: number;
     cpp: number; oas: number; oasClawback: number; otherIncome: number;
     taxes: number; spending: number; shortfall: number;
-    endingPortfolio: number; endingTfsa: number; endingRegistered: number; endingNonReg: number;
+    endingPortfolio: number; endingTfsa: number; endingRegistered: number; endingLira: number; endingNonReg: number;
   }>();
 
   for (const m of result.monthly) {
@@ -372,13 +372,14 @@ function simulationToProjection(
         rrifDraw: 0, lifDraw: 0, nonregDraw: 0, tfsaDraw: 0,
         cpp: 0, oas: 0, oasClawback: 0, otherIncome: 0,
         taxes: 0, spending: 0, shortfall: 0,
-        endingPortfolio: 0, endingTfsa: 0, endingRegistered: 0, endingNonReg: 0,
+        endingPortfolio: 0, endingTfsa: 0, endingRegistered: 0, endingLira: 0, endingNonReg: 0,
       };
       yearlyMap.set(year, y);
     }
     const ws = m.withdrawalSources;
     if (ws) {
       y.rrifDraw += ws.registered;
+      y.lifDraw += ws.lira ?? 0;
       y.nonregDraw += ws.nonRegistered;
       y.tfsaDraw += ws.tfsa;
     }
@@ -393,6 +394,7 @@ function simulationToProjection(
     y.endingPortfolio = m.portfolio;
     y.endingTfsa = m.tfsa;
     y.endingRegistered = m.registered;
+    y.endingLira = m.lira ?? 0;
     y.endingNonReg = m.nonRegistered;
   }
 
@@ -429,7 +431,7 @@ function simulationToProjection(
       balances: {
         tfsa: y.endingTfsa / d,
         rrsp: y.endingRegistered / d,
-        lira: 0,
+        lira: y.endingLira / d,
         nonreg: y.endingNonReg / d,
         total: y.endingPortfolio / d,
       },
@@ -465,7 +467,7 @@ function simulationToProjection(
     totalTaxes: deflatedTotalTaxes,
     totalClawback: deflatedTotalClawback,
     estateTax: (metrics.estateTax ?? 0) / endDeflator,
-    estateRegistered: lastRow?.balances.rrsp ?? 0,
+    estateRegistered: (lastRow?.balances.rrsp ?? 0) + (lastRow?.balances.lira ?? 0),
   };
 }
 
