@@ -42,8 +42,11 @@ import {
   oasAt,
   CPP_MAX_MONTHLY_65,
   WITHDRAWAL_POLICIES,
+  STRESS_SCENARIOS,
   type WithdrawalPolicy,
   type StrategyObjective,
+  type StressScenario,
+  type StressSeverity,
   type PersonSpec,
   type PlannerInputs,
 } from "@/lib/retirement/adapter/oldApiAdapter";
@@ -492,7 +495,24 @@ function RetirementPage() {
     comparing,
     runCompare,
     runProject,
+    stressResults,
+    stressing,
+    runStress,
+    clearStress,
   } = useSimulationWorker();
+
+  // Stress test severity per scenario (user-adjustable)
+  const [stressSeverities, setStressSeverities] = useState<Record<string, StressSeverity>>({
+    crash: "moderate",
+    lowReturn: "moderate",
+    highInflation: "moderate",
+    longLife: "moderate",
+  });
+
+  // Clear stress results when inputs change (they're stale)
+  useEffect(() => {
+    clearStress();
+  }, [inputs, clearStress]);
 
   useEffect(() => {
     if (!inputs) return;
@@ -1007,6 +1027,79 @@ function RetirementPage() {
                   ))}
                 </AreaChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* --------------------------- STRESS TESTS --------------------------- */}
+          <div className="rounded-xl border bg-card p-4 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold">Stress test your plan</h3>
+                <p className="text-sm text-muted-foreground">
+                  See if your plan holds up when things go wrong. Pick how harsh each
+                  scenario is, then run them.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!inputs) return;
+                  for (const s of STRESS_SCENARIOS) {
+                    runStress(inputs, s.id, stressSeverities[s.id] ?? "moderate");
+                  }
+                }}
+                disabled={stressing || !inputs}
+              >
+                {stressing ? "Testing…" : "Run stress tests"}
+              </Button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {STRESS_SCENARIOS.map((s) => {
+                const severity = stressSeverities[s.id] ?? "moderate";
+                const key = `${s.id}-${severity}`;
+                const result = stressResults[key];
+                return (
+                  <div key={s.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{s.label}</span>
+                      {result ? (
+                        result.passed ? (
+                          <span className="text-xs font-medium text-green-600">✓ Holds up</span>
+                        ) : (
+                          <span className="text-xs font-medium text-amber-600">
+                            Runs short at {result.depletionAge}
+                          </span>
+                        )
+                      ) : stressing ? (
+                        <span className="text-xs text-muted-foreground">Testing…</span>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{s.description}</p>
+                    <div className="flex gap-1">
+                      {(["mild", "moderate", "severe"] as StressSeverity[]).map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          onClick={() => setStressSeverities((prev) => ({ ...prev, [s.id]: level }))}
+                          className={`rounded px-2 py-1 text-xs transition ${
+                            severity === level
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                          }`}
+                        >
+                          {s.severities[level].label}
+                        </button>
+                      ))}
+                    </div>
+                    {result && !result.passed && (
+                      <p className="text-xs text-muted-foreground">
+                        Under this scenario ({result.severityLabel}), the money runs out at age{" "}
+                        {result.depletionAge}.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </TabsContent>

@@ -4,10 +4,13 @@ import type {
   Projection,
   StrategyComparison,
   StrategyObjective,
+  StressScenario,
+  StressSeverity,
+  StressTestResult,
   WithdrawalPolicy,
 } from "@/lib/retirement/adapter/oldApiAdapter";
 
-type JobKind = "project" | "earliest" | "compare";
+type JobKind = "project" | "earliest" | "compare" | "stress";
 
 /**
  * Runs retirement engine jobs in a Web Worker so the UI thread never blocks.
@@ -21,7 +24,7 @@ type JobKind = "project" | "earliest" | "compare";
 export function useSimulationWorker() {
   const workerRef = useRef<Worker | null>(null);
   const seqRef = useRef(0);
-  const latestRef = useRef<Record<JobKind, number>>({ project: 0, earliest: 0, compare: 0 });
+  const latestRef = useRef<Record<JobKind, number>>({ project: 0, earliest: 0, compare: 0, stress: 0 });
 
   const [projection, setProjection] = useState<Projection | null>(null);
   const [projecting, setProjecting] = useState(false);
@@ -32,6 +35,8 @@ export function useSimulationWorker() {
     best: WithdrawalPolicy;
   } | null>(null);
   const [comparing, setComparing] = useState(false);
+  const [stressResults, setStressResults] = useState<Record<string, StressTestResult>>({});
+  const [stressing, setStressing] = useState(false);
   const [workerError, setWorkerError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,6 +61,7 @@ export function useSimulationWorker() {
         if (kind === "project") setProjecting(false);
         if (kind === "earliest") setEarliestLoading(false);
         if (kind === "compare") setComparing(false);
+        if (kind === "stress") setStressing(false);
         return;
       }
 
@@ -70,6 +76,10 @@ export function useSimulationWorker() {
           result as { results: StrategyComparison[]; best: WithdrawalPolicy },
         );
         setComparing(false);
+      } else if (kind === "stress") {
+        const r = result as StressTestResult;
+        setStressResults((prev) => ({ ...prev, [`${r.scenarioId}-${r.severity}`]: r }));
+        setStressing(false);
       }
     };
 
@@ -78,6 +88,7 @@ export function useSimulationWorker() {
       setProjecting(false);
       setEarliestLoading(false);
       setComparing(false);
+      setStressing(false);
     };
 
     return () => {
@@ -86,13 +97,13 @@ export function useSimulationWorker() {
     };
   }, []);
 
-  const post = useCallback((kind: JobKind, inputs: PlannerInputs, objective?: StrategyObjective) => {
+  const post = useCallback((kind: JobKind, inputs: PlannerInputs, objective?: StrategyObjective, extra?: { scenarioId?: StressScenario["id"]; severity?: StressSeverity }) => {
     const worker = workerRef.current;
     if (!worker) return;
     const id = ++seqRef.current;
     latestRef.current[kind] = id;
     setWorkerError(null);
-    worker.postMessage({ id, kind, inputs, objective });
+    worker.postMessage({ id, kind, inputs, objective, ...extra });
   }, []);
 
   /** Live projection — call on every input change (debounced by caller). */
@@ -122,6 +133,20 @@ export function useSimulationWorker() {
     [post],
   );
 
+  /** On-demand: run a single stress test scenario. */
+  const runStress = useCallback(
+    (inputs: PlannerInputs, scenarioId: StressScenario["id"], severity: StressSeverity) => {
+      setStressing(true);
+      post("stress", inputs, undefined, { scenarioId, severity });
+    },
+    [post],
+  );
+
+  /** Clear stress test results (e.g. when inputs change). */
+  const clearStress = useCallback(() => {
+    setStressResults({});
+  }, []);
+
   return {
     projection,
     projecting,
@@ -132,6 +157,10 @@ export function useSimulationWorker() {
     comparing,
     runCompare,
     runProject,
+    stressResults,
+    stressing,
+    runStress,
+    clearStress,
     workerError,
   };
 }
