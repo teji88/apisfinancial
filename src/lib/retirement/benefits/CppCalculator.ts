@@ -45,6 +45,12 @@ export interface CppCalculationResult {
   cppAt65Monthly: number;
   /** Annual CPP benefit at age 65. */
   cppAt65Annual: number;
+  /** Monthly post-retirement benefits (0 if not working while collecting). */
+  prbMonthly: number;
+  /** Annual post-retirement benefits. */
+  prbAnnual: number;
+  /** Years that earned PRBs (cppStartAge to retirementAge). */
+  prbYears: number[];
   /** Number of years in contributory period. */
   contributoryYears: number;
   /** Number of years dropped (general + child-rearing). */
@@ -87,9 +93,14 @@ export function calculateCppBenefit(input: CppCalculationInput): CppCalculationR
     cppStartAge = 65,
   } = input;
 
-  // Contributory period: from age 18 to min(70, CPP start age)
+  // Contributory period: from age 18 to min(70, CPP start age).
+  // Extended to cover PRB years (working while collecting CPP).
   const startYear = Math.max(birthYear + 18, CPP_START_YEAR);
-  const endYear = Math.min(birthYear + Math.min(cppStartAge, 70), new Date().getFullYear() + 50);
+  const cppEndYear = Math.min(birthYear + Math.min(cppStartAge, 70), new Date().getFullYear() + 50);
+  const prbEndYear = retirementAge !== undefined && retirementAge > cppStartAge
+    ? birthYear + Math.min(retirementAge, 70)
+    : cppEndYear;
+  const endYear = Math.max(cppEndYear, prbEndYear);
   // Last year with earnings: the year the person turns retirementAge.
   // Years after retirement have zero earnings (they still count in the
   // contributory period, subject to dropout rules).
@@ -178,6 +189,21 @@ export function calculateCppBenefit(input: CppCalculationInput): CppCalculationR
   const annualBenefit = baseAnnualBenefit + enhancementAnnualBenefit;
   const monthlyBenefit = annualBenefit / 12;
 
+  // Post-retirement benefits (PRBs): if working while collecting CPP
+  // (retirementAge > cppStartAge), each year earns 1/40 of max CPP × earnings ratio.
+  // PRBs start the January after the contribution year and stack.
+  const prbYears: number[] = [];
+  let prbAnnual = 0;
+  if (retirementAge !== undefined && retirementAge > cppStartAge) {
+    const maxCppAnnual = averageYmpe * (BASE_REPLACEMENT_RATE + ENHANCEMENT_REPLACEMENT_RATE);
+    for (let year = birthYear + cppStartAge; year < birthYear + Math.min(retirementAge, 70); year++) {
+      const yearData = years.find((y) => y.year === year);
+      if (!yearData || yearData.ratio <= 0) continue;
+      prbYears.push(year);
+      prbAnnual += (maxCppAnnual / 40) * yearData.ratio;
+    }
+  }
+
   // Build breakdown
   const yearlyBreakdown: CppCalculationResult["yearlyBreakdown"] = years.map((y) => {
     const isChildRearing = childRearingSet.has(y.year);
@@ -198,6 +224,9 @@ export function calculateCppBenefit(input: CppCalculationInput): CppCalculationR
   return {
     cppAt65Monthly: Math.max(0, monthlyBenefit),
     cppAt65Annual: Math.max(0, annualBenefit),
+    prbMonthly: Math.max(0, prbAnnual / 12),
+    prbAnnual: Math.max(0, prbAnnual),
+    prbYears,
     contributoryYears,
     dropoutYears: childRearingDropout.length + generalDropoutCount,
     generalDropoutYears: generalDropoutCount,

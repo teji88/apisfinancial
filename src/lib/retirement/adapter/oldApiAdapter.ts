@@ -430,6 +430,33 @@ export function cppFromDetailedHistory(
 }
 
 /**
+ * Post-retirement benefit info for someone working while collecting CPP.
+ * Returns monthly PRB amount and the years that earned PRBs.
+ */
+export function cppPrbInfo(
+  birthYear: number,
+  earningsHistory: Array<{ year: number; earnings: number }>,
+  futureAnnualEarnings: number = 0,
+  childRearingYears: number[] = [],
+  retirementAge?: number,
+  cppStartAge: number = 65,
+): { monthly: number; annual: number; years: number[] } {
+  if (earningsHistory.length === 0 || retirementAge === undefined || retirementAge <= cppStartAge) {
+    return { monthly: 0, annual: 0, years: [] };
+  }
+  const result = calculateCppBenefit({
+    birthYear,
+    birthMonth: 6,
+    earningsHistory,
+    futureAnnualEarnings,
+    retirementAge,
+    childRearingYears,
+    cppStartAge,
+  });
+  return { monthly: result.prbMonthly, annual: result.prbAnnual, years: result.prbYears };
+}
+
+/**
  * OAS fraction based on years of Canadian residence (40 years = full).
  */
 export function oasFractionFromResidence(years: number): number {

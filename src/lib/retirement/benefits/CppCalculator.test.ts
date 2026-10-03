@@ -187,4 +187,25 @@ describe("CPP calculator", () => {
     // The enhancement should add value for post-2018 earnings
     expect(withEnhancement.cppAt65Monthly).toBeGreaterThan(withoutEnhancement.cppAt65Monthly);
   });
+
+  it("calculates PRBs when working while collecting CPP", () => {
+    const earningsHistory = [];
+    for (let year = 1990; year <= 2026; year++) {
+      earningsHistory.push({ year, earnings: 70000 });
+    }
+    // Retire at 68, start CPP at 65 → 3 years of PRBs
+    const withPrb = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory,
+      futureAnnualEarnings: 70000, retirementAge: 68, cppStartAge: 65,
+    });
+    expect(withPrb.prbYears).toEqual([2025, 2026, 2027]);
+    expect(withPrb.prbMonthly).toBeGreaterThan(0);
+    // Retire at 65, start CPP at 65 → no PRBs
+    const noPrb = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory,
+      futureAnnualEarnings: 70000, retirementAge: 65, cppStartAge: 65,
+    });
+    expect(noPrb.prbYears).toEqual([]);
+    expect(noPrb.prbMonthly).toBe(0);
+  });
 });
