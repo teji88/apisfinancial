@@ -196,6 +196,9 @@ export function runRetirementSimulation(
     const allRetired = alivePeople.length > 0 && alivePeople.every((person) => (ages[person.role] ?? 0) >= person.retirementAge);
 
     const calendarYear = date.getUTCFullYear();
+    // Year-specific return override (sequence-of-returns stress tests)
+    const overrideReturn = scenario.assumptions.annualReturnOverrides?.[calendarYear];
+    const effectiveReturn = overrideReturn ?? scenario.assumptions.investmentReturn;
     for (const account of accounts) {
       if (account.minimumReferenceYear !== calendarYear && (account.type === "RRIF" || account.type === "LIF")) {
         account.minimumReferenceBalance = account.balance;
@@ -204,7 +207,7 @@ export function runRetirementSimulation(
       const beforeReturn = account.balance;
       account.balance = applyMonthlyReturn(
         account.balance,
-        scenario.assumptions.investmentReturn,
+        effectiveReturn,
         scenario.assumptions.investmentFeeRate,
       );
       investmentGrowthThisMonth += account.balance - beforeReturn;
@@ -615,7 +618,7 @@ export function runRetirementSimulation(
         const treatment = applyAccountDeathTreatment(account, hasSpouse, scenarioAccount?.nonRegisteredAcb ?? 0, transfer);
         const deathTaxableIncome = treatment.taxableAtDeath + treatment.taxableCapitalGainAtDeath;
         deathCapitalGains += treatment.capitalGainAtDeath;
-        deathTax += calculateBasicTax(deathTaxableIncome, scenario.household.province, maxAge).totalTax;
+        deathTax += calculateBasicTax(deathTaxableIncome, scenario.household.province, maxAge, calendarYear, scenario.assumptions.inflationRate).totalTax;
         estateGross += treatment.estateValue + treatment.transferredToSurvivor;
         account.balance = treatment.estateValue;
       }
@@ -729,8 +732,6 @@ export function runRetirementSimulation(
         netWorthReconciliation: financialLedger.netWorthReconciliation,
       },
     });
-
-    if (allRetired) spending *= 1 + monthlyInflation;
   }
 
   const endingPortfolio = monthly.at(-1)?.portfolio ?? startingPortfolio;
