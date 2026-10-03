@@ -158,6 +158,8 @@ export interface MonthlySnapshot {
     cash: Money;
   };
   taxes: Money;
+  /** OAS recovery tax portion of taxes (for reporting). */
+  oasRecovery?: Money;
   spending: Money;
   debtPayments?: Money;
   debtInterest?: Money;
