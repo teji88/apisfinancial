@@ -263,6 +263,27 @@ function RetirementPage() {
 
 
   const [form, setForm] = useState<Profile | null>(null);
+  // Detailed CPP earnings histories are not in the Supabase schema yet, so
+  // they persist on this device (localStorage) and merge into the form on load.
+  // This keeps them across logins until the columns exist server-side.
+  const CPP_DETAIL_KEY = "apis.cpp-detail.v1";
+  type CppDetail = Pick<
+    Profile,
+    | "cpp_detailed_history"
+    | "cpp_detailed_future_earnings"
+    | "cpp_detailed_child_rearing"
+    | "spouse_cpp_detailed_history"
+    | "spouse_cpp_detailed_future_earnings"
+    | "spouse_cpp_detailed_child_rearing"
+  >;
+  const readCppDetail = (): Partial<CppDetail> => {
+    try {
+      const raw = window.localStorage.getItem(CPP_DETAIL_KEY);
+      return raw ? (JSON.parse(raw) as Partial<CppDetail>) : {};
+    } catch {
+      return {};
+    }
+  };
   /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
   const [clawbackTolerance, setClawbackTolerance] = useState(0);
   const [policy, setPolicy] = useState<WithdrawalPolicy>("TAX_TARGETED");
@@ -284,7 +305,7 @@ function RetirementPage() {
     if (authLoading || form) return;
     if (isGuest) {
       const stored = window.localStorage.getItem(PENDING_PLAN_KEY);
-      setForm(stored ? { ...GUEST_PROFILE, ...(JSON.parse(stored) as Partial<Profile>) } : GUEST_PROFILE);
+      setForm(stored ? { ...GUEST_PROFILE, ...(JSON.parse(stored) as Partial<Profile>), ...readCppDetail() } : { ...GUEST_PROFILE, ...readCppDetail() });
       return;
     }
     if (!profileQuery.data) return;
@@ -293,16 +314,34 @@ function RetirementPage() {
       // A plan built before signing in: write it to the new profile.
       const pending = JSON.parse(stored) as Partial<Profile>;
       window.localStorage.removeItem(PENDING_PLAN_KEY);
-      setForm({ ...profileQuery.data, ...pending });
+      setForm({ ...profileQuery.data, ...pending, ...readCppDetail() });
       updateProfile.mutate(pending, {
         onSuccess: () => toast.success("Your retirement plan is saved to your account"),
         onError: (e) => toast.error((e as Error).message),
       });
       return;
     }
-    setForm(profileQuery.data);
+    setForm({ ...profileQuery.data, ...readCppDetail() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileQuery.data, form, authLoading, isGuest]);
+
+  // Persist detailed CPP histories on this device whenever they change.
+  useEffect(() => {
+    if (!form) return;
+    const detail: Partial<CppDetail> = {
+      cpp_detailed_history: form.cpp_detailed_history,
+      cpp_detailed_future_earnings: form.cpp_detailed_future_earnings,
+      cpp_detailed_child_rearing: form.cpp_detailed_child_rearing,
+      spouse_cpp_detailed_history: form.spouse_cpp_detailed_history,
+      spouse_cpp_detailed_future_earnings: form.spouse_cpp_detailed_future_earnings,
+      spouse_cpp_detailed_child_rearing: form.spouse_cpp_detailed_child_rearing,
+    };
+    try {
+      window.localStorage.setItem(CPP_DETAIL_KEY, JSON.stringify(detail));
+    } catch {
+      // Storage full or unavailable — the in-memory values still work for this session.
+    }
+  }, [form]);
 
   const byType = useMemo(() => {
     const sums: Record<string, number> = {};
@@ -651,8 +690,9 @@ function RetirementPage() {
     Spending: Math.round(r.spending),
   }));
 
-  const selfOas = oasAt(p.oas_start_age ?? 65, derived.selfOasFraction);
-  const spouseOas = married ? oasAt(p.spouse_oas_start_age ?? 65, derived.spouseOasFraction) : 0;
+  // oasAt expects *years* of residence, not the already-computed fraction.
+  const selfOas = oasAt(p.oas_start_age ?? 65, p.oas_years_in_canada ?? 40);
+  const spouseOas = married ? oasAt(p.spouse_oas_start_age ?? 65, p.spouse_oas_years_in_canada ?? 40) : 0;
 
   return (
     <div className={isGuest ? "mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-6" : "min-h-screen bg-surface"}>
@@ -1272,6 +1312,12 @@ function RetirementPage() {
               />
             </Field>
             <div className="sm:col-span-2">
+              {(p.cpp_detailed_history?.length ?? 0) > 0 && (
+                <p className="text-xs text-emerald-700 mb-2">
+                  ✓ Using your saved detailed earnings history ({p.cpp_detailed_history!.length} years) —
+                  stored on this device and reloaded automatically when you log back in.
+                </p>
+              )}
               <OldUiCppHistoryEditor
                 birthYear={new Date().getFullYear() - (p.current_age ?? 40)}
                 earningsHistory={p.cpp_detailed_history ?? []}
@@ -1348,6 +1394,12 @@ function RetirementPage() {
                 />
               </Field>
               <div className="sm:col-span-2">
+                {(p.spouse_cpp_detailed_history?.length ?? 0) > 0 && (
+                  <p className="text-xs text-emerald-700 mb-2">
+                    ✓ Using the saved detailed earnings history ({p.spouse_cpp_detailed_history!.length} years) —
+                    stored on this device and reloaded automatically when you log back in.
+                  </p>
+                )}
                 <OldUiCppHistoryEditor
                   birthYear={new Date().getFullYear() - (p.spouse_age ?? p.current_age ?? 40)}
                   earningsHistory={p.spouse_cpp_detailed_history ?? []}
