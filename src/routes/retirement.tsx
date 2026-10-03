@@ -490,11 +490,13 @@ function RetirementPage() {
     projecting,
     earliest,
     earliestLoading,
+    earliestProgress,
     runEarliest,
     comparison,
     comparing,
     runCompare,
     runProject,
+    runProjectQuick,
     stressResults,
     stressing,
     runStress,
@@ -514,6 +516,13 @@ function RetirementPage() {
   useEffect(() => {
     clearStress();
   }, [inputs, clearStress]);
+
+  // Quick estimate runs immediately (no debounce) for instant feedback.
+  // Full projection follows after 400ms of inactivity and overwrites it.
+  useEffect(() => {
+    if (!inputs) return;
+    runProjectQuick(inputs);
+  }, [inputs, runProjectQuick]);
 
   useEffect(() => {
     if (!inputs) return;
@@ -698,7 +707,9 @@ function RetirementPage() {
           value={earliestLoading ? "Calculating…" : earliest ? `Age ${earliest}` : "Not calculated"}
           hint={
             earliestLoading ? (
-              "Testing retirement ages in the background…"
+              earliestProgress
+                ? `Testing… ${earliestProgress.completed}/${earliestProgress.total} checks`
+                : "Testing retirement ages in the background…"
             ) : earliest ? (
               <>
                 {earliest <= inputs.retirementAge

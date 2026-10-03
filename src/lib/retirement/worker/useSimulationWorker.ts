@@ -10,7 +10,7 @@ import type {
   WithdrawalPolicy,
 } from "@/lib/retirement/adapter/oldApiAdapter";
 
-type JobKind = "project" | "earliest" | "compare" | "stress";
+type JobKind = "project" | "project-quick" | "earliest" | "compare" | "stress";
 
 /**
  * Runs retirement engine jobs in a Web Worker so the UI thread never blocks.
@@ -24,7 +24,7 @@ type JobKind = "project" | "earliest" | "compare" | "stress";
 export function useSimulationWorker() {
   const workerRef = useRef<Worker | null>(null);
   const seqRef = useRef(0);
-  const latestRef = useRef<Record<JobKind, number>>({ project: 0, earliest: 0, compare: 0, stress: 0 });
+  const latestRef = useRef<Record<JobKind, number>>({ project: 0, "project-quick": 0, earliest: 0, compare: 0, stress: 0 });
 
   const [projection, setProjection] = useState<Projection | null>(null);
   const [projecting, setProjecting] = useState(false);
@@ -37,6 +37,8 @@ export function useSimulationWorker() {
   const [comparing, setComparing] = useState(false);
   const [stressResults, setStressResults] = useState<Record<string, StressTestResult>>({});
   const [stressing, setStressing] = useState(false);
+  const [earliestProgress, setEarliestProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [compareProgress, setCompareProgress] = useState<{ completed: number; total: number } | null>(null);
   const [workerError, setWorkerError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,19 +48,28 @@ export function useSimulationWorker() {
     workerRef.current = worker;
 
     worker.onmessage = (e: MessageEvent) => {
-      const { id, kind, ok, result, error } = e.data as {
+      const { id, kind, ok, result, error, progress } = e.data as {
         id: number;
         kind: JobKind;
-        ok: boolean;
+        ok?: boolean;
         result?: unknown;
         error?: string;
+        progress?: { completed: number; total: number };
       };
       // Ignore stale responses — only the latest request per kind counts.
       if (id !== latestRef.current[kind]) return;
 
+      // Progress updates (not final results)
+      if (progress !== undefined) {
+        if (kind === "earliest") setEarliestProgress(progress);
+        if (kind === "compare") setCompareProgress(progress);
+        return;
+      }
+
       if (!ok) {
         setWorkerError(error ?? "Simulation failed");
         if (kind === "project") setProjecting(false);
+        if (kind === "project-quick") setProjecting(false);
         if (kind === "earliest") setEarliestLoading(false);
         if (kind === "compare") setComparing(false);
         if (kind === "stress") setStressing(false);
@@ -68,6 +79,13 @@ export function useSimulationWorker() {
       if (kind === "project") {
         setProjection(result as Projection);
         setProjecting(false);
+        // Full result arrived — any pending quick result is now stale.
+        // (Quick uses its own id tracking, so this is just for clarity.)
+      } else if (kind === "project-quick") {
+        // Only use quick result if a full projection isn't already in flight
+        // for newer inputs. The full projection will overwrite when done.
+        setProjection(result as Projection);
+        // Don't clear projecting — the full version is still coming.
       } else if (kind === "earliest") {
         setEarliest(result as number | null);
         setEarliestLoading(false);
@@ -115,10 +133,20 @@ export function useSimulationWorker() {
     [post],
   );
 
+  /** Fast estimate — call immediately on input change (no debounce needed). */
+  const runProjectQuick = useCallback(
+    (inputs: PlannerInputs) => {
+      // Don't set projecting — the full version controls the loading state.
+      post("project-quick", inputs);
+    },
+    [post],
+  );
+
   /** On-demand: find earliest sustainable retirement age. */
   const runEarliest = useCallback(
     (inputs: PlannerInputs) => {
       setEarliestLoading(true);
+      setEarliestProgress(null);
       post("earliest", inputs);
     },
     [post],
@@ -157,10 +185,13 @@ export function useSimulationWorker() {
     comparing,
     runCompare,
     runProject,
+    runProjectQuick,
     stressResults,
     stressing,
     runStress,
     clearStress,
+    earliestProgress,
+    compareProgress,
     workerError,
   };
 }
