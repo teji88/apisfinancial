@@ -109,6 +109,8 @@ export interface RetirementScenario {
   debts?: DebtScenario[];
   assumptions: ScenarioAssumptions;
   strategy: StrategyPreferences;
+  /** Quick mode: simplified withdrawal (no tax optimization), for fast estimates. */
+  quick?: boolean;
   metadata: { createdAt: string; engineVersion: string; rulesVersion: string; scenarioHash?: string };
 }
 

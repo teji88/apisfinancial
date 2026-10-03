@@ -27,6 +27,10 @@ function withdrawalOrder(policy: RetirementScenario["strategy"]["withdrawalPolic
   if (policy === "TFSA_FIRST") return ["tfsa", "cash", "nonRegistered", "registered"];
   if (policy === "NON_REGISTERED_FIRST") return ["nonRegistered", "cash", "registered", "tfsa"];
   if (policy === "REGISTERED_FIRST") return ["registered", "cash", "nonRegistered", "tfsa"];
+  // TAX_TARGETED: registered up to bracket/clawback ceiling, then non-reg, then TFSA.
+  // The ceiling logic is applied in the simulation; this order ensures registered
+  // is considered before non-registered.
+  if (policy === "TAX_TARGETED") return ["cash", "registered", "nonRegistered", "tfsa"];
   return ["cash", "nonRegistered", "registered", "tfsa"];
 }
 
@@ -88,6 +92,38 @@ function withdrawFromBucket(accounts: AccountState[], bucket: ReturnType<typeof 
     remaining -= part;
   }
   return taken;
+}
+
+/**
+ * Simplified withdrawal for quick mode: take from accounts in priority order
+ * without tax gross-up solving. Faster but less tax-efficient.
+ */
+function quickWithdrawalSequence(
+  netNeed: number,
+  priority: Array<"CASH" | "NON_REGISTERED" | "RRSP_RRIF" | "LIRA_LIF" | "TFSA">,
+  accounts: Array<{ id: string; type: string; balance: number }>,
+): { steps: Array<{ bucket: string; accountId: string; grossWithdrawal: number; netCash: number }> } {
+  let remaining = Math.max(0, netNeed);
+  const steps: Array<{ bucket: string; accountId: string; grossWithdrawal: number; netCash: number }> = [];
+  const bucketForType = (t: string): string => {
+    if (t === "CASH") return "CASH";
+    if (t === "NON_REGISTERED") return "NON_REGISTERED";
+    if (t === "TFSA") return "TFSA";
+    if (t === "LIRA" || t === "LIF") return "LIRA_LIF";
+    return "RRSP_RRIF";
+  };
+  for (const bucket of priority) {
+    if (remaining <= 0) break;
+    for (const account of accounts) {
+      if (remaining <= 0) break;
+      if (bucketForType(account.type) !== bucket) continue;
+      if (account.balance <= 0) continue;
+      const taken = Math.min(remaining, account.balance);
+      steps.push({ bucket, accountId: account.id, grossWithdrawal: taken, netCash: taken });
+      remaining -= taken;
+    }
+  }
+  return { steps };
 }
 
 export function runRetirementSimulation(
@@ -440,7 +476,11 @@ export function runRetirementSimulation(
       if (bucket === "registered") return "RRSP_RRIF" as const;
       return "TFSA" as const;
     });
-    const sequence = planWithdrawalSequence({
+    // Quick mode: simple fixed-order withdrawal without tax optimization.
+    // Takes from accounts in priority order, no gross-up solving.
+    const sequence = scenario.quick
+      ? quickWithdrawalSequence(remainingNeed, sequencePriority, accounts)
+      : planWithdrawalSequence({
       netNeed: remainingNeed,
       taxInputs: taxBaseByOwner,
       province: scenario.household.province,

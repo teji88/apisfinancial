@@ -84,6 +84,8 @@ export type PlannerInputs = {
   growth?: number;
   /** Year-specific return overrides: calendar year -> annual return %. For sequence-of-returns stress tests. */
   annualReturnOverrides?: Record<number, number>;
+  /** Quick mode: simplified withdrawal for fast estimates. */
+  quick?: boolean;
   desiredIncome: number;
   annualSavings: number;
   savingsSplit: SavingsSplit;
@@ -194,6 +196,9 @@ export function plannerInputsToScenario(
   scenario.assumptions.investmentReturn = growth;
   if (input.annualReturnOverrides) {
     scenario.assumptions.annualReturnOverrides = input.annualReturnOverrides;
+  }
+  if (input.quick) {
+    scenario.quick = true;
   }
 
   // Province
@@ -370,9 +375,20 @@ export function projectRetirement(input: PlannerInputs): Projection {
 }
 
 /**
+ * Fast projection for quick estimates: simplified withdrawal (no tax optimization).
+ * Use for immediate UI feedback; follow with full projectRetirement for accuracy.
+ */
+export function projectQuick(input: PlannerInputs): Projection {
+  return projectRetirement({ ...input, quick: true });
+}
+
+/**
  * Find the earliest retirement age using the new optimizer.
  */
-export function earliestRetirementAge(input: PlannerInputs): number | null {
+export function earliestRetirementAge(
+  input: PlannerInputs,
+  onProgress?: (current: number, total: number) => void,
+): number | null {
   const portfolioTotal = input.self.balances.tfsa + input.self.balances.rrsp +
     input.self.balances.lira + input.self.balances.nonreg +
     (input.spouse ? input.spouse.balances.tfsa + input.spouse.balances.rrsp +
@@ -383,6 +399,7 @@ export function earliestRetirementAge(input: PlannerInputs): number | null {
     startingPortfolio: portfolioTotal,
     startYear: new Date().getFullYear(),
     objective: "MIN_RETIREMENT_AGE",
+    onProgress,
   });
   if (result.selectedCandidate) {
     return result.selectedCandidate.scenario.goals.retirementAge;

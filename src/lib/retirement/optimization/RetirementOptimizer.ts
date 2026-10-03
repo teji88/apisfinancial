@@ -36,6 +36,8 @@ export interface OptimizationProblem {
   variables?: OptimizationVariable[];
   constraints?: OptimizationConstraints;
   objective?: StrategyPreferences["objective"];
+  /** Progress callback: (completed, total) */
+  onProgress?: (completed: number, total: number) => void;
 }
 
 const DEFAULT_POLICIES: StrategyPreferences["withdrawalPolicy"][] = [
@@ -377,8 +379,16 @@ function optimizeEarliestRetirement(
   let bestCandidates: OptimizationCandidate[] = [];
   const allCandidates: OptimizationCandidate[] = [];
 
+  const ESTIMATED_STEPS = 8; // 1 max-age check + ~7 binary search iterations
+  let completedSteps = 0;
+  const reportProgress = () => {
+    completedSteps++;
+    problem.onProgress?.(completedSteps, ESTIMATED_STEPS);
+  };
+
   const atMax = isFeasibleAtAge(MAX_AGE);
   allCandidates.push(...atMax.candidates);
+  reportProgress();
   if (!atMax.feasible) {
     return buildOptimizationResult(allCandidates, problem, objective);
   }
@@ -387,6 +397,7 @@ function optimizeEarliestRetirement(
     const mid = Math.floor((low + high) / 2);
     const { feasible, candidates } = isFeasibleAtAge(mid);
     allCandidates.push(...candidates);
+    reportProgress();
     if (feasible) {
       bestCandidates = candidates;
       high = mid - 1;
