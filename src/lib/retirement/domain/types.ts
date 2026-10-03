@@ -83,6 +83,8 @@ export interface RetirementGoals {
 export interface ScenarioAssumptions {
   inflationRate: number;
   investmentReturn: number;
+  /** Optional: different return during working years (before retirement). Falls back to investmentReturn. */
+  workingInvestmentReturn?: number;
   investmentFeeRate: number;
   incomeYield?: number;
   capitalGrowthRate?: number;

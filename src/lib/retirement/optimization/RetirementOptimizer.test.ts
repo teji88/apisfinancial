@@ -73,8 +73,9 @@ describe("RetirementOptimizer", () => {
     expect(result.selectedCandidate).toBeDefined();
     const selectedAge = result.selectedCandidate!.scenario.goals.retirementAge;
     // The selected plan should have the minimum retirement age among feasible candidates
+    // (using the same $1000 materiality threshold as the optimizer)
     const feasibleAges = result.candidates
-      .filter((c) => c.violations.length === 0 && c.metrics.maximumSpendingShortfall === 0 && !c.metrics.depletionDate)
+      .filter((c) => c.violations.length === 0 && c.metrics.maximumSpendingShortfall <= 1000 && !c.metrics.depletionDate)
       .map((c) => c.scenario.goals.retirementAge);
     if (feasibleAges.length > 0) {
       expect(selectedAge).toBe(Math.min(...feasibleAges));

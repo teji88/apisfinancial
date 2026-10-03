@@ -365,10 +365,13 @@ function optimizeEarliestRetirement(
     const scenarios: RetirementScenario[] = [];
     enumerate(ageVariables, 0, problem.scenario, scenarios);
     const candidates = scenarios.map((s) => evaluateCandidate(s, problem, objective));
+    // $1,000 nominal ≈ $500-600 in today's dollars; below this is tax
+    // gross-up numerical noise, not a real planning failure.
+    const MATERIAL_SHORTFALL_NOMINAL = 1000;
     const feasible = candidates.some(
       (c) =>
         c.violations.length === 0 &&
-        c.metrics.maximumSpendingShortfall === 0 &&
+        c.metrics.maximumSpendingShortfall <= MATERIAL_SHORTFALL_NOMINAL &&
         !c.metrics.depletionDate,
     );
     return { feasible, candidates };
@@ -433,7 +436,7 @@ function buildOptimizationResult(
     const feasibleAtBest = bestAgeCandidates.filter(
       (c) =>
         c.violations.length === 0 &&
-        c.metrics.maximumSpendingShortfall === 0 &&
+        c.metrics.maximumSpendingShortfall <= 1000 &&
         !c.metrics.depletionDate,
     );
     selectedCandidate = [...feasibleAtBest].sort(
