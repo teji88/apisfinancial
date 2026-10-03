@@ -202,6 +202,8 @@ function RetirementPage() {
           onRun={() => runSimulation()}
           onOptimize={runOptimization}
           running={running}
+          stressResults={stressResults}
+          onScenarios={() => setSection("scenarios")}
         />
       )}
       {section === "plan" && (
@@ -232,6 +234,8 @@ function Overview({
   onRun,
   onOptimize,
   running,
+  stressResults,
+  onScenarios,
 }: {
   overview: ReturnType<typeof buildRetirementOverview>;
   portfolioTotal: number;
@@ -241,6 +245,8 @@ function Overview({
   onRun: () => Promise<void>;
   onOptimize: () => Promise<void>;
   running: boolean;
+  stressResults: ScenarioStressTestResult | null;
+  onScenarios: () => void;
 }) {
   return (
     <div className="space-y-5">
@@ -291,7 +297,7 @@ function Overview({
         </div>
       )}
 
-      {stressResults && <StressOverview stressResults={stressResults} onScenarios={() => setSection("scenarios")} />}
+      {stressResults && <StressOverview stressResults={stressResults} onScenarios={onScenarios} />}
 
       {optimization && (
         <div className="panel p-5">
