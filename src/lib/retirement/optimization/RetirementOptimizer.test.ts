@@ -12,7 +12,7 @@ describe("RetirementOptimizer", () => {
       startYear: 2026,
     });
 
-    expect(result.candidates.length).toBe(72);
+    expect(result.candidates.length).toBe(288); // 3 spending × 4 retirementAge × 3 CPP × 2 OAS × 4 policies
     expect(result.feasiblePlans.length).toBeGreaterThan(0);
     expect(result.selectedCandidate).toBeDefined();
     expect(result.selectedPlan).toBeDefined();
@@ -54,6 +54,27 @@ describe("RetirementOptimizer", () => {
       expect(result.selectedCandidate.violations).toEqual([]);
     } else {
       expect(result.selectedPlan).toBeUndefined();
+    }
+  });
+
+  it("selects the earliest feasible retirement age for MIN_RETIREMENT_AGE", () => {
+    const scenario = createDefaultRetirementScenario(new Date("2026-01-01T00:00:00Z"));
+
+    const result = optimizeRetirementPlan({
+      scenario,
+      startingPortfolio: 2_000_000,
+      startYear: 2026,
+      objective: "MIN_RETIREMENT_AGE",
+    });
+
+    expect(result.selectedCandidate).toBeDefined();
+    const selectedAge = result.selectedCandidate!.scenario.goals.retirementAge;
+    // The selected plan should have the minimum retirement age among feasible candidates
+    const feasibleAges = result.candidates
+      .filter((c) => c.violations.length === 0 && c.metrics.maximumSpendingShortfall === 0 && !c.metrics.depletionDate)
+      .map((c) => c.scenario.goals.retirementAge);
+    if (feasibleAges.length > 0) {
+      expect(selectedAge).toBe(Math.min(...feasibleAges));
     }
   });
 });

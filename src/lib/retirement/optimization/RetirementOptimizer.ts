@@ -99,6 +99,18 @@ function applyVariable(
 function defaultVariables(
   scenario: RetirementScenario,
 ): OptimizationVariable[] {
+  // Retirement ages to try: from 50 up to the user's target, in 5-year steps.
+  // This enables the "earliest retirement" objective to find the minimum feasible age.
+  const retirementAges: number[] = [];
+  const maxAge = Math.min(65, Math.max(50, scenario.goals.retirementAge));
+  for (let age = 50; age <= maxAge; age += 5) {
+    retirementAges.push(age);
+  }
+  if (!retirementAges.includes(scenario.goals.retirementAge)) {
+    retirementAges.push(scenario.goals.retirementAge);
+  }
+  retirementAges.sort((a, b) => a - b);
+
   return [
     {
       path: "annualSpending",
@@ -108,6 +120,7 @@ function defaultVariables(
         scenario.goals.annualSpending * 1.1,
       ],
     },
+    { path: "retirementAge", values: retirementAges },
     { path: "cppStartAge", values: [60, 65, 70] },
     { path: "oasStartAge", values: [65, 70] },
     { path: "withdrawalPolicy", values: DEFAULT_POLICIES },
@@ -164,7 +177,9 @@ function constraintViolations(
 function objectiveValue(
   metrics: SimulationMetrics,
   objective: StrategyPreferences["objective"],
+  scenario: RetirementScenario,
 ): number {
+  const feasible = metrics.maximumSpendingShortfall === 0 && !metrics.depletionDate;
   switch (objective) {
     case "MAX_SUSTAINABLE_SPENDING":
       return metrics.maximumSpendingShortfall === 0
@@ -180,6 +195,10 @@ function objectiveValue(
         : -metrics.maximumSpendingShortfall;
     case "MIN_TAX":
       return -metrics.lifetimeTax;
+    case "MIN_RETIREMENT_AGE":
+      // Earliest feasible retirement age wins. Infeasible plans (shortfall or
+      // depletion) are penalized below any feasible plan.
+      return feasible ? -scenario.goals.retirementAge : -1000 - scenario.goals.retirementAge;
     case "CUSTOM":
     default:
       return metrics.lifetimeAfterTaxCash;
@@ -255,7 +274,7 @@ export function optimizeRetirementPlan(
     return {
       scenario,
       metrics: simulation.metrics,
-      objectiveValue: objectiveValue(simulation.metrics, objective),
+      objectiveValue: objectiveValue(simulation.metrics, objective, scenario),
       violations: constraintViolations(
         scenario,
         simulation.metrics,
