@@ -1,6 +1,7 @@
 import { CANADA_2026_PARAMETERS } from "../rules/canada2026";
 import { GIS_TABLES_2026_Q3, type GisBand } from "../rules/gisTables2026Q3";
 import type { Money, PersonScenario, PersonRole } from "../domain/types";
+import { resolveCppAt65 } from "../benefits/resolveCpp";
 
 export interface BenefitEstimate {
   cpp: Money;
@@ -77,7 +78,7 @@ export function estimateGovernmentBenefits(
     ? 1 + cppMonthsFrom65 * Math.abs(CANADA_2026_PARAMETERS.cpp.before65MonthlyAdjustment)
     : 1 + cppMonthsFrom65 * CANADA_2026_PARAMETERS.cpp.after65MonthlyAdjustment;
 
-  const cppAt65Annual = Math.max(0, person.cppAt65 ?? 0) * 12;
+  const cppAt65Annual = resolveCppAt65(person) * 12;
   const cppAnnual = age >= cppStartAge
     ? cppAt65Annual * Math.max(0, cppAdjustment) * indexFactor
     : 0;
