@@ -372,6 +372,7 @@ function RetirementPage() {
         p.cpp_detailed_history,
         p.cpp_detailed_future_earnings ?? 0,
         p.cpp_detailed_child_rearing ?? [],
+        retireAge,
       );
       selfPct = Math.min(100, (monthly / CPP_MAX_MONTHLY_65) * 100);
     } else {
@@ -653,9 +654,23 @@ function RetirementPage() {
             earliestLoading ? (
               "Testing retirement ages in the background…"
             ) : earliest ? (
-              earliest <= inputs.retirementAge
-                ? `Your target of ${inputs.retirementAge} works`
-                : `Your target of ${inputs.retirementAge} runs short`
+              <>
+                {earliest <= inputs.retirementAge
+                  ? `Your target of ${inputs.retirementAge} works`
+                  : `Your target of ${inputs.retirementAge} runs short`}
+                {(() => {
+                  const displayAge = earliest <= inputs.retirementAge ? inputs.retirementAge : earliest;
+                  const cppStart = p.cpp_start_age ?? 65;
+                  const oasStart = p.oas_start_age ?? 65;
+                  const firstBenefit = Math.min(cppStart, oasStart);
+                  const bridgeYears = firstBenefit - displayAge;
+                  return bridgeYears > 0 ? (
+                    <span className="block mt-1 text-amber-600">
+                      {bridgeYears}-year bridge: portfolio funds everything until benefits start at {firstBenefit}
+                    </span>
+                  ) : null;
+                })()}
+              </>
             ) : (
               <button
                 type="button"

@@ -267,6 +267,7 @@ function simulationToProjection(
     }
     y.cpp += m.benefitSources?.cpp ?? 0;
     y.oas += (m.benefitSources?.oas ?? 0) + (m.benefitSources?.gis ?? 0);
+    y.oasClawback += m.oasRecovery ?? 0;
     y.taxes += m.taxes;
     y.spending += m.spending;
     y.shortfall = Math.max(y.shortfall, m.shortfall);
@@ -329,6 +330,7 @@ function simulationToProjection(
   // Summary figures are also in today's dollars. Lifetime tax is the sum of
   // the already-deflated yearly taxes (not the deflated nominal total).
   const deflatedTotalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
+  const deflatedTotalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
   const lastYear = sortedYears.length ? sortedYears[sortedYears.length - 1]! : currentYear;
   const endDeflator = deflatorFor(lastYear);
   const lastRow = rows.length ? rows[rows.length - 1]! : null;
@@ -339,7 +341,7 @@ function simulationToProjection(
     success: metrics.maximumSpendingShortfall <= 0 && !metrics.depletionDate,
     endingBalance: metrics.endingPortfolio / endDeflator,
     totalTaxes: deflatedTotalTaxes,
-    totalClawback: 0,
+    totalClawback: deflatedTotalClawback,
     estateTax: (metrics.estateTax ?? 0) / endDeflator,
     estateRegistered: lastRow?.balances.rrsp ?? 0,
   };
@@ -412,6 +414,7 @@ export function cppFromDetailedHistory(
   earningsHistory: Array<{ year: number; earnings: number }>,
   futureAnnualEarnings: number = 0,
   childRearingYears: number[] = [],
+  retirementAge?: number,
 ): number {
   if (earningsHistory.length === 0) return 0;
   const result = calculateCppBenefit({
@@ -419,6 +422,7 @@ export function cppFromDetailedHistory(
     birthMonth: 6,
     earningsHistory,
     futureAnnualEarnings,
+    ...(retirementAge !== undefined ? { retirementAge } : {}),
     childRearingYears,
     cppStartAge: 65,
   });
