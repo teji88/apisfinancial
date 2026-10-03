@@ -20,6 +20,8 @@ import { optimizeRetirementPlan } from "../optimization/RetirementOptimizer";
 import { calculateCppBenefit } from "../benefits/CppCalculator";
 import { createDefaultRetirementScenario } from "../scenario/defaults";
 import type {
+  AccountScenario,
+  PersonRole,
   RetirementScenario,
   SimulationResult,
 } from "../domain/types";
@@ -192,8 +194,14 @@ export function plannerInputsToScenario(
 
   // Assumptions
   scenario.assumptions.inflationRate = input.inflation;
-  const growth = input.retirementGrowth ?? input.workingGrowth ?? input.growth ?? 5;
-  scenario.assumptions.investmentReturn = growth;
+  // Use separate working/retirement growth rates when provided; the engine
+  // switches at retirement. Falls back to a single rate for both phases.
+  const retirementGrowth = input.retirementGrowth ?? input.growth ?? 5;
+  const workingGrowth = input.workingGrowth ?? retirementGrowth;
+  scenario.assumptions.investmentReturn = retirementGrowth;
+  if (workingGrowth !== retirementGrowth) {
+    scenario.assumptions.workingInvestmentReturn = workingGrowth;
+  }
   if (input.annualReturnOverrides) {
     scenario.assumptions.annualReturnOverrides = input.annualReturnOverrides;
   }
@@ -237,9 +245,108 @@ export function plannerInputsToScenario(
     scenario.strategy.withdrawalPolicy = input.withdrawalPolicy;
   }
 
-  scenario.accounts = [];
+  // Build real accounts from the per-person balances so the engine sees
+  // RRSP/LIRA/TFSA/non-registered separately (not one lump sum).
+  // Household annual savings are split across the main user's accounts
+  // per savingsSplit, contributed until their retirement age.
+  scenario.accounts = buildHouseholdAccounts(input);
 
   return scenario;
+}
+
+/**
+ * Normalize a savings split to fractions (accepts 0-100 percentages or 0-1 fractions).
+ */
+function normalizeSplit(split: SavingsSplit): { rrsp: number; tfsa: number; nonreg: number } {
+  const total = (split.rrsp ?? 0) + (split.tfsa ?? 0) + (split.nonreg ?? 0);
+  if (total <= 0) return { rrsp: 0, tfsa: 0, nonreg: 0 };
+  const divisor = total > 1 ? 100 : 1;
+  return {
+    rrsp: Math.max(0, (split.rrsp ?? 0) / divisor),
+    tfsa: Math.max(0, (split.tfsa ?? 0) / divisor),
+    nonreg: Math.max(0, (split.nonreg ?? 0) / divisor),
+  };
+}
+
+function buildHouseholdAccounts(input: PlannerInputs): AccountScenario[] {
+  const accounts: AccountScenario[] = [];
+  const split = normalizeSplit(input.savingsSplit ?? { rrsp: 0, tfsa: 0, nonreg: 0 });
+  const annualSavings = Math.max(0, input.annualSavings ?? 0);
+
+  const addPersonAccounts = (spec: PersonSpec, role: PersonRole, isMain: boolean) => {
+    const balances = spec.balances;
+    const untilAge = spec.retirementAge;
+    // Only the main user gets the household savings contributions (v1 simplification).
+    const contribFor = (fraction: number): AccountScenario["contribution"] | undefined => {
+      if (!isMain || annualSavings <= 0 || fraction <= 0) return undefined;
+      return { annualAmount: annualSavings * fraction, untilAge };
+    };
+    const withContribution = (
+      base: Omit<AccountScenario, "contribution">,
+      fraction: number,
+    ): AccountScenario => {
+      const c = contribFor(fraction);
+      return c ? { ...base, contribution: c } : base;
+    };
+    if (balances.tfsa > 0 || (contribFor(split.tfsa)?.annualAmount ?? 0) > 0) {
+      accounts.push(
+        withContribution(
+          {
+            id: `${role}-tfsa`,
+            owner: role,
+            type: "TFSA",
+            valuation: { mode: "SNAPSHOT", linkedValue: Math.max(0, balances.tfsa) },
+          },
+          split.tfsa,
+        ),
+      );
+    }
+    if (balances.rrsp > 0 || (contribFor(split.rrsp)?.annualAmount ?? 0) > 0) {
+      accounts.push(
+        withContribution(
+          {
+            id: `${role}-rrsp`,
+            owner: role,
+            type: "RRSP",
+            valuation: { mode: "SNAPSHOT", linkedValue: Math.max(0, balances.rrsp) },
+          },
+          split.rrsp,
+        ),
+      );
+    }
+    if (balances.lira > 0) {
+      // Locked-in: no contributions possible.
+      accounts.push({
+        id: `${role}-lira`,
+        owner: role,
+        type: "LIRA",
+        valuation: { mode: "SNAPSHOT", linkedValue: Math.max(0, balances.lira) },
+      });
+    }
+    if (balances.nonreg > 0 || (contribFor(split.nonreg)?.annualAmount ?? 0) > 0) {
+      const value = Math.max(0, balances.nonreg);
+      // Derive ACB from the gain ratio when available (gainRatio = unrealized gain / market value).
+      const gainRatio = Math.min(1, Math.max(0, spec.nonregGainRatio ?? 0));
+      accounts.push(
+        withContribution(
+          {
+            id: `${role}-nonreg`,
+            owner: role,
+            type: "NON_REGISTERED",
+            valuation: { mode: "SNAPSHOT", linkedValue: value },
+            nonRegisteredAcb: value * (1 - gainRatio),
+          },
+          split.nonreg,
+        ),
+      );
+    }
+  };
+
+  addPersonAccounts(input.self, "MAIN_USER", true);
+  if (input.spouse) {
+    addPersonAccounts(input.spouse, "PARTNER", false);
+  }
+  return accounts;
 }
 
 /**
@@ -345,10 +452,15 @@ function simulationToProjection(
   const endDeflator = deflatorFor(lastYear);
   const lastRow = rows.length ? rows[rows.length - 1]! : null;
 
+  // A shortfall under $500/yr (today's dollars) is numerical noise from tax
+  // gross-up estimation, not a real planning failure. Don't flip the whole
+  // plan to "cannot retire" over a rounding error.
+  const maxDeflatedShortfall = rows.reduce((m, r) => Math.max(m, r.shortfall), 0);
+  const MATERIAL_SHORTFALL_TODAYS = 500;
   return {
     rows,
     depletionAge,
-    success: metrics.maximumSpendingShortfall <= 0 && !metrics.depletionDate,
+    success: maxDeflatedShortfall <= MATERIAL_SHORTFALL_TODAYS && !metrics.depletionDate,
     endingBalance: metrics.endingPortfolio / endDeflator,
     totalTaxes: deflatedTotalTaxes,
     totalClawback: deflatedTotalClawback,

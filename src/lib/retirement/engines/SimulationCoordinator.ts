@@ -20,7 +20,11 @@ function householdStageForMonth(people: PersonScenario[], ages: Partial<Record<P
     const deathAge = (person as PersonWithDeath).deathAge;
     return typeof deathAge !== "number" || (ages[person.role] ?? 0) < deathAge;
   });
-  return alive.length >= 2 ? "BOTH_ALIVE" : alive.length === 1 ? "SURVIVOR" : "ESTATE";
+  if (alive.length === 0) return "ESTATE";
+  // A lifelong single is not a "survivor" — survivor means a partner died.
+  // Only a household that started with 2+ people can enter the survivor stage.
+  if (people.length >= 2 && alive.length === 1) return "SURVIVOR";
+  return "BOTH_ALIVE";
 }
 
 function withdrawalOrder(policy: RetirementScenario["strategy"]["withdrawalPolicy"]): Array<"cash" | "nonRegistered" | "registered" | "tfsa"> {
@@ -234,7 +238,11 @@ export function runRetirementSimulation(
     const calendarYear = date.getUTCFullYear();
     // Year-specific return override (sequence-of-returns stress tests)
     const overrideReturn = scenario.assumptions.annualReturnOverrides?.[calendarYear];
-    const effectiveReturn = overrideReturn ?? scenario.assumptions.investmentReturn;
+    // Use working-years return before retirement, retirement return after.
+    const baseReturn = !retired && scenario.assumptions.workingInvestmentReturn !== undefined
+      ? scenario.assumptions.workingInvestmentReturn
+      : scenario.assumptions.investmentReturn;
+    const effectiveReturn = overrideReturn ?? baseReturn;
     for (const account of accounts) {
       if (account.minimumReferenceYear !== calendarYear && (account.type === "RRIF" || account.type === "LIF")) {
         account.minimumReferenceBalance = account.balance;
@@ -470,11 +478,12 @@ export function runRetirementSimulation(
       }
     }
 
-    const sequencePriority = withdrawalOrder(scenario.strategy.withdrawalPolicy).map((bucket) => {
-      if (bucket === "cash") return "CASH" as const;
-      if (bucket === "nonRegistered") return "NON_REGISTERED" as const;
-      if (bucket === "registered") return "RRSP_RRIF" as const;
-      return "TFSA" as const;
+    const sequencePriority = withdrawalOrder(scenario.strategy.withdrawalPolicy).flatMap((bucket) => {
+      if (bucket === "cash") return ["CASH" as const];
+      if (bucket === "nonRegistered") return ["NON_REGISTERED" as const];
+      // Registered covers both RRSP/RRIF and LIRA/LIF — LIRA must not be invisible to the solver.
+      if (bucket === "registered") return ["RRSP_RRIF" as const, "LIRA_LIF" as const];
+      return ["TFSA" as const];
     });
     // Quick mode: simple fixed-order withdrawal without tax optimization.
     // Takes from accounts in priority order, no gross-up solving.
