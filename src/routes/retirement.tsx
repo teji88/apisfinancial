@@ -226,6 +226,10 @@ const GUEST_PROFILE: Profile = {
   spouse_cpp_avg_income: 0,
   spouse_cpp_years_worked: 0,
   spouse_cpp_future_income: 0,
+  // Detailed spouse CPP earnings history (mirrors self's - in-memory only)
+  spouse_cpp_detailed_history: [] as Array<{ year: number; earnings: number }>,
+  spouse_cpp_detailed_future_earnings: 0,
+  spouse_cpp_detailed_child_rearing: [] as number[],
   spouse_oas_years_in_canada: 40,
   spouse_cpp_start_age: 65,
   spouse_oas_start_age: 65,
@@ -400,12 +404,24 @@ function RetirementPage() {
     }
     const spouseAge = p.spouse_age ?? currentAge;
     const spouseRetire = p.spouse_retirement_age ?? retireAge;
-    const spousePct = cppPercentFromEarnings({
-      pastAverageIncome: p.spouse_cpp_avg_income ?? 0,
-      yearsWorked: p.spouse_cpp_years_worked ?? 0,
-      futureIncome: p.spouse_cpp_future_income ?? 0,
-      futureYears: Math.max(0, Math.min(spouseRetire, 65) - spouseAge),
-    });
+    let spousePct: number;
+    if (p.spouse_cpp_detailed_history && p.spouse_cpp_detailed_history.length > 0) {
+      const monthly = cppFromDetailedHistory(
+        (new Date().getFullYear() - spouseAge),
+        p.spouse_cpp_detailed_history,
+        p.spouse_cpp_detailed_future_earnings ?? 0,
+        p.spouse_cpp_detailed_child_rearing ?? [],
+        spouseRetire,
+      );
+      spousePct = Math.min(100, (monthly / CPP_MAX_MONTHLY_65) * 100);
+    } else {
+      spousePct = cppPercentFromEarnings({
+        pastAverageIncome: p.spouse_cpp_avg_income ?? 0,
+        yearsWorked: p.spouse_cpp_years_worked ?? 0,
+        futureIncome: p.spouse_cpp_future_income ?? 0,
+        futureYears: Math.max(0, Math.min(spouseRetire, 65) - spouseAge),
+      });
+    }
     const annual = (pct: number) => (CPP_MAX_MONTHLY_65 * 12 * pct) / 100;
     // PRB info: only when working while collecting CPP (retirement > CPP start)
     let selfPrb = { monthly: 0, annual: 0, years: [] as number[] };
@@ -691,10 +707,40 @@ function RetirementPage() {
           {
             key: "outcome",
             label: "Outcome",
-            value: projection?.success ? "Fully funded" : `Short at ${projection?.depletionAge ?? "—"}`,
+            value: projection?.success
+              ? "Fully funded"
+              : projection?.depletionAge != null
+                ? `Short at ${projection.depletionAge}`
+                : "Shortfall in some years",
             tone: projection?.success ? "good" : "warn",
             dimmed: projecting,
-            detail: <>Ending balance {formatCad(endingBalance)} {moneyNote}</>,
+            detail: (
+              <>
+                <div>Ending balance {formatCad(endingBalance)} {moneyNote}</div>
+                {!projection?.success && projection?.rows && (
+                  <div className="mt-2">
+                    <div className="font-medium">Years with shortfalls:</div>
+                    <ul className="list-disc list-inside text-xs">
+                      {projection.rows
+                        .filter((r) => r.shortfall > 500)
+                        .slice(0, 5)
+                        .map((r) => (
+                          <li key={r.age}>
+                            Age {r.age}: {formatCad(r.shortfall)} shortfall
+                          </li>
+                        ))}
+                      {projection.rows.filter((r) => r.shortfall > 500).length > 5 && (
+                        <li>...and {projection.rows.filter((r) => r.shortfall > 500).length - 5} more years</li>
+                      )}
+                    </ul>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      A shortfall means the planned spending couldn't be fully met that year,
+                      even if the overall portfolio recovers later.
+                    </p>
+                  </div>
+                )}
+              </>
+            ),
           },
           {
             key: "earliest",
@@ -1139,9 +1185,19 @@ function RetirementPage() {
                 value={p.target_retirement_age ?? 65}
                 onChange={(age) => set({ target_retirement_age: age })}
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Retirement begins in your birthday month, so the first calendar year shows
+                partial spending and withdrawals — the year-by-year table normalises from
+                the next year on. CPP and OAS also start in the birthday month of the start
+                age you pick (not January), matching how Service Canada pays them.
+              </p>
             </Field>
             <Field label="Desired after-tax household income (today's $)">
               <NumInput value={p.desired_income} onCommit={(n) => set({ desired_income: n })} />
+              <p className="text-xs text-muted-foreground mt-1">
+                This is what you want to spend after taxes are paid. The planner grosses up
+                withdrawals to cover the tax bill on top of this amount.
+              </p>
             </Field>
             <Field label="Province">
               <Select value={inputs.province} onValueChange={(v) => set({ province: v })}>
@@ -1291,6 +1347,17 @@ function RetirementPage() {
                   onChange={(age) => set({ spouse_oas_start_age: age })}
                 />
               </Field>
+              <div className="sm:col-span-2">
+                <OldUiCppHistoryEditor
+                  birthYear={new Date().getFullYear() - (p.spouse_age ?? p.current_age ?? 40)}
+                  earningsHistory={p.spouse_cpp_detailed_history ?? []}
+                  futureEarnings={p.spouse_cpp_detailed_future_earnings ?? 0}
+                  childRearingYears={p.spouse_cpp_detailed_child_rearing ?? []}
+                  onHistoryChange={(history) => set({ spouse_cpp_detailed_history: history })}
+                  onFutureEarningsChange={(value) => set({ spouse_cpp_detailed_future_earnings: value })}
+                  onChildRearingChange={(years) => set({ spouse_cpp_detailed_child_rearing: years })}
+                />
+              </div>
 
               <Field label="Spouse RRSP">
                               <NumInput value={p.spouse_rrsp} onCommit={(n) => set({ spouse_rrsp: n })} />
