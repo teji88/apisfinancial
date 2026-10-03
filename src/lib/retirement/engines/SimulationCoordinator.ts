@@ -446,10 +446,48 @@ export function runRetirementSimulation(
 
     // Existing household cash is available before new portfolio withdrawals.
     // Investment income is already represented by investmentIncomeDistributed.
+    // Provision for this month's tax on known income (benefits, other income,
+    // mandatory withdrawals) BEFORE planning discretionary withdrawals. The
+    // withdrawal solver grosses up for the tax on the withdrawals themselves,
+    // but without this provision the tax on other income creates a chronic
+    // cash deficit that gets misreported as a shortfall.
+    let estimatedMonthlyTax = 0;
+    {
+      const provisional: Record<PersonRole, TaxIncomeComponents> = {
+        MAIN_USER: { ...yearTaxInputs.MAIN_USER },
+        PARTNER: { ...yearTaxInputs.PARTNER },
+      };
+      for (const person of alivePeople) {
+        const role = person.role;
+        const monthly = monthlyTaxInputs[role] ?? {};
+        for (const [key, value] of Object.entries(monthly)) {
+          if (key === "age" || key === "pensionSplitPercent" || typeof value !== "number") continue;
+          (provisional[role] as unknown as Record<string, number>)[key] =
+            (((provisional[role] as unknown as Record<string, number>)[key] ?? 0) + value);
+        }
+        // Mandatory registered withdrawals are taxable but only join
+        // monthlyTaxInputs after withdrawal planning.
+        provisional[role].rrspRrif = (provisional[role].rrspRrif ?? 0) + (mandatoryByOwner[role] ?? 0);
+      }
+      const payerProvisional = provisional.MAIN_USER.age ? { ...provisional.MAIN_USER } : { age: 65 };
+      const spouseProvisional = alivePeople.some((p) => p.role === "PARTNER") ? { ...provisional.PARTNER } : undefined;
+      const provisionalTax = calculateHouseholdTax({
+        payer: payerProvisional,
+        spouse: spouseProvisional,
+        province: scenario.household.province,
+        payerAge: ages.MAIN_USER ?? 65,
+        spouseAge: ages.PARTNER ?? 65,
+        pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
+        taxYear: calendarYear,
+        inflationRate: scenario.assumptions.inflationRate,
+      });
+      estimatedMonthlyTax = Math.max(0, (provisionalTax.householdTax ?? 0) - cumulativeTaxLiability);
+    }
     const baseCashNeed = Math.max(
       0,
       targetSpending +
-        debtPayments -
+        debtPayments +
+        estimatedMonthlyTax -
         benefits -
         otherIncome -
         nonRegisteredInvestmentIncome -
