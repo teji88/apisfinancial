@@ -146,6 +146,7 @@ export interface MonthlySnapshot {
   benefitSources?: {
     cpp: Money;
     oas: Money;
+    oasClawback?: Money;
     gis: Money;
     allowance: Money;
   };

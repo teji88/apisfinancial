@@ -116,4 +116,38 @@ describe("BenefitEngine", () => {
     const combined = estimateCppSurvivorAnnual(12000, 65, 12000, 60);
     expect(combined).toBeLessThanOrEqual(1507.65 * 12 * 1.02);
   });
+
+  it("applies no OAS clawback below the threshold", () => {
+    const result = estimateGovernmentBenefits(person, 65, 50_000, {
+      previousYearIncome: 50_000,
+      inflationRate: 0,
+      calendarYear: 2026,
+    });
+    expect(result.oasClawback).toBe(0);
+    expect(result.oas).toBeCloseTo(751.97 * 12, 2);
+  });
+
+  it("claws back OAS at 15% above the threshold", () => {
+    // $120,000 income vs $95,323 threshold = $24,677 excess × 15% = $3,701.55
+    const result = estimateGovernmentBenefits(person, 65, 120_000, {
+      previousYearIncome: 120_000,
+      inflationRate: 0,
+      calendarYear: 2026,
+    });
+    const grossOas = 751.97 * 12;
+    const expectedClawback = Math.min(grossOas, 0.15 * (120_000 + grossOas - 95_323));
+    expect(result.oasClawback).toBeCloseTo(expectedClawback, 2);
+    expect(result.oas).toBeCloseTo(grossOas - expectedClawback, 2);
+  });
+
+  it("fully claws back OAS at very high income", () => {
+    const result = estimateGovernmentBenefits(person, 65, 500_000, {
+      previousYearIncome: 500_000,
+      inflationRate: 0,
+      calendarYear: 2026,
+    });
+    const grossOas = 751.97 * 12;
+    expect(result.oasClawback).toBeCloseTo(grossOas, 2);
+    expect(result.oas).toBe(0);
+  });
 });

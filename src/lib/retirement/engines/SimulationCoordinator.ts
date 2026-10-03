@@ -240,7 +240,7 @@ export function runRetirementSimulation(
     totalDebtPayments += debtPayments;
 
     let benefits = 0;
-    const benefitSources = { cpp: 0, oas: 0, gis: 0, allowance: 0 };
+    const benefitSources = { cpp: 0, oas: 0, oasClawback: 0, gis: 0, allowance: 0 };
     let taxableBenefits = 0;
     let otherIncome = 0;
     let nonRegisteredInvestmentIncome = 0;
@@ -327,11 +327,13 @@ export function runRetirementSimulation(
         });
         const monthlyCpp = benefit.cpp / 12;
         const monthlyOas = benefit.oas / 12;
+        const monthlyOasClawback = (benefit.oasClawback ?? 0) / 12;
         const monthlyGis = benefit.gis / 12;
         const monthlyAllowance = benefit.allowance / 12;
         benefits += monthlyCpp + monthlyOas + monthlyGis + monthlyAllowance;
         benefitSources.cpp += monthlyCpp;
         benefitSources.oas += monthlyOas;
+        benefitSources.oasClawback += monthlyOasClawback;
         benefitSources.gis += monthlyGis;
         benefitSources.allowance += monthlyAllowance;
         taxableBenefits += monthlyCpp + monthlyOas;
