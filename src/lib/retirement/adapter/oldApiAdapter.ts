@@ -158,12 +158,12 @@ export const WITHDRAWAL_POLICIES: {
   {
     key: "TAX_TARGETED",
     label: "Tax-targeted meltdown",
-    blurb: "Draws registered money each year up to the clawback/bracket ceiling, then taxable, then TFSA.",
+    blurb: "Melts down registered accounts but stops at the OAS clawback line (plus your tolerance), then uses taxable/TFSA. Avoids OAS clawback while drawing down registered.",
   },
   {
     key: "REGISTERED_FIRST",
     label: "Registered first",
-    blurb: "Empties RRSP/RRIF and LIRA/LIF as fast as needed, leaving the TFSA to compound.",
+    blurb: "Empties RRSP/RRIF and LIRA/LIF as fast as spending needs dictate, ignoring the OAS clawback line. Leaves TFSA to compound longest.",
   },
   {
     key: "NON_REGISTERED_FIRST",
@@ -370,6 +370,11 @@ function simulationToProjection(
     cpp: number; oas: number; oasClawback: number; otherIncome: number;
     taxes: number; spending: number; shortfall: number;
     endingPortfolio: number; endingTfsa: number; endingRegistered: number; endingLira: number; endingNonReg: number;
+    people: Map<string, {
+      label: string; age: number;
+      rrifDraw: number; lifDraw: number; nonregDraw: number; tfsaDraw: number;
+      cpp: number; oas: number;
+    }>;
   }>();
 
   for (const m of result.monthly) {
@@ -381,6 +386,7 @@ function simulationToProjection(
         cpp: 0, oas: 0, oasClawback: 0, otherIncome: 0,
         taxes: 0, spending: 0, shortfall: 0,
         endingPortfolio: 0, endingTfsa: 0, endingRegistered: 0, endingLira: 0, endingNonReg: 0,
+        people: new Map(),
       };
       yearlyMap.set(year, y);
     }
@@ -398,6 +404,32 @@ function simulationToProjection(
     y.spending += m.spending;
     y.shortfall = Math.max(y.shortfall, m.shortfall);
     y.otherIncome += m.grossIncome - m.benefits;
+    // Aggregate per-person data
+    const bp = m.benefitsByPerson;
+    const wp = m.withdrawalsByPerson;
+    if (bp || wp) {
+      for (const role of ["MAIN_USER", "PARTNER"] as const) {
+        const age = m.ages?.[role];
+        if (age == null) continue;
+        const label = role === "MAIN_USER" ? (input.self.label || "You") : (input.spouse?.label || "Spouse");
+        let p = y.people.get(role);
+        if (!p) {
+          p = { label, age, rrifDraw: 0, lifDraw: 0, nonregDraw: 0, tfsaDraw: 0, cpp: 0, oas: 0 };
+          y.people.set(role, p);
+        }
+        p.age = age; // Last month wins for age
+        if (bp?.[role]) {
+          p.cpp += bp[role].cpp;
+          p.oas += bp[role].oas + bp[role].gis;
+        }
+        if (wp?.[role]) {
+          p.rrifDraw += wp[role].registered;
+          p.lifDraw += wp[role].lira;
+          p.nonregDraw += wp[role].nonRegistered;
+          p.tfsaDraw += wp[role].tfsa;
+        }
+      }
+    }
     // Track ending balances (last month wins)
     y.endingPortfolio = m.portfolio;
     y.endingTfsa = m.tfsa;
@@ -435,7 +467,21 @@ function simulationToProjection(
       pensionSplit: 0,
       effectiveCeiling: 0,
       meltdownFlag: false,
-      people: [],
+      people: Array.from(y.people.values()).map((p) => ({
+        label: p.label,
+        age: p.age,
+        rrifDraw: p.rrifDraw / d,
+        lifDraw: p.lifDraw / d,
+        nonregDraw: p.nonregDraw / d,
+        tfsaDraw: p.tfsaDraw / d,
+        cpp: p.cpp / d,
+        oas: p.oas / d,
+        oasClawback: 0,
+        otherIncome: 0,
+        taxableIncome: 0,
+        taxes: 0,
+        balances: { tfsa: 0, rrsp: 0, lira: 0, nonreg: 0, total: 0 },
+      })),
       balances: {
         tfsa: y.endingTfsa / d,
         rrsp: y.endingRegistered / d,
