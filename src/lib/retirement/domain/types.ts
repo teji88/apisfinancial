@@ -159,6 +159,7 @@ export interface MonthlySnapshot {
     gis: Money;
     allowance: Money;
   };
+  benefitsByPerson?: Record<PersonRole, { cpp: Money; oas: Money; gis: Money }>;
   withdrawals: Money;
   withdrawalSources?: {
     registered: Money;
@@ -167,6 +168,7 @@ export interface MonthlySnapshot {
     nonRegistered: Money;
     cash: Money;
   };
+  withdrawalsByPerson?: Record<PersonRole, { registered: Money; lira: Money; tfsa: Money; nonRegistered: Money }>;
   taxes: Money;
   /** OAS recovery tax portion of taxes (for reporting). */
   oasRecovery?: Money;
