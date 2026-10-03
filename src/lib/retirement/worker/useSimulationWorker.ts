@@ -25,6 +25,9 @@ export function useSimulationWorker() {
   const workerRef = useRef<Worker | null>(null);
   const seqRef = useRef(0);
   const latestRef = useRef<Record<JobKind, number>>({ project: 0, "project-quick": 0, earliest: 0, compare: 0, stress: 0 });
+  // Stress jobs are fired as a batch (one per scenario), so their replies must
+  // accumulate instead of the single-latest-wins filter used by other kinds.
+  const pendingStressRef = useRef<Set<number>>(new Set());
 
   const [projection, setProjection] = useState<Projection | null>(null);
   const [projecting, setProjecting] = useState(false);
@@ -56,8 +59,17 @@ export function useSimulationWorker() {
         error?: string;
         progress?: { completed: number; total: number };
       };
-      // Ignore stale responses — only the latest request per kind counts.
-      if (id !== latestRef.current[kind]) return;
+      // Ignore stale responses. Single-shot kinds (project, earliest, compare)
+      // only honour the latest request; stress jobs accumulate as a batch, so
+      // any reply whose id is still pending counts.
+      if (kind === "stress") {
+        if (!pendingStressRef.current.has(id)) {
+          if (pendingStressRef.current.size === 0) setStressing(false);
+          return;
+        }
+      } else if (id !== latestRef.current[kind]) {
+        return;
+      }
 
       // Progress updates (not final results)
       if (progress !== undefined) {
@@ -72,7 +84,10 @@ export function useSimulationWorker() {
         if (kind === "project-quick") setProjecting(false);
         if (kind === "earliest") setEarliestLoading(false);
         if (kind === "compare") setComparing(false);
-        if (kind === "stress") setStressing(false);
+        if (kind === "stress") {
+          pendingStressRef.current.delete(id);
+          if (pendingStressRef.current.size === 0) setStressing(false);
+        }
         return;
       }
 
@@ -96,8 +111,9 @@ export function useSimulationWorker() {
         setComparing(false);
       } else if (kind === "stress") {
         const r = result as StressTestResult;
+        pendingStressRef.current.delete(id);
         setStressResults((prev) => ({ ...prev, [`${r.scenarioId}-${r.severity}`]: r }));
-        setStressing(false);
+        if (pendingStressRef.current.size === 0) setStressing(false);
       }
     };
 
@@ -117,11 +133,12 @@ export function useSimulationWorker() {
 
   const post = useCallback((kind: JobKind, inputs: PlannerInputs, objective?: StrategyObjective, extra?: { scenarioId?: StressScenario["id"]; severity?: StressSeverity }) => {
     const worker = workerRef.current;
-    if (!worker) return;
+    if (!worker) return -1;
     const id = ++seqRef.current;
     latestRef.current[kind] = id;
     setWorkerError(null);
     worker.postMessage({ id, kind, inputs, objective, ...extra });
+    return id;
   }, []);
 
   /** Live projection — call on every input change (debounced by caller). */
@@ -165,13 +182,15 @@ export function useSimulationWorker() {
   const runStress = useCallback(
     (inputs: PlannerInputs, scenarioId: StressScenario["id"], severity: StressSeverity) => {
       setStressing(true);
-      post("stress", inputs, undefined, { scenarioId, severity });
+      const id = post("stress", inputs, undefined, { scenarioId, severity });
+      if (id > 0) pendingStressRef.current.add(id);
     },
     [post],
   );
 
   /** Clear stress test results (e.g. when inputs change). */
   const clearStress = useCallback(() => {
+    pendingStressRef.current.clear();
     setStressResults({});
   }, []);
 
