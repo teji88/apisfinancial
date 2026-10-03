@@ -99,6 +99,18 @@ function applyVariable(
 function defaultVariables(
   scenario: RetirementScenario,
 ): OptimizationVariable[] {
+  // Retirement ages for grid search: 5-year steps. The MIN_RETIREMENT_AGE
+  // objective uses binary search (35-85, 1-year precision) instead.
+  const retirementAges: number[] = [];
+  const maxAge = Math.min(65, Math.max(50, scenario.goals.retirementAge));
+  for (let age = 50; age <= maxAge; age += 5) {
+    retirementAges.push(age);
+  }
+  if (!retirementAges.includes(scenario.goals.retirementAge)) {
+    retirementAges.push(scenario.goals.retirementAge);
+  }
+  retirementAges.sort((a, b) => a - b);
+
   return [
     {
       path: "annualSpending",
@@ -108,6 +120,7 @@ function defaultVariables(
         scenario.goals.annualSpending * 1.1,
       ],
     },
+    { path: "retirementAge", values: retirementAges },
     { path: "cppStartAge", values: [60, 65, 70] },
     { path: "oasStartAge", values: [65, 70] },
     { path: "withdrawalPolicy", values: DEFAULT_POLICIES },
@@ -164,7 +177,9 @@ function constraintViolations(
 function objectiveValue(
   metrics: SimulationMetrics,
   objective: StrategyPreferences["objective"],
+  scenario: RetirementScenario,
 ): number {
+  const feasible = metrics.maximumSpendingShortfall === 0 && !metrics.depletionDate;
   switch (objective) {
     case "MAX_SUSTAINABLE_SPENDING":
       return metrics.maximumSpendingShortfall === 0
@@ -180,6 +195,10 @@ function objectiveValue(
         : -metrics.maximumSpendingShortfall;
     case "MIN_TAX":
       return -metrics.lifetimeTax;
+    case "MIN_RETIREMENT_AGE":
+      // Earliest feasible retirement age wins. Infeasible plans (shortfall or
+      // depletion) are penalized below any feasible plan.
+      return feasible ? -scenario.goals.retirementAge : -1000 - scenario.goals.retirementAge;
     case "CUSTOM":
     default:
       return metrics.lifetimeAfterTaxCash;
@@ -239,30 +258,21 @@ export function optimizeRetirementPlan(
 ): OptimizationResult {
   const objective =
     problem.objective ?? problem.scenario.strategy.objective;
+
+  // Specialized efficient search for earliest retirement: binary search on
+  // retirement age (35-85) instead of brute-forcing every year in the grid.
+  if (objective === "MIN_RETIREMENT_AGE" && !problem.variables) {
+    return optimizeEarliestRetirement(problem);
+  }
+
   const variables = problem.variables ?? defaultVariables(problem.scenario);
   const scenarios: RetirementScenario[] = [];
 
   enumerate(variables, 0, problem.scenario, scenarios);
 
-  const candidates: OptimizationCandidate[] = scenarios.map((scenario) => {
-    const simulation = runRetirementSimulation(
-      scenario,
-      problem.startingPortfolio,
-      problem.startYear,
-      problem.portfolioByType,
-    );
-
-    return {
-      scenario,
-      metrics: simulation.metrics,
-      objectiveValue: objectiveValue(simulation.metrics, objective),
-      violations: constraintViolations(
-        scenario,
-        simulation.metrics,
-        problem.constraints ?? {},
-      ),
-    };
-  });
+  const candidates: OptimizationCandidate[] = scenarios.map((scenario) =>
+    evaluateCandidate(scenario, problem, objective),
+  );
 
   const feasible = candidates.filter(
     (candidate) => candidate.violations.length === 0,
@@ -302,4 +312,146 @@ export function optimizeRetirementPlan(
       },
     ],
   };
+}
+
+function evaluateCandidate(
+  scenario: RetirementScenario,
+  problem: OptimizationProblem,
+  objective: StrategyPreferences["objective"],
+): OptimizationCandidate {
+  const simulation = runRetirementSimulation(
+    scenario,
+    problem.startingPortfolio,
+    problem.startYear,
+    problem.portfolioByType,
+  );
+
+  return {
+    scenario,
+    metrics: simulation.metrics,
+    objectiveValue: objectiveValue(simulation.metrics, objective, scenario),
+    violations: constraintViolations(
+      scenario,
+      simulation.metrics,
+      problem.constraints ?? {},
+    ),
+  };
+}
+
+/**
+ * Find the earliest feasible retirement age using binary search.
+ * Tests every integer age from 35 to 85, but only ~6 grid evaluations
+ * instead of 51, by exploiting monotonicity: if you can retire at age X,
+ * you can retire at any age > X (more savings, fewer years to fund).
+ */
+function optimizeEarliestRetirement(
+  problem: OptimizationProblem,
+): OptimizationResult {
+  const objective = "MIN_RETIREMENT_AGE" as const;
+  const baseVariables = (problem.variables ?? defaultVariables(problem.scenario)).filter(
+    (v) => v.path !== "retirementAge",
+  );
+
+  const MIN_AGE = 35;
+  const MAX_AGE = 85;
+
+  const isFeasibleAtAge = (age: number): { feasible: boolean; candidates: OptimizationCandidate[] } => {
+    const ageVariables: OptimizationVariable[] = [
+      { path: "retirementAge", values: [age] },
+      ...baseVariables,
+    ];
+    const scenarios: RetirementScenario[] = [];
+    enumerate(ageVariables, 0, problem.scenario, scenarios);
+    const candidates = scenarios.map((s) => evaluateCandidate(s, problem, objective));
+    const feasible = candidates.some(
+      (c) =>
+        c.violations.length === 0 &&
+        c.metrics.maximumSpendingShortfall === 0 &&
+        !c.metrics.depletionDate,
+    );
+    return { feasible, candidates };
+  };
+
+  let low = MIN_AGE;
+  let high = MAX_AGE;
+  let bestCandidates: OptimizationCandidate[] = [];
+  const allCandidates: OptimizationCandidate[] = [];
+
+  const atMax = isFeasibleAtAge(MAX_AGE);
+  allCandidates.push(...atMax.candidates);
+  if (!atMax.feasible) {
+    return buildOptimizationResult(allCandidates, problem, objective);
+  }
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const { feasible, candidates } = isFeasibleAtAge(mid);
+    allCandidates.push(...candidates);
+    if (feasible) {
+      bestCandidates = candidates;
+      high = mid - 1;
+    } else {
+      low = mid + 1;
+    }
+  }
+
+  return buildOptimizationResult(allCandidates, problem, objective, bestCandidates);
+}
+
+function buildOptimizationResult(
+  candidates: OptimizationCandidate[],
+  problem: OptimizationProblem,
+  objective: StrategyPreferences["objective"],
+  bestAgeCandidates?: OptimizationCandidate[],
+): OptimizationResult {
+  const feasible = candidates.filter(
+    (candidate) => candidate.violations.length === 0,
+  );
+  const pool = feasible;
+
+  const paretoCandidates = pool.filter(
+    (candidate, index) =>
+      !pool.some(
+        (other, otherIndex) =>
+          index !== otherIndex && dominates(other, candidate),
+      ),
+  );
+
+  let selectedCandidate: OptimizationCandidate | undefined;
+  if (bestAgeCandidates && bestAgeCandidates.length > 0) {
+    const feasibleAtBest = bestAgeCandidates.filter(
+      (c) =>
+        c.violations.length === 0 &&
+        c.metrics.maximumSpendingShortfall === 0 &&
+        !c.metrics.depletionDate,
+    );
+    selectedCandidate = [...feasibleAtBest].sort(
+      (a, b) => b.objectiveValue - a.objectiveValue,
+    )[0];
+  } else {
+    selectedCandidate = [...pool].sort(
+      (a, b) => b.objectiveValue - a.objectiveValue,
+    )[0];
+  }
+
+  const result: OptimizationResult = {
+    candidates,
+    feasiblePlans: feasible.map((candidate) => candidate.scenario),
+    paretoFrontier: paretoCandidates.map((candidate) => candidate.scenario),
+    paretoCandidates,
+    objective,
+    constraints: [
+      {
+        name: "feasible",
+        satisfied: feasible.length > 0,
+        value: feasible.length,
+        limit: 1,
+      },
+    ],
+  };
+  if (selectedCandidate) {
+    result.selectedPlan = selectedCandidate.scenario;
+    result.selectedCandidate = selectedCandidate;
+  }
+  return result;
 }

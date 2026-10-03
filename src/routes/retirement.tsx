@@ -51,7 +51,6 @@ function RetirementPage() {
   const [stressResults, setStressResults] = useState<ScenarioStressTestResult | null>(null);
   const [optimization, setOptimization] = useState<OptimizationResult | null>(null);
   const [optimizing, setOptimizing] = useState(false);
-  const [showTodaysDollars, setShowTodaysDollars] = useState(false);
 
   const portfolio = useMemo(() => {
     const byType: Record<string, number> = {};
@@ -116,7 +115,7 @@ function RetirementPage() {
       });
     if (changed) setScenario({ ...scenario, accounts: nextAccounts });
   }, [accounts, portfolio.accountValues, scenario]);
-  const overview = buildRetirementOverview(result, activeScenario, { inTodaysDollars: showTodaysDollars });
+  const overview = buildRetirementOverview(result, activeScenario);
 
   const runOptimization = async () => {
     setOptimizing(true);
@@ -221,8 +220,6 @@ function RetirementPage() {
           running={running}
           stressResults={stressResults}
           onScenarios={() => setSection("scenarios")}
-          showTodaysDollars={showTodaysDollars}
-          onToggleDollars={() => setShowTodaysDollars((v) => !v)}
         />
       )}
       {section === "plan" && (
@@ -255,8 +252,6 @@ function Overview({
   running,
   stressResults,
   onScenarios,
-  showTodaysDollars,
-  onToggleDollars,
 }: {
   overview: ReturnType<typeof buildRetirementOverview>;
   portfolioTotal: number;
@@ -268,8 +263,6 @@ function Overview({
   running: boolean;
   stressResults: ScenarioStressTestResult | null;
   onScenarios: () => void;
-  showTodaysDollars: boolean;
-  onToggleDollars: () => void;
 }) {
   return (
     <div className="space-y-5">
@@ -280,25 +273,7 @@ function Overview({
             <h2 className="mt-2 font-display text-2xl font-semibold">{overview.headline}</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">{overview.explanation}</p>
           </div>
-          <div className="flex flex-wrap gap-2 items-center">
-            <div className="flex rounded-lg border border-border overflow-hidden" role="group" aria-label="Dollar basis">
-              <button
-                type="button"
-                onClick={() => showTodaysDollars && onToggleDollars()}
-                className={`px-3 py-2 text-sm font-medium transition-colors ${!showTodaysDollars ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
-                aria-pressed={!showTodaysDollars}
-              >
-                Nominal $
-              </button>
-              <button
-                type="button"
-                onClick={() => !showTodaysDollars && onToggleDollars()}
-                className={`px-3 py-2 text-sm font-medium transition-colors ${showTodaysDollars ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}
-                aria-pressed={showTodaysDollars}
-              >
-                Today's $
-              </button>
-            </div>
+          <div className="flex gap-2">
             <Button variant="outline" onClick={onPlan}>Edit plan</Button>
             <Button variant="outline" onClick={onOptimize} disabled={running || optimizing}>
               {optimizing ? "Analyzing strategies…" : "Analyze strategies"}
@@ -560,7 +535,7 @@ function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
 
       <Section title="Strategy" subtitle="Withdrawal policies and optimization objectives are explicit inputs.">
         <Field label="Withdrawal policy"><Select value={scenario.strategy.withdrawalPolicy} onValueChange={(v) => onChange({ strategy: { ...scenario.strategy, withdrawalPolicy: v as RetirementScenario["strategy"]["withdrawalPolicy"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["OPTIMIZE","USER_DEFINED","TAX_TARGETED","REGISTERED_FIRST","TFSA_FIRST","NON_REGISTERED_FIRST"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
-        <Field label="Optimization objective"><Select value={scenario.strategy.objective} onValueChange={(v) => onChange({ strategy: { ...scenario.strategy, objective: v as RetirementScenario["strategy"]["objective"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["MAX_SUSTAINABLE_SPENDING","MAX_LIFETIME_AFTER_TAX_CASH","MAX_ESTATE","MIN_DEPLETION_RISK","MIN_TAX","CUSTOM"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Optimization objective"><Select value={scenario.strategy.objective} onValueChange={(v) => onChange({ strategy: { ...scenario.strategy, objective: v as RetirementScenario["strategy"]["objective"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["MAX_SUSTAINABLE_SPENDING","MAX_LIFETIME_AFTER_TAX_CASH","MAX_ESTATE","MIN_DEPLETION_RISK","MIN_TAX","MIN_RETIREMENT_AGE","CUSTOM"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
         <NumberField label="Minimum cash reserve" value={scenario.strategy.cashReserve} min={0} onChange={(v) => onChange({ strategy: { ...scenario.strategy, cashReserve: Math.max(0, v ?? 0) } })} />
         <NumberField label="Target taxable income" value={scenario.strategy.taxableIncomeTarget} min={0} onChange={(v) => onChange({ strategy: { ...scenario.strategy, taxableIncomeTarget: v === undefined ? undefined : Math.max(0, v) } })} />
         <NumberField label="Pension split %" value={scenario.strategy.pensionSplitPercent ?? 0} min={0} max={50} onChange={(v) => onChange({ strategy: { ...scenario.strategy, pensionSplitPercent: v === undefined ? undefined : Math.min(50, Math.max(0, v)) } })} />
