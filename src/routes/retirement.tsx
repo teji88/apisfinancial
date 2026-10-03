@@ -264,6 +264,15 @@ function RetirementPage() {
   const [clawbackTolerance, setClawbackTolerance] = useState(0);
   const [policy, setPolicy] = useState<WithdrawalPolicy>("TAX_TARGETED");
   const [objective, setObjective] = useState<StrategyObjective>("MIN_TAX");
+  /** True once the user scrolls — collapses the sticky summary to a compact bar. */
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 80);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
 
   useEffect(() => {
@@ -457,10 +466,18 @@ function RetirementPage() {
   }, [p, derived, balances, clawbackTolerance, policy]);
 
   const projection = useMemo(() => (inputs ? projectRetirement(inputs) : null), [inputs]);
-  const earliest = useMemo(() => (inputs ? earliestRetirementAge(inputs) : null), [inputs]);
+  /* Debounce the expensive optimizer calls (earliest age + strategy comparison)
+     so typing in "Your details" stays responsive — they run 600ms after the
+     user stops editing instead of on every keystroke. */
+  const [debouncedInputs, setDebouncedInputs] = useState(inputs);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedInputs(inputs), 600);
+    return () => clearTimeout(t);
+  }, [inputs]);
+  const earliest = useMemo(() => (debouncedInputs ? earliestRetirementAge(debouncedInputs) : null), [debouncedInputs]);
   const comparison = useMemo(
-    () => (inputs ? compareWithdrawalStrategies(inputs, objective) : null),
-    [inputs, objective],
+    () => (debouncedInputs ? compareWithdrawalStrategies(debouncedInputs, objective) : null),
+    [debouncedInputs, objective],
   );
 
 
@@ -594,7 +611,28 @@ function RetirementPage() {
         </div>
       </div>
 
-      <div className="sticky top-0 z-30 -mx-4 grid gap-4 border-b border-border/60 bg-background/95 px-4 py-3 shadow-sm backdrop-blur sm:grid-cols-2 lg:grid-cols-5 md:-mx-6 md:px-6">
+      <div className={`sticky top-0 z-30 -mx-4 border-b border-border/60 bg-background/95 px-4 shadow-sm backdrop-blur md:-mx-6 md:px-6 ${scrolled ? "py-1.5" : "py-3"}`}>
+        {scrolled ? (
+          /* Compact bar: headings + numbers only, no explanations */
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+            <span className="font-medium">
+              Retire <span className={earliest && earliest <= inputs.retirementAge ? "text-green-600" : "text-amber-600"}>{earliest ? `at ${earliest}` : "after 80"}</span>
+            </span>
+            <span className="text-muted-foreground">
+              At {inputs.retirementAge}: <span className="font-medium text-foreground">{formatCad(startBalance)}</span>
+            </span>
+            <span className="text-muted-foreground">
+              Outcome: <span className={`font-medium ${projection.success ? "text-green-600" : "text-amber-600"}`}>{projection.success ? "Fully funded" : `Short at ${projection.depletionAge}`}</span>
+            </span>
+            <span className="text-muted-foreground">
+              Lifetime tax: <span className="font-medium text-foreground">{formatCad(totalTaxes)}</span>
+            </span>
+            <span className="text-muted-foreground">
+              Estate tax: <span className="font-medium text-foreground">{formatCad(projection.estateTax)}</span>
+            </span>
+          </div>
+        ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           icon={<CalendarClock className="h-4 w-4" />}
           label="Earliest sustainable retirement"
@@ -637,7 +675,8 @@ function RetirementPage() {
           hint={`${formatCad(projection.estateRegistered)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`}
           tone={projection.estateTax > 1 ? "warn" : "good"}
         />
-
+        </div>
+        )}
       </div>
 
       <Tabs defaultValue="plan">
