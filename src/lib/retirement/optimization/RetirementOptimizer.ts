@@ -36,6 +36,8 @@ export interface OptimizationProblem {
   variables?: OptimizationVariable[];
   constraints?: OptimizationConstraints;
   objective?: StrategyPreferences["objective"];
+  /** Progress callback: (completed, total) */
+  onProgress?: (completed: number, total: number) => void;
 }
 
 const DEFAULT_POLICIES: StrategyPreferences["withdrawalPolicy"][] = [
@@ -363,10 +365,13 @@ function optimizeEarliestRetirement(
     const scenarios: RetirementScenario[] = [];
     enumerate(ageVariables, 0, problem.scenario, scenarios);
     const candidates = scenarios.map((s) => evaluateCandidate(s, problem, objective));
+    // $1,000 nominal ≈ $500-600 in today's dollars; below this is tax
+    // gross-up numerical noise, not a real planning failure.
+    const MATERIAL_SHORTFALL_NOMINAL = 1000;
     const feasible = candidates.some(
       (c) =>
         c.violations.length === 0 &&
-        c.metrics.maximumSpendingShortfall === 0 &&
+        c.metrics.maximumSpendingShortfall <= MATERIAL_SHORTFALL_NOMINAL &&
         !c.metrics.depletionDate,
     );
     return { feasible, candidates };
@@ -377,8 +382,16 @@ function optimizeEarliestRetirement(
   let bestCandidates: OptimizationCandidate[] = [];
   const allCandidates: OptimizationCandidate[] = [];
 
+  const ESTIMATED_STEPS = 8; // 1 max-age check + ~7 binary search iterations
+  let completedSteps = 0;
+  const reportProgress = () => {
+    completedSteps++;
+    problem.onProgress?.(completedSteps, ESTIMATED_STEPS);
+  };
+
   const atMax = isFeasibleAtAge(MAX_AGE);
   allCandidates.push(...atMax.candidates);
+  reportProgress();
   if (!atMax.feasible) {
     return buildOptimizationResult(allCandidates, problem, objective);
   }
@@ -387,6 +400,7 @@ function optimizeEarliestRetirement(
     const mid = Math.floor((low + high) / 2);
     const { feasible, candidates } = isFeasibleAtAge(mid);
     allCandidates.push(...candidates);
+    reportProgress();
     if (feasible) {
       bestCandidates = candidates;
       high = mid - 1;
@@ -422,7 +436,7 @@ function buildOptimizationResult(
     const feasibleAtBest = bestAgeCandidates.filter(
       (c) =>
         c.violations.length === 0 &&
-        c.metrics.maximumSpendingShortfall === 0 &&
+        c.metrics.maximumSpendingShortfall <= 1000 &&
         !c.metrics.depletionDate,
     );
     selectedCandidate = [...feasibleAtBest].sort(

@@ -1,7 +1,7 @@
 import { CANADA_2026_PARAMETERS } from "../rules/canada2026";
 import { GIS_TABLES_2026_Q3, type GisBand } from "../rules/gisTables2026Q3";
 import type { Money, PersonScenario, PersonRole } from "../domain/types";
-import { resolveCppAt65 } from "../benefits/resolveCpp";
+import { resolveCppAt65, resolveCppPrb } from "../benefits/resolveCpp";
 
 export interface BenefitEstimate {
   cpp: Money;
@@ -79,8 +79,15 @@ export function estimateGovernmentBenefits(
     : 1 + cppMonthsFrom65 * CANADA_2026_PARAMETERS.cpp.after65MonthlyAdjustment;
 
   const cppAt65Annual = resolveCppAt65(person) * 12;
+  // PRBs: earned by working while collecting CPP. Each PRB starts the January
+  // after its contribution year. Only include PRBs for years already worked.
+  const prbInfo = resolveCppPrb(person);
+  const earnedPrbYears = prbInfo.years.filter((y) => y < calendarYear);
+  const prbAnnual = earnedPrbYears.length > 0
+    ? (prbInfo.monthly * 12 * earnedPrbYears.length) / prbInfo.years.length
+    : 0;
   const cppAnnual = age >= cppStartAge
-    ? cppAt65Annual * Math.max(0, cppAdjustment) * indexFactor
+    ? (cppAt65Annual * Math.max(0, cppAdjustment) + prbAnnual) * indexFactor
     : 0;
 
   const oasStartAge = typeof person.oasStartAge === "number"

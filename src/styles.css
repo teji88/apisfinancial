@@ -431,3 +431,11 @@
 @media (prefers-reduced-motion: reduce) {
   .honey-story-cell { transition: none; }
 }
+/* Hide scrollbars on horizontal swipe strips (glance bar) while keeping scroll */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

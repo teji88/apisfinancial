@@ -83,9 +83,13 @@ export interface RetirementGoals {
 export interface ScenarioAssumptions {
   inflationRate: number;
   investmentReturn: number;
+  /** Optional: different return during working years (before retirement). Falls back to investmentReturn. */
+  workingInvestmentReturn?: number;
   investmentFeeRate: number;
   incomeYield?: number;
   capitalGrowthRate?: number;
+  /** Year-specific return overrides: calendar year -> annual return %. Used for sequence-of-returns stress tests. */
+  annualReturnOverrides?: Record<number, number>;
   futureRulesMode: "CURRENT_LAW" | "CURRENT_LAW_PLUS_INDEXING" | "CONSERVATIVE" | "CUSTOM";
 }
 
@@ -94,6 +98,8 @@ export interface StrategyPreferences {
   objective: "MAX_SUSTAINABLE_SPENDING" | "MAX_LIFETIME_AFTER_TAX_CASH" | "MAX_ESTATE" | "MIN_DEPLETION_RISK" | "MIN_TAX" | "MIN_RETIREMENT_AGE" | "CUSTOM";
   taxableIncomeTarget?: Money;
   pensionSplitPercent?: number;
+  /** Allowed overshoot above the OAS clawback threshold when melting down registered accounts (today's dollars). */
+  clawbackTolerance?: Money;
   cashReserve?: Money;
   estateTarget?: Money;
 }
@@ -107,6 +113,8 @@ export interface RetirementScenario {
   debts?: DebtScenario[];
   assumptions: ScenarioAssumptions;
   strategy: StrategyPreferences;
+  /** Quick mode: simplified withdrawal (no tax optimization), for fast estimates. */
+  quick?: boolean;
   metadata: { createdAt: string; engineVersion: string; rulesVersion: string; scenarioHash?: string };
 }
 
@@ -135,6 +143,7 @@ export interface MonthlySnapshot {
   householdStage: HouseholdStage;
   portfolio: Money;
   registered: Money;
+  lira: Money;
   tfsa: Money;
   nonRegistered: Money;
   cash: Money;
@@ -146,17 +155,23 @@ export interface MonthlySnapshot {
   benefitSources?: {
     cpp: Money;
     oas: Money;
+    oasClawback?: Money;
     gis: Money;
     allowance: Money;
   };
+  benefitsByPerson?: Record<PersonRole, { cpp: Money; oas: Money; gis: Money }>;
   withdrawals: Money;
   withdrawalSources?: {
     registered: Money;
+    lira: Money;
     tfsa: Money;
     nonRegistered: Money;
     cash: Money;
   };
+  withdrawalsByPerson?: Record<PersonRole, { registered: Money; lira: Money; tfsa: Money; nonRegistered: Money }>;
   taxes: Money;
+  /** OAS recovery tax portion of taxes (for reporting). */
+  oasRecovery?: Money;
   spending: Money;
   debtPayments?: Money;
   debtInterest?: Money;

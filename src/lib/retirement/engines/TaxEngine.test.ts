@@ -39,9 +39,10 @@ describe("TaxEngine Canadian retirement ledgers", () => {
 
   it("applies the 2026 federal and Alberta basic personal credits", () => {
     const result = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 65);
-    expect(result.federalTax).toBeCloseTo(4_696.72, 2);
+    // Federal tax includes the age credit: $8,790 - ($50,000 - $46,576) × 15% = $8,276.40 × 14% = $1,158.70
+    expect(result.federalTax).toBeCloseTo(3_538.02, 2);
     expect(result.provincialTax).toBeCloseTo(2_178.48, 2);
-    expect(result.totalTax).toBeCloseTo(6_875.20, 2);
+    expect(result.totalTax).toBeCloseTo(5_716.50, 2);
   });
 
   it("does not create tax from a zero-income return", () => {
@@ -63,6 +64,37 @@ describe("TaxEngine Canadian retirement ledgers", () => {
     const belowUpper = calculateTaxFromIncome({ oas: 10_000, rrspRrif: 145_108 }, "AB", 65);
     const aboveUpper = calculateTaxFromIncome({ oas: 10_000, rrspRrif: 145_110 }, "AB", 65);
     expect(aboveUpper.oasRecovery - belowUpper.oasRecovery).toBeCloseTo(0.15, 2);
+  });
+
+  it("indexes OAS recovery threshold to the tax year", () => {
+    // 2026 threshold $95,323; in 2036 at 2% inflation ≈ $116,100
+    const income2026 = 100_000;
+    const result2026 = calculateTaxFromIncome({ oas: 10_000, rrspRrif: income2026 }, "AB", 65, 2026, 2);
+    const result2036 = calculateTaxFromIncome({ oas: 10_000, rrspRrif: income2026 }, "AB", 65, 2036, 2);
+    // Same nominal income, but higher threshold in 2036 → less recovery
+    expect(result2036.oasRecovery).toBeLessThan(result2026.oasRecovery);
+  });
+
+  it("indexes tax brackets to the tax year", () => {
+    // $60,000 income in 2026 vs 2046: brackets should inflate, lowering the rate
+    const result2026 = calculateTaxFromIncome({ rrspRrif: 60_000 }, "AB", 65, 2026, 2);
+    const result2046 = calculateTaxFromIncome({ rrspRrif: 60_000 }, "AB", 65, 2046, 2);
+    expect(result2046.totalTax).toBeLessThan(result2026.totalTax);
+  });
+
+  it("applies the federal age credit at 65+", () => {
+    const at64 = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 64, 2026, 2);
+    const at65 = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 65, 2026, 2);
+    // Age credit at $50K: ($8,790 - ($50,000 - $46,576) × 15%) × 14% = $1,158.70
+    expect(at64.totalTax - at65.totalTax).toBeCloseTo(1158.70, 0);
+  });
+
+  it("reduces the age credit above the income threshold", () => {
+    const lowIncome = calculateTaxFromIncome({ rrspRrif: 40_000 }, "AB", 65, 2026, 2);
+    const highIncome = calculateTaxFromIncome({ rrspRrif: 100_000 }, "AB", 65, 2026, 2);
+    // High income partially phases out the age credit, so the tax difference
+    // should exceed just the bracket difference
+    expect(highIncome.totalTax - lowIncome.totalTax).toBeGreaterThan(0);
   });
 
   it("keeps pension income available for a future pension-income credit", () => {

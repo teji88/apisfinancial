@@ -44,6 +44,10 @@ export type Profile = {
   spouse_cpp_avg_income: number;
   spouse_cpp_years_worked: number;
   spouse_cpp_future_income: number;
+  // Detailed spouse CPP earnings history (mirrors self's - in-memory only)
+  spouse_cpp_detailed_history?: Array<{ year: number; earnings: number }>;
+  spouse_cpp_detailed_future_earnings?: number;
+  spouse_cpp_detailed_child_rearing?: number[];
   spouse_oas_years_in_canada: number;
   spouse_cpp_start_age: number;
   spouse_oas_start_age: number;
@@ -138,7 +142,15 @@ export function useUpdateProfile() {
       if (!id) throw new Error("Not signed in");
 
       // Strip detailed CPP history fields (not in Supabase schema yet - stored in-memory only)
-      const { cpp_detailed_history, cpp_detailed_future_earnings, cpp_detailed_child_rearing, ...supabasePatch } = patch;
+      const {
+        cpp_detailed_history,
+        cpp_detailed_future_earnings,
+        cpp_detailed_child_rearing,
+        spouse_cpp_detailed_history,
+        spouse_cpp_detailed_future_earnings,
+        spouse_cpp_detailed_child_rearing,
+        ...supabasePatch
+      } = patch;
       const { error } = await supabase
         .from("profiles")
         .upsert({ id, ...supabasePatch }, { onConflict: "id" });

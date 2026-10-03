@@ -42,10 +42,11 @@ describe("CPP calculator", () => {
 
     // With max earnings every year: ratio = 1.0 for all years
     // After 17% dropout: average ratio still 1.0
-    // Benefit = 1.0 * 25% * avgYmpe(2026) / 12
-    // avgYmpe(2026) = 69180, so monthly = 69180 * 0.25 / 12 = 1441.25
+    // Base = 1.0 * 25% * avgYmpe(2026) / 12 = 1441.25
+    // Enhancement: 8.33% pro-rated for post-2018 years
     expect(result.averageEarningsRatio).toBeCloseTo(1.0, 2);
-    expect(result.cppAt65Monthly).toBeCloseTo(1441, -1); // Within $10
+    expect(result.cppAt65Monthly).toBeGreaterThan(1441); // Base + enhancement
+    expect(result.cppAt65Monthly).toBeLessThan(1700);
     expect(result.contributoryYears).toBe(48); // 1979-2026
   });
 
@@ -135,5 +136,139 @@ describe("CPP calculator", () => {
     // For someone retiring in 2037 (1972+65), YMPE will be higher than 2026,
     // so benefit can exceed the 2026 maximum. Just check it's reasonable.
     expect(monthly).toBeLessThan(3000);
+  });
+
+  it("reduces CPP when retiring early (zero earnings after retirement age)", () => {
+    const earningsHistory = [];
+    for (let year = 1990; year <= 2026; year++) {
+      earningsHistory.push({ year, earnings: 70000 });
+    }
+    const base = { birthYear: 1980, birthMonth: 6, earningsHistory, futureAnnualEarnings: 70000, cppStartAge: 65 };
+
+    const workTo65 = calculateCppBenefit({ ...base, retirementAge: 65 });
+    const retireAt50 = calculateCppBenefit({ ...base, retirementAge: 50 });
+
+    // Retiring at 50 means 15 years of zero earnings; CPP must be lower
+    expect(retireAt50.cppAt65Monthly).toBeLessThan(workTo65.cppAt65Monthly);
+    // But not zero — dropout rules absorb some of the gap
+    expect(retireAt50.cppAt65Monthly).toBeGreaterThan(0);
+  });
+
+  it("keeps legacy behavior when retirement age is omitted", () => {
+    const earningsHistory = [];
+    for (let year = 1990; year <= 2026; year++) {
+      earningsHistory.push({ year, earnings: 70000 });
+    }
+    const base = { birthYear: 1980, birthMonth: 6, earningsHistory, futureAnnualEarnings: 70000, cppStartAge: 65 };
+
+    const withRetirement65 = calculateCppBenefit({ ...base, retirementAge: 65 });
+    const withoutRetirement = calculateCppBenefit(base);
+
+    // Omitting retirementAge keeps future earnings until CPP start (legacy)
+    expect(withoutRetirement.cppAt65Monthly).toBeGreaterThanOrEqual(withRetirement65.cppAt65Monthly);
+  });
+
+  it("includes CPP enhancement for post-2018 earnings", () => {
+    const earningsHistory = [];
+    for (let year = 1990; year <= 2026; year++) {
+      earningsHistory.push({ year, earnings: 70000 });
+    }
+    // Someone with only pre-2019 earnings gets no enhancement
+    const oldEarnings = [];
+    for (let year = 1990; year <= 2018; year++) {
+      oldEarnings.push({ year, earnings: 70000 });
+    }
+    const withEnhancement = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory, futureAnnualEarnings: 0, cppStartAge: 65,
+    });
+    const withoutEnhancement = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory: oldEarnings, futureAnnualEarnings: 0, cppStartAge: 65,
+    });
+    // The enhancement should add value for post-2018 earnings
+    expect(withEnhancement.cppAt65Monthly).toBeGreaterThan(withoutEnhancement.cppAt65Monthly);
+    // Breakdown should be exposed
+    expect(withEnhancement.firstAdditionalAnnual).toBeGreaterThan(0);
+    expect(withoutEnhancement.firstAdditionalAnnual).toBe(0);
+    expect(withoutEnhancement.secondAdditionalAnnual).toBe(0);
+  });
+
+  it("applies phase-in factors to first additional (2019 < 2023)", () => {
+    // Two people with identical careers except one worked 2019, the other 2023
+    const base = [];
+    for (let year = 1990; year <= 2018; year++) {
+      base.push({ year, earnings: 60000 });
+    }
+    const with2019 = [...base, { year: 2019, earnings: 60000 }];
+    const with2023 = [...base, { year: 2023, earnings: 60000 }];
+    const r2019 = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory: with2019, futureAnnualEarnings: 0, cppStartAge: 65,
+    });
+    const r2023 = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory: with2023, futureAnnualEarnings: 0, cppStartAge: 65,
+    });
+    // 2023 (100% phase-in) should give more enhancement than 2019 (15% phase-in)
+    expect(r2023.firstAdditionalAnnual).toBeGreaterThan(r2019.firstAdditionalAnnual);
+    // Roughly 100/15 = 6.67x (same YMPE ratio, different phase-in)
+    // Allow tolerance for YMPE differences between years
+    const ratio = r2023.firstAdditionalAnnual / r2019.firstAdditionalAnnual;
+    expect(ratio).toBeGreaterThan(4);
+  });
+
+  it("calculates CPP2 second additional for earnings above YMPE (2024+)", () => {
+    const history = [];
+    for (let year = 1990; year <= 2026; year++) {
+      history.push({ year, earnings: 90000 }); // Above YMPE every year
+    }
+    const highEarner = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory: history, futureAnnualEarnings: 0, cppStartAge: 65,
+    });
+    // Should have CPP2 for 2024-2026
+    expect(highEarner.secondAdditionalAnnual).toBeGreaterThan(0);
+
+    // Someone earning below YMPE gets no CPP2
+    const lowHistory = [];
+    for (let year = 1990; year <= 2026; year++) {
+      lowHistory.push({ year, earnings: 50000 });
+    }
+    const lowEarner = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory: lowHistory, futureAnnualEarnings: 0, cppStartAge: 65,
+    });
+    expect(lowEarner.secondAdditionalAnnual).toBe(0);
+    // But still gets first additional
+    expect(lowEarner.firstAdditionalAnnual).toBeGreaterThan(0);
+  });
+
+  it("gives no CPP2 for pre-2024 earnings even if above YMPE", () => {
+    const history = [];
+    for (let year = 1990; year <= 2023; year++) {
+      history.push({ year, earnings: 90000 });
+    }
+    const result = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory: history, futureAnnualEarnings: 0, cppStartAge: 65,
+    });
+    expect(result.secondAdditionalAnnual).toBe(0);
+    // First additional still applies to 2019-2023
+    expect(result.firstAdditionalAnnual).toBeGreaterThan(0);
+  });
+
+  it("calculates PRBs when working while collecting CPP", () => {
+    const earningsHistory = [];
+    for (let year = 1990; year <= 2026; year++) {
+      earningsHistory.push({ year, earnings: 70000 });
+    }
+    // Retire at 68, start CPP at 65 → 3 years of PRBs
+    const withPrb = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory,
+      futureAnnualEarnings: 70000, retirementAge: 68, cppStartAge: 65,
+    });
+    expect(withPrb.prbYears).toEqual([2025, 2026, 2027]);
+    expect(withPrb.prbMonthly).toBeGreaterThan(0);
+    // Retire at 65, start CPP at 65 → no PRBs
+    const noPrb = calculateCppBenefit({
+      birthYear: 1960, birthMonth: 6, earningsHistory,
+      futureAnnualEarnings: 70000, retirementAge: 65, cppStartAge: 65,
+    });
+    expect(noPrb.prbYears).toEqual([]);
+    expect(noPrb.prbMonthly).toBe(0);
   });
 });

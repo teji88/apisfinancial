@@ -37,6 +37,12 @@ export interface WithdrawalSequenceInput {
   pensionSplitPercent?: number;
   /** Optional ordering override; defaults to a tax-aware V1 sequence. */
   priority?: WithdrawalBucket[];
+  /** OAS clawback threshold (nominal $ for the year). Enables ceiling logic. */
+  oasClawbackThreshold?: number;
+  /** Allowed overshoot above the threshold for registered meltdown (nominal $). */
+  clawbackTolerance?: number;
+  /** When true, cap registered withdrawals at the clawback ceiling. */
+  applyClawbackCeiling?: boolean;
 }
 
 export interface WithdrawalSequenceStep {
@@ -68,34 +74,77 @@ export function planWithdrawalSequence(input: WithdrawalSequenceInput): Withdraw
   let remainingNeed = Math.max(0, input.netNeed);
   const steps: WithdrawalSequenceStep[] = [];
 
-  for (const bucket of priority) {
-    if (remainingNeed <= 0) break;
-    const candidates = input.owners.filter((x) => x.type === bucket && x.balance > 0);
-    for (const account of candidates) {
+  // For the clawback ceiling: estimate current taxable income from tax inputs.
+  // Registered withdrawals are capped so income stays under threshold + tolerance.
+  const estimateCurrentIncome = (): number => {
+    const t = input.taxInputs.MAIN_USER ?? {};
+    return Math.max(0,
+      (t.employment ?? 0) + (t.cpp ?? 0) + (t.oas ?? 0) + (t.pension ?? 0) +
+      (t.rrspRrif ?? 0) + (t.capitalGains ?? 0) * 0.5 + (t.interest ?? 0) +
+      (t.eligibleCanadianDividends ?? 0) + (t.nonEligibleCanadianDividends ?? 0) +
+      (t.canadianDividends ?? 0) + (t.foreignIncome ?? 0)
+    );
+  };
+  const ceilingActive = input.applyClawbackCeiling === true &&
+    input.oasClawbackThreshold !== undefined && input.oasClawbackThreshold > 0;
+  const maxRegisteredGross = (): number => {
+    if (!ceilingActive) return Infinity;
+    const current = estimateCurrentIncome();
+    const ceiling = (input.oasClawbackThreshold ?? 0) + (input.clawbackTolerance ?? 0);
+    return Math.max(0, ceiling - current);
+  };
+
+  // The clawback ceiling is a preference, not a hard wall: if the need cannot
+  // be met from other buckets, we'd rather breach the ceiling (paying some
+  // OAS clawback) than report a shortfall while registered money sits unused.
+  const plannedByAccount = new Map<string, number>();
+  const runBuckets = (buckets: WithdrawalBucket[], ignoreCeiling: boolean) => {
+    for (const bucket of buckets) {
       if (remainingNeed <= 0) break;
-      const taxableRegistered = bucket === "RRSP_RRIF" || bucket === "LIRA_LIF";
-      const accountType = account.registeredAccountType ?? (bucket === "RRSP_RRIF" ? "RRIF" : bucket === "LIRA_LIF" ? "LIRA" : undefined);
-      const solved = solveGrossWithdrawalForNetNeed({
-        netNeed: remainingNeed,
-        payer: input.taxInputs.MAIN_USER ?? {},
-        spouse: input.taxInputs.PARTNER ?? {},
-        owner: account.owner,
-        province: input.province,
-        payerAge: account.owner === "MAIN_USER" ? account.age : input.payerAge,
-        spouseAge: account.owner === "PARTNER" ? account.age : input.spouseAge,
-        pensionSplitPercent: input.pensionSplitPercent ?? 0,
-        maxGross: account.balance,
-        taxableRegistered,
-        registeredAccountType: accountType,
-        nonRegisteredGainFraction: bucket === "NON_REGISTERED" ? account.gainFraction : undefined,
-      });
-      const exactTaxFreeFunding = solved.incrementalTax === 0 && Math.abs(solved.netCash - remainingNeed) <= 0.005;
-      const grossWithdrawal = exactTaxFreeFunding ? remainingNeed : solved.grossWithdrawal;
-      const netCash = exactTaxFreeFunding ? remainingNeed : Math.min(remainingNeed, solved.netCash);
-      if (solved.grossWithdrawal <= 0 || netCash <= 0) continue;
-      steps.push({ bucket, owner: account.owner, accountId: account.accountId, grossWithdrawal, incrementalTax: solved.incrementalTax, netCash });
-      remainingNeed = Math.max(0, remainingNeed - netCash);
+      const candidates = input.owners.filter((x) => x.type === bucket && x.balance > 0);
+      for (const account of candidates) {
+        if (remainingNeed <= 0) break;
+        const taxableRegistered = bucket === "RRSP_RRIF" || bucket === "LIRA_LIF";
+        const accountType = account.registeredAccountType ?? (bucket === "RRSP_RRIF" ? "RRIF" : bucket === "LIRA_LIF" ? "LIRA" : undefined);
+        // Apply clawback ceiling to registered withdrawals
+        const alreadyPlanned = plannedByAccount.get(account.accountId ?? "") ?? 0;
+        let maxGross = Math.max(0, account.balance - alreadyPlanned);
+        if (taxableRegistered && ceilingActive && !ignoreCeiling) {
+          const ceilingMax = maxRegisteredGross();
+          // Reserve: don't exceed ceiling, but allow at least the minimum if already over
+          maxGross = Math.min(maxGross, Math.max(0, ceilingMax));
+          if (maxGross <= 0) continue; // At ceiling, skip registered, use other buckets
+        }
+        const solved = solveGrossWithdrawalForNetNeed({
+          netNeed: remainingNeed,
+          payer: input.taxInputs.MAIN_USER ?? {},
+          spouse: input.taxInputs.PARTNER ?? {},
+          owner: account.owner,
+          province: input.province,
+          payerAge: account.owner === "MAIN_USER" ? account.age : input.payerAge,
+          spouseAge: account.owner === "PARTNER" ? account.age : input.spouseAge,
+          pensionSplitPercent: input.pensionSplitPercent ?? 0,
+          maxGross,
+          taxableRegistered,
+          registeredAccountType: accountType,
+          nonRegisteredGainFraction: bucket === "NON_REGISTERED" ? account.gainFraction : undefined,
+        });
+        const exactTaxFreeFunding = solved.incrementalTax === 0 && Math.abs(solved.netCash - remainingNeed) <= 0.005;
+        const grossWithdrawal = exactTaxFreeFunding ? remainingNeed : solved.grossWithdrawal;
+        const netCash = exactTaxFreeFunding ? remainingNeed : Math.min(remainingNeed, solved.netCash);
+        if (solved.grossWithdrawal <= 0 || netCash <= 0) continue;
+        steps.push({ bucket, owner: account.owner, accountId: account.accountId, grossWithdrawal, incrementalTax: solved.incrementalTax, netCash });
+        plannedByAccount.set(account.accountId ?? "", alreadyPlanned + grossWithdrawal);
+        remainingNeed = Math.max(0, remainingNeed - netCash);
+      }
     }
+  };
+
+  runBuckets(priority, false);
+  if (remainingNeed > 0 && ceilingActive) {
+    // Second pass: breach the ceiling on registered buckets rather than
+    // report a shortfall while registered money is available.
+    runBuckets(priority.filter((b) => b === "RRSP_RRIF" || b === "LIRA_LIF"), true);
   }
 
   return {

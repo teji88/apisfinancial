@@ -3,6 +3,7 @@ import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
 import { calculateBasicTax, calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
 import { planWithdrawalSequence } from "./WithdrawalEngine";
+import { CANADA_2026_PARAMETERS } from "../rules/canada2026";
 import { createAccountState, applyMonthlyReturn, mandatoryRegisteredWithdrawal, withdraw, withdrawNonRegistered, estimateNonRegisteredMonthlyIncome, applyAccountDeathTreatment, type AccountState } from "./AccountEngine";
 import { validateRetirementScenario } from "../validation/RetirementValidation";
 import { createDebtState, accrueDebtMonth, type DebtState } from "./DebtEngine";
@@ -20,13 +21,21 @@ function householdStageForMonth(people: PersonScenario[], ages: Partial<Record<P
     const deathAge = (person as PersonWithDeath).deathAge;
     return typeof deathAge !== "number" || (ages[person.role] ?? 0) < deathAge;
   });
-  return alive.length >= 2 ? "BOTH_ALIVE" : alive.length === 1 ? "SURVIVOR" : "ESTATE";
+  if (alive.length === 0) return "ESTATE";
+  // A lifelong single is not a "survivor" — survivor means a partner died.
+  // Only a household that started with 2+ people can enter the survivor stage.
+  if (people.length >= 2 && alive.length === 1) return "SURVIVOR";
+  return "BOTH_ALIVE";
 }
 
 function withdrawalOrder(policy: RetirementScenario["strategy"]["withdrawalPolicy"]): Array<"cash" | "nonRegistered" | "registered" | "tfsa"> {
   if (policy === "TFSA_FIRST") return ["tfsa", "cash", "nonRegistered", "registered"];
   if (policy === "NON_REGISTERED_FIRST") return ["nonRegistered", "cash", "registered", "tfsa"];
   if (policy === "REGISTERED_FIRST") return ["registered", "cash", "nonRegistered", "tfsa"];
+  // TAX_TARGETED: registered up to bracket/clawback ceiling, then non-reg, then TFSA.
+  // The ceiling logic is applied in the simulation; this order ensures registered
+  // is considered before non-registered.
+  if (policy === "TAX_TARGETED") return ["cash", "registered", "nonRegistered", "tfsa"];
   return ["cash", "nonRegistered", "registered", "tfsa"];
 }
 
@@ -88,6 +97,38 @@ function withdrawFromBucket(accounts: AccountState[], bucket: ReturnType<typeof 
     remaining -= part;
   }
   return taken;
+}
+
+/**
+ * Simplified withdrawal for quick mode: take from accounts in priority order
+ * without tax gross-up solving. Faster but less tax-efficient.
+ */
+function quickWithdrawalSequence(
+  netNeed: number,
+  priority: Array<"CASH" | "NON_REGISTERED" | "RRSP_RRIF" | "LIRA_LIF" | "TFSA">,
+  accounts: Array<{ id: string; type: string; balance: number }>,
+): { steps: Array<{ bucket: string; accountId: string; grossWithdrawal: number; netCash: number }> } {
+  let remaining = Math.max(0, netNeed);
+  const steps: Array<{ bucket: string; accountId: string; grossWithdrawal: number; netCash: number }> = [];
+  const bucketForType = (t: string): string => {
+    if (t === "CASH") return "CASH";
+    if (t === "NON_REGISTERED") return "NON_REGISTERED";
+    if (t === "TFSA") return "TFSA";
+    if (t === "LIRA" || t === "LIF") return "LIRA_LIF";
+    return "RRSP_RRIF";
+  };
+  for (const bucket of priority) {
+    if (remaining <= 0) break;
+    for (const account of accounts) {
+      if (remaining <= 0) break;
+      if (bucketForType(account.type) !== bucket) continue;
+      if (account.balance <= 0) continue;
+      const taken = Math.min(remaining, account.balance);
+      steps.push({ bucket, accountId: account.id, grossWithdrawal: taken, netCash: taken });
+      remaining -= taken;
+    }
+  }
+  return { steps };
 }
 
 export function runRetirementSimulation(
@@ -172,6 +213,7 @@ export function runRetirementSimulation(
   let yearTax = 0;
   let currentTax = 0;
   let cumulativeTaxLiability = 0;
+  let cumulativeOasRecovery = 0;
   const yearTaxInputs: Record<PersonRole, TaxIncomeComponents> = { MAIN_USER: {}, PARTNER: {} };
   let previousStage: "BOTH_ALIVE" | "SURVIVOR" | "ESTATE" = "BOTH_ALIVE";
 
@@ -195,6 +237,23 @@ export function runRetirementSimulation(
     const allRetired = alivePeople.length > 0 && alivePeople.every((person) => (ages[person.role] ?? 0) >= person.retirementAge);
 
     const calendarYear = date.getUTCFullYear();
+    // At age 71, RRSP converts to RRIF and LIRA converts to LIF (mandatory
+    // minimums apply from 71). Without this, minimums never trigger.
+    for (const account of accounts) {
+      const ownerAge = ages[account.owner] ?? 0;
+      if (ownerAge >= 71 && account.type === "RRSP") {
+        account.type = "RRIF";
+      } else if (ownerAge >= 71 && account.type === "LIRA") {
+        account.type = "LIF";
+      }
+    }
+    // Year-specific return override (sequence-of-returns stress tests)
+    const overrideReturn = scenario.assumptions.annualReturnOverrides?.[calendarYear];
+    // Use working-years return before retirement, retirement return after.
+    const baseReturn = !retired && scenario.assumptions.workingInvestmentReturn !== undefined
+      ? scenario.assumptions.workingInvestmentReturn
+      : scenario.assumptions.investmentReturn;
+    const effectiveReturn = overrideReturn ?? baseReturn;
     for (const account of accounts) {
       if (account.minimumReferenceYear !== calendarYear && (account.type === "RRIF" || account.type === "LIF")) {
         account.minimumReferenceBalance = account.balance;
@@ -203,7 +262,7 @@ export function runRetirementSimulation(
       const beforeReturn = account.balance;
       account.balance = applyMonthlyReturn(
         account.balance,
-        scenario.assumptions.investmentReturn,
+        effectiveReturn,
         scenario.assumptions.investmentFeeRate,
       );
       investmentGrowthThisMonth += account.balance - beforeReturn;
@@ -241,6 +300,10 @@ export function runRetirementSimulation(
 
     let benefits = 0;
     const benefitSources = { cpp: 0, oas: 0, gis: 0, allowance: 0 };
+    const benefitsByPerson: Record<PersonRole, { cpp: number; oas: number; gis: number }> = {
+      MAIN_USER: { cpp: 0, oas: 0, gis: 0 },
+      PARTNER: { cpp: 0, oas: 0, gis: 0 },
+    };
     let taxableBenefits = 0;
     let otherIncome = 0;
     let nonRegisteredInvestmentIncome = 0;
@@ -334,6 +397,9 @@ export function runRetirementSimulation(
         benefitSources.oas += monthlyOas;
         benefitSources.gis += monthlyGis;
         benefitSources.allowance += monthlyAllowance;
+        benefitsByPerson[person.role].cpp += monthlyCpp;
+        benefitsByPerson[person.role].oas += monthlyOas;
+        benefitsByPerson[person.role].gis += monthlyGis;
         taxableBenefits += monthlyCpp + monthlyOas;
         monthlyTaxInputs[person.role].cpp = (monthlyTaxInputs[person.role].cpp ?? 0) + monthlyCpp;
         monthlyTaxInputs[person.role].oas = (monthlyTaxInputs[person.role].oas ?? 0) + monthlyOas;
@@ -393,10 +459,18 @@ export function runRetirementSimulation(
     let withdrawals = mandatoryTaken + investmentIncomeDistributed;
     const withdrawalSources = {
       registered: mandatoryTaken,
+      lira: 0,
       tfsa: 0,
       nonRegistered: investmentIncomeDistributed,
       cash: 0,
     };
+    const withdrawalsByPerson: Record<PersonRole, { registered: number; lira: number; tfsa: number; nonRegistered: number }> = {
+      MAIN_USER: { registered: 0, lira: 0, tfsa: 0, nonRegistered: 0 },
+      PARTNER: { registered: 0, lira: 0, tfsa: 0, nonRegistered: 0 },
+    };
+    // Seed with mandatory withdrawals (tracked by owner)
+    withdrawalsByPerson.MAIN_USER.registered = mandatoryByOwner.MAIN_USER;
+    withdrawalsByPerson.PARTNER.registered = mandatoryByOwner.PARTNER;
     let taxableWithdrawals = taxableMandatory;
 
     const registeredWithdrawalsByOwner: Record<PersonRole, number> = { MAIN_USER: 0, PARTNER: 0 };
@@ -430,13 +504,18 @@ export function runRetirementSimulation(
       }
     }
 
-    const sequencePriority = withdrawalOrder(scenario.strategy.withdrawalPolicy).map((bucket) => {
-      if (bucket === "cash") return "CASH" as const;
-      if (bucket === "nonRegistered") return "NON_REGISTERED" as const;
-      if (bucket === "registered") return "RRSP_RRIF" as const;
-      return "TFSA" as const;
+    const sequencePriority = withdrawalOrder(scenario.strategy.withdrawalPolicy).flatMap((bucket) => {
+      if (bucket === "cash") return ["CASH" as const];
+      if (bucket === "nonRegistered") return ["NON_REGISTERED" as const];
+      // Registered covers both RRSP/RRIF and LIRA/LIF — LIRA must not be invisible to the solver.
+      if (bucket === "registered") return ["RRSP_RRIF" as const, "LIRA_LIF" as const];
+      return ["TFSA" as const];
     });
-    const sequence = planWithdrawalSequence({
+    // Quick mode: simple fixed-order withdrawal without tax optimization.
+    // Takes from accounts in priority order, no gross-up solving.
+    const sequence = scenario.quick
+      ? quickWithdrawalSequence(remainingNeed, sequencePriority, accounts)
+      : planWithdrawalSequence({
       netNeed: remainingNeed,
       taxInputs: taxBaseByOwner,
       province: scenario.household.province,
@@ -444,6 +523,12 @@ export function runRetirementSimulation(
       spouseAge: ages.PARTNER,
       pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
       priority: sequencePriority,
+      // TAX_TARGETED: cap registered meltdown at the OAS clawback ceiling (+ tolerance)
+      applyClawbackCeiling: scenario.strategy.withdrawalPolicy === "TAX_TARGETED",
+      oasClawbackThreshold: CANADA_2026_PARAMETERS.oasRecovery.startIncome *
+        Math.pow(1 + Math.max(0, scenario.assumptions.inflationRate) / 100, Math.max(0, calendarYear - 2026)),
+      clawbackTolerance: (scenario.strategy.clawbackTolerance ?? 0) *
+        Math.pow(1 + Math.max(0, scenario.assumptions.inflationRate) / 100, Math.max(0, calendarYear - 2026)),
       owners: accounts
         .filter((account) => account.balance > 0)
         .map((account) => ({
@@ -508,14 +593,22 @@ export function runRetirementSimulation(
 
       if (taken <= 0) continue;
       withdrawals += taken;
-      if (step.bucket === "RRSP_RRIF" || step.bucket === "LIRA_LIF") {
+      if (step.bucket === "RRSP_RRIF") {
         withdrawalSources.registered += taken;
         taxableWithdrawals += taken;
         registeredWithdrawalsByOwner[account.owner] += taken;
+        withdrawalsByPerson[account.owner].registered += taken;
+      } else if (step.bucket === "LIRA_LIF") {
+        withdrawalSources.lira += taken;
+        taxableWithdrawals += taken;
+        registeredWithdrawalsByOwner[account.owner] += taken;
+        withdrawalsByPerson[account.owner].lira += taken;
       } else if (step.bucket === "TFSA") {
         withdrawalSources.tfsa += taken;
+        withdrawalsByPerson[account.owner].tfsa += taken;
       } else if (step.bucket === "NON_REGISTERED") {
         withdrawalSources.nonRegistered += taken;
+        withdrawalsByPerson[account.owner].nonRegistered += taken;
       } else if (step.bucket === "CASH") {
         withdrawalSources.cash += taken;
       }
@@ -550,6 +643,8 @@ export function runRetirementSimulation(
       payerAge: ages.MAIN_USER ?? 65,
       spouseAge: ages.PARTNER ?? 65,
       pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
+      taxYear: calendarYear,
+      inflationRate: scenario.assumptions.inflationRate,
     });
     // The household tax engine calculates liability on the income accumulated
     // so far in the current tax year. Cash-flow reporting must therefore use
@@ -558,6 +653,8 @@ export function runRetirementSimulation(
     const householdTaxLiability = householdTax.householdTax;
     currentTax = Math.max(0, householdTaxLiability - cumulativeTaxLiability);
     cumulativeTaxLiability = householdTaxLiability;
+    const currentOasRecovery = Math.max(0, (householdTax.oasRecovery ?? 0) - cumulativeOasRecovery);
+    cumulativeOasRecovery = householdTax.oasRecovery ?? 0;
 
     const yearEnd = date.getUTCMonth() === 11;
     if (yearEnd) {
@@ -571,6 +668,7 @@ export function runRetirementSimulation(
       yearTaxInputs.MAIN_USER = {};
       yearTaxInputs.PARTNER = {};
       cumulativeTaxLiability = 0;
+      cumulativeOasRecovery = 0;
     }
 
     if (stage === "SURVIVOR" && previousStage === "BOTH_ALIVE") {
@@ -609,7 +707,7 @@ export function runRetirementSimulation(
         const treatment = applyAccountDeathTreatment(account, hasSpouse, scenarioAccount?.nonRegisteredAcb ?? 0, transfer);
         const deathTaxableIncome = treatment.taxableAtDeath + treatment.taxableCapitalGainAtDeath;
         deathCapitalGains += treatment.capitalGainAtDeath;
-        deathTax += calculateBasicTax(deathTaxableIncome, scenario.household.province, maxAge).totalTax;
+        deathTax += calculateBasicTax(deathTaxableIncome, scenario.household.province, maxAge, calendarYear, scenario.assumptions.inflationRate).totalTax;
         estateGross += treatment.estateValue + treatment.transferredToSurvivor;
         account.balance = treatment.estateValue;
       }
@@ -653,6 +751,7 @@ export function runRetirementSimulation(
       grossIncome: benefits + otherIncome,
       withdrawals,
       taxes: currentTax + deathTax,
+      oasRecovery: currentOasRecovery,
       spending: targetSpending,
       debtPayments,
       endingPortfolio: portfolio,
@@ -665,6 +764,7 @@ export function runRetirementSimulation(
       grossIncome: benefits + otherIncome,
       withdrawals,
       taxes: currentTax + deathTax,
+      oasRecovery: currentOasRecovery,
       spending: targetSpending,
       debtPayments,
       debtPrincipal,
@@ -676,12 +776,16 @@ export function runRetirementSimulation(
       endingDebt: debtBalance,
     });
 
+    const liraBalance = accounts
+      .filter((a) => a.type === "LIRA" || a.type === "LIF")
+      .reduce((sum, a) => sum + a.balance, 0);
     monthly.push({
       date: date.toISOString(),
       ages,
       householdStage: stage,
       portfolio,
-      registered: sumBucket(accounts, "registered"),
+      registered: sumBucket(accounts, "registered") - liraBalance,
+      lira: liraBalance,
       tfsa: sumBucket(accounts, "tfsa"),
       nonRegistered: sumBucket(accounts, "nonRegistered"),
       cash: sumBucket(accounts, "cash"),
@@ -691,9 +795,12 @@ export function runRetirementSimulation(
       grossIncome: benefits + otherIncome + withdrawals,
       benefits,
       benefitSources,
+      benefitsByPerson,
       withdrawals,
       withdrawalSources,
+      withdrawalsByPerson,
       taxes: currentTax + deathTax,
+      oasRecovery: currentOasRecovery,
       spending: targetSpending,
       debtPayments,
       debtInterest,
@@ -707,6 +814,7 @@ export function runRetirementSimulation(
         grossIncome: benefits + otherIncome,
         grossWithdrawals: withdrawals,
         taxes: currentTax + deathTax,
+      oasRecovery: currentOasRecovery,
         spending: targetSpending,
         debtPayments,
         endingPortfolio: portfolio,
@@ -719,8 +827,6 @@ export function runRetirementSimulation(
         netWorthReconciliation: financialLedger.netWorthReconciliation,
       },
     });
-
-    if (allRetired) spending *= 1 + monthlyInflation;
   }
 
   const endingPortfolio = monthly.at(-1)?.portfolio ?? startingPortfolio;
