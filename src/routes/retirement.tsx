@@ -37,6 +37,7 @@ import { formatCad, summariseAccount } from "@/lib/finance";
 import {
   cppPercentFromEarnings,
   cppFromDetailedHistory,
+  cppPrbInfo,
   oasFractionFromResidence,
   oasAt,
   CPP_MAX_MONTHLY_65,
@@ -392,11 +393,24 @@ function RetirementPage() {
       futureYears: Math.max(0, Math.min(spouseRetire, 65) - spouseAge),
     });
     const annual = (pct: number) => (CPP_MAX_MONTHLY_65 * 12 * pct) / 100;
+    // PRB info: only when working while collecting CPP (retirement > CPP start)
+    let selfPrb = { monthly: 0, annual: 0, years: [] as number[] };
+    if (p.cpp_detailed_history && p.cpp_detailed_history.length > 0) {
+      selfPrb = cppPrbInfo(
+        (new Date().getFullYear() - currentAge),
+        p.cpp_detailed_history,
+        p.cpp_detailed_future_earnings ?? 0,
+        p.cpp_detailed_child_rearing ?? [],
+        retireAge,
+        p.cpp_start_age ?? 65,
+      );
+    }
     return {
       selfPct,
       spousePct,
       selfCpp65: annual(selfPct),
       spouseCpp65: annual(spousePct),
+      selfPrb,
       selfOasFraction: oasFractionFromResidence(p.oas_years_in_canada ?? 40),
       spouseOasFraction: oasFractionFromResidence(p.spouse_oas_years_in_canada ?? 40),
     };
@@ -872,6 +886,9 @@ function RetirementPage() {
               oasStart={p.oas_start_age ?? 65}
               oasAnnual={selfOas}
               oasYears={p.oas_years_in_canada ?? 40}
+              prbAnnual={derived.selfPrb.annual}
+              prbYears={derived.selfPrb.years}
+              retirementAge={p.target_retirement_age ?? 65}
             />
             {married ? (
               <BenefitCard
@@ -1561,6 +1578,9 @@ function BenefitCard({
   oasStart,
   oasAnnual,
   oasYears,
+  prbAnnual,
+  prbYears,
+  retirementAge,
 }: {
   title: string;
   cppPct: number;
@@ -1569,6 +1589,9 @@ function BenefitCard({
   oasStart: number;
   oasAnnual: number;
   oasYears: number;
+  prbAnnual?: number;
+  prbYears?: number[];
+  retirementAge?: number;
 }) {
   return (
     <div className="panel space-y-3 p-5">
@@ -1590,6 +1613,19 @@ function BenefitCard({
         <p className="text-xs text-muted-foreground">
           {Math.min(40, Math.max(0, oasYears))} of 40 years of Canadian residence.
         </p>
+        {prbAnnual !== undefined && prbAnnual > 0 && prbYears && prbYears.length > 0 && (
+          <div className="mt-3 rounded-lg border border-accent/40 bg-accent/10 p-3 text-xs">
+            <p className="font-medium text-foreground">
+              Working while collecting CPP: +{formatCad(prbAnnual)}/yr in post-retirement benefits
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              You set CPP to start at {cppStart} but retirement at {retirementAge}. That means{" "}
+              {prbYears.length} year{prbYears.length > 1 ? "s" : ""} of contributions while receiving CPP,{" "}
+              each earning a post-retirement benefit that stacks on top of your base CPP for life.{" "}
+              We've added {formatCad(prbAnnual)}/yr to your projected CPP income.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
