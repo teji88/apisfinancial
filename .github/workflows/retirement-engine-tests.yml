@@ -1,0 +1,28 @@
+name: Retirement Engine Tests
+
+on:
+  push:
+    branches:
+      - retirement-rebuild-step26
+  pull_request:
+    branches:
+      - retirement-rebuild-step26
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-package-lock
+
+      - name: Run tests
+        run: npm test

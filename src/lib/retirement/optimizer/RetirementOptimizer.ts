@@ -1,4 +1,3 @@
-// @ts-nocheck -- work in progress: depends on retirement modules not yet added.
 import type { RetirementScenario, OptimizationResult, StrategyPreferences } from "../domain/types";
 import { runRetirementSimulation } from "../engines/SimulationCoordinator";
 
@@ -48,14 +47,18 @@ function applyVariable(s: RetirementScenario, path: OptimizationVariable["path"]
   return next;
 }
 
-function violations(m: Candidate["metrics"], c: OptimizationConstraints): string[] {
+function ageAtDate(birthYear: number, birthMonth: number, isoDate: string): number {
+  const date = new Date(isoDate);
+  return date.getUTCFullYear() - birthYear - (date.getUTCMonth() + 1 < birthMonth ? 1 : 0);
+}
+
+function violations(scenario: RetirementScenario, m: Candidate["metrics"], c: OptimizationConstraints): string[] {
   const out: string[] = [];
   if (c.minimumEstate !== undefined && m.endingPortfolio < c.minimumEstate) out.push("minimumEstate");
   if (c.maximumShortfall !== undefined && m.maximumSpendingShortfall > c.maximumShortfall) out.push("maximumShortfall");
   if (c.maximumDepletionAge !== undefined && m.depletionDate) {
-    const depletionYear = new Date(m.depletionDate).getUTCFullYear();
-    const birthYear = new Date().getUTCFullYear() - 65;
-    if (depletionYear - birthYear < c.maximumDepletionAge) out.push("maximumDepletionAge");
+    const person = scenario.household.people[0];
+    if (person && ageAtDate(person.birthYear, person.birthMonth, m.depletionDate) < c.maximumDepletionAge) out.push("maximumDepletionAge");
   }
   if (c.minimumSpending !== undefined && m.lifetimeSpending < c.minimumSpending) out.push("minimumSpending");
   return out;
@@ -72,10 +75,17 @@ function objectiveValue(m: Candidate["metrics"], objective: StrategyPreferences[
   }
 }
 
-function dominates(a: Candidate, b: Candidate): boolean {
-  if (a.violations.length !== 0 && b.violations.length === 0) return false;
-  if (a.violations.length === 0 && b.violations.length !== 0) return true;
-  return a.objectiveValue >= b.objectiveValue;
+function multiObjectiveDominates(a: Candidate, b: Candidate): boolean {
+  if (a.violations.length < b.violations.length) return true;
+  if (a.violations.length > b.violations.length) return false;
+  const av = [a.metrics.lifetimeSpending, a.metrics.lifetimeAfterTaxCash, a.metrics.endingPortfolio, a.metrics.minimumPortfolio, -a.metrics.lifetimeTax, -a.metrics.maximumSpendingShortfall];
+  const bv = [b.metrics.lifetimeSpending, b.metrics.lifetimeAfterTaxCash, b.metrics.endingPortfolio, b.metrics.minimumPortfolio, -b.metrics.lifetimeTax, -b.metrics.maximumSpendingShortfall];
+  let strictlyBetter = false;
+  for (let i = 0; i < av.length; i++) {
+    if (av[i] < bv[i]) return false;
+    if (av[i] > bv[i]) strictlyBetter = true;
+  }
+  return strictlyBetter;
 }
 
 export function optimizeRetirementPlan(problem: OptimizationProblem): OptimizationResult {
@@ -93,8 +103,12 @@ export function optimizeRetirementPlan(problem: OptimizationProblem): Optimizati
     if (candidates.length >= maxCandidates) return;
     if (index === variables.length) {
       const sim = runRetirementSimulation(scenario, problem.startingPortfolio, problem.startYear, problem.portfolioByType);
-      const candidate: Candidate = { scenario, metrics: sim.metrics, objectiveValue: objectiveValue(sim.metrics, objective), violations: violations(sim.metrics, problem.constraints ?? {}) };
-      candidates.push(candidate);
+      candidates.push({
+        scenario,
+        metrics: sim.metrics,
+        objectiveValue: objectiveValue(sim.metrics, objective),
+        violations: violations(scenario, sim.metrics, problem.constraints ?? {}),
+      });
       return;
     }
     for (const value of variables[index].values) walk(index + 1, applyVariable(scenario, variables[index].path, value));
@@ -103,18 +117,22 @@ export function optimizeRetirementPlan(problem: OptimizationProblem): Optimizati
 
   const feasible = candidates.filter(c => c.violations.length === 0);
   const pool = feasible.length ? feasible : candidates;
-  const pareto = pool.filter((a, i) => !pool.some((b, j) => i !== j && dominates(b, a)));
+  const pareto = pool.filter((a, i) => !pool.some((b, j) => i !== j && multiObjectiveDominates(b, a)));
   const selected = [...pool].sort((a, b) => b.objectiveValue - a.objectiveValue)[0];
 
   return {
+    candidates,
     feasiblePlans: feasible.map(c => c.scenario),
     paretoFrontier: pareto.map(c => c.scenario),
+    paretoCandidates: pareto,
     selectedPlan: selected?.scenario,
+    selectedCandidate: selected,
     objective,
     constraints: [
       { name: "feasible", satisfied: feasible.length > 0, value: feasible.length, limit: 1 },
       ...(problem.constraints?.minimumEstate !== undefined ? [{ name: "minimumEstate", satisfied: feasible.some(c => !c.violations.includes("minimumEstate")), limit: problem.constraints.minimumEstate }] : []),
       ...(problem.constraints?.maximumShortfall !== undefined ? [{ name: "maximumShortfall", satisfied: feasible.some(c => !c.violations.includes("maximumShortfall")), limit: problem.constraints.maximumShortfall }] : []),
+      ...(problem.constraints?.maximumDepletionAge !== undefined ? [{ name: "maximumDepletionAge", satisfied: feasible.some(c => !c.violations.includes("maximumDepletionAge")), limit: problem.constraints.maximumDepletionAge }] : []),
     ],
   };
 }

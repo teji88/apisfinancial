@@ -1,1493 +1,974 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useAuth } from "@/hooks/useAuth";
-import { ApisLogo } from "@/components/brand/ApisLogo";
-import { AppHeader } from "@/routes/_authenticated/route";
-import { PENDING_PLAN_KEY } from "@/lib/pending-plan";
-import { useMemo, useState, useEffect, useRef } from "react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  ComposedChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
-  CalendarClock,
-  Coins,
-  Landmark,
-  PiggyBank,
-  ShieldCheck,
-  Wallet,
-  TriangleAlert,
-} from "lucide-react";
-import { toast } from "sonner";
-import { usePortfolio } from "@/lib/portfolio";
-import { useProfile, useUpdateProfile, type Profile } from "@/lib/profile";
-import { formatCad, summariseAccount } from "@/lib/finance";
-import {
-  earliestRetirementAge,
-  projectRetirement,
-  cppPercentFromEarnings,
-  oasFractionFromResidence,
-  oasAt,
-  CPP_MAX_MONTHLY_65,
-  compareWithdrawalStrategies,
-  WITHDRAWAL_POLICIES,
-  type WithdrawalPolicy,
-  type StrategyObjective,
-  type PersonSpec,
-  type PlannerInputs,
-} from "@/lib/retirement";
-
-import { PROVINCES, PROVINCE_CODES, type ProvinceCode } from "@/lib/tax";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { BarChart3, FileText, Settings2, ShieldCheck, WalletCards } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Lock } from "lucide-react";
-import { useEntitlement } from "@/lib/entitlement";
-import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatCad, summariseAccount } from "@/lib/finance";
+import { usePortfolio } from "@/lib/portfolio";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  buildRetirementOverview,
+  buildRetirementAnalysis,
+  createDefaultRetirementScenario,
+  retirementStore,
+  runBasicSimulation,
+  runStressTests,
+  summarizeStressTests,
+  DEFAULT_STRESS_TESTS,
+  scenarioStatusText,
+  buildRetirementReport,
+  serializeRetirementReport,
+  buildPrintableRetirementReport,
+  type ScenarioStressTestResult,
+  type ScenarioSummary,
+  type RetirementScenario,
+  type SimulationResult,
+  type OptimizationResult,
+} from "@/lib/retirement/index";
 
 export const Route = createFileRoute("/retirement")({
   staticData: { sitemap: true },
   head: () => ({
     meta: [
-      { title: "Retirement Planner — Apis Financial" },
-      {
-        name: "description",
-        content:
-          "Canadian retirement planning with 2026 federal and provincial tax brackets, CPP from your earnings history, OAS from your years in Canada, RRIF minimums and a tax-efficient household withdrawal plan.",
-      },
-      { property: "og:title", content: "Retirement Planner — Apis Financial" },
-      {
-        property: "og:description",
-        content:
-          "Find out when you can retire and see a tax-efficient drawdown plan year by year, to age 95.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      { title: "Retirement — Apis Financial" },
+      { name: "description", content: "Canadian retirement planning, simulation and strategy analysis." },
     ],
   }),
   component: RetirementPage,
 });
 
-const TFSA_TYPES = ["TFSA"];
-const RRSP_TYPES = ["RRSP", "Spousal RRSP"];
-const LIRA_TYPES = ["LIRA", "LRSP"];
-const FHSA_TYPES = ["FHSA"];
-const NONREG_TYPES = ["Non-Registered", "Corporate"];
-
-function num(v: string, fallback = 0) {
-  const cleaned = v.replace(/[^0-9.-]/g, "");
-  if (!cleaned) return fallback;
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-const CPP_AGE_OPTIONS = [...Array.from({ length: 11 }, (_, index) => ({ age: 60 + index }))];
-
-const OAS_AGE_OPTIONS = [...Array.from({ length: 6 }, (_, index) => ({ age: 65 + index }))];
-
-function AgeSelect({
-  value,
-  options,
-  onChange,
-}: {
-  value: number;
-  options: { age: number }[];
-  onChange: (age: number) => void;
-}) {
-  return (
-    <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
-      <SelectTrigger>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => (
-          <SelectItem key={o.age} value={String(o.age)}>
-            {`Age ${o.age}`}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-/** Keep intermediate keystrokes local so clearing/replacing a multi-digit age works. */
-function RetirementAgeInput({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (age: number) => void;
-}) {
-  const [draft, setDraft] = useState(String(value));
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (document.activeElement !== inputRef.current) setDraft(String(value));
-  }, [value]);
-
-  const commit = () => {
-    const entered = draft.trim();
-    if (!entered) {
-      setDraft(String(value));
-      return;
-    }
-    const age = Math.round(Number(entered));
-    if (!Number.isFinite(age)) {
-      setDraft(String(value));
-      return;
-    }
-    onChange(age);
-    setDraft(String(age));
-  };
-
-  return (
-    <Input
-      ref={inputRef}
-      type="number"
-      step="1"
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") event.currentTarget.blur();
-      }}
-    />
-  );
-}
-
-const GUEST_PROFILE: Profile = {
-  id: "guest",
-  display_name: null,
-  base_currency: "CAD",
-  province: "ON",
-  current_age: 45,
-  target_retirement_age: 65,
-  inflation_rate: 2.5,
-  growth_rate: 6,
-  working_growth_rate: 6,
-  retirement_growth_rate: 4.5,
-  life_expectancy: 95,
-  marital_status: "Single",
-  spouse_age: null,
-  spouse_rrsp: 0,
-  spouse_tfsa: 0,
-  spouse_income: 0,
-  desired_income: 60000,
-  cpp_start_age: 65,
-  cpp_pct: 75,
-  oas_start_age: 65,
-  manual_override: true,
-  override_tfsa: 75000,
-  override_rrsp: 150000,
-  override_lira: 0,
-  override_fhsa: 0,
-  override_nonreg: 25000,
-  annual_savings: 12000,
-  save_pct_tfsa: 40,
-  save_pct_rrsp: 40,
-  save_pct_nonreg: 20,
-  cpp_avg_income: 60000,
-  cpp_years_worked: 23,
-  cpp_future_income: 60000,
-  oas_years_in_canada: 40,
-  spouse_retirement_age: null,
-  spouse_cpp_avg_income: 0,
-  spouse_cpp_years_worked: 0,
-  spouse_cpp_future_income: 0,
-  spouse_oas_years_in_canada: 40,
-  spouse_cpp_start_age: 65,
-  spouse_oas_start_age: 65,
-  spouse_lira: 0,
-  spouse_nonreg: 0,
-};
+type Section = "overview" | "plan" | "scenarios" | "analysis" | "reports";
 
 function RetirementPage() {
-  const { session, loading: authLoading } = useAuth();
-  const isGuest = !authLoading && !session;
-  const navigate = useNavigate();
   const { accounts, holdings, transactions, quotes, fxUsdCad, loading } = usePortfolio();
-  const profileQuery = useProfile();
-  const updateProfile = useUpdateProfile();
+  const [section, setSection] = useState<Section>("overview");
+  const [scenario, setScenario] = useState<RetirementScenario | null>(null);
+  const [result, setResult] = useState<SimulationResult | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [stressResults, setStressResults] = useState<ScenarioStressTestResult | null>(null);
+  const [optimization, setOptimization] = useState<OptimizationResult | null>(null);
+  const [optimizing, setOptimizing] = useState(false);
 
-  const { entitlement } = useEntitlement();
-  // Every planning control is free now — nothing on this page is locked.
-  const isPro: boolean = true;
-  const isProPlus: boolean = true;
-  const [proPromptOpen, setProPromptOpen] = useState(false);
-  const [promptReason] = useState<string>("");
-  const PRO_REASON = "Everything in the retirement planner is free.";
-  const PLUS_REASON = PRO_REASON;
-  const openPrompt = (_reason: string) => setProPromptOpen(true);
-  const lockProps = {};
-  const plusProps = {};
-  void entitlement;
-  void PLUS_REASON;
-  void openPrompt;
-
-
-
-  const [form, setForm] = useState<Profile | null>(null);
-  /** Bounded income overshoot allowed above the effective ceiling, today's CAD. */
-  const [clawbackTolerance, setClawbackTolerance] = useState(0);
-  const [policy, setPolicy] = useState<WithdrawalPolicy>("TAX_TARGETED");
-  const [objective, setObjective] = useState<StrategyObjective>("MIN_TAX");
-
-
-  useEffect(() => {
-    if (authLoading || form) return;
-    if (isGuest) {
-      const stored = window.localStorage.getItem(PENDING_PLAN_KEY);
-      setForm(stored ? { ...GUEST_PROFILE, ...(JSON.parse(stored) as Partial<Profile>) } : GUEST_PROFILE);
-      return;
-    }
-    if (!profileQuery.data) return;
-    const stored = window.localStorage.getItem(PENDING_PLAN_KEY);
-    if (stored) {
-      // A plan built before signing in: write it to the new profile.
-      const pending = JSON.parse(stored) as Partial<Profile>;
-      window.localStorage.removeItem(PENDING_PLAN_KEY);
-      setForm({ ...profileQuery.data, ...pending });
-      updateProfile.mutate(pending, {
-        onSuccess: () => toast.success("Your retirement plan is saved to your account"),
-        onError: (e) => toast.error((e as Error).message),
-      });
-      return;
-    }
-    setForm(profileQuery.data);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileQuery.data, form, authLoading, isGuest]);
-
-  const byType = useMemo(() => {
-    const sums: Record<string, number> = {};
-    for (const a of accounts) {
-      const s = summariseAccount(
-        a,
-        transactions.filter((t) => t.account_id === a.id),
-        holdings.filter((h) => h.account_id === a.id),
+  const portfolio = useMemo(() => {
+    const byType: Record<string, number> = {};
+    const accountValues: Record<string, { value: number; name: string; type: string; owner: "MAIN_USER" | "PARTNER" }> = {};
+    let total = 0;
+    for (const account of accounts) {
+      const summary = summariseAccount(
+        account,
+        transactions.filter((t) => t.account_id === account.id),
+        holdings.filter((h) => h.account_id === account.id),
         quotes,
         fxUsdCad,
       );
-      const value = s.marketValue + Math.max(0, s.cash);
-      sums[a.account_type] = (sums[a.account_type] ?? 0) + value;
+      const value = Math.max(0, summary.marketValue + Math.max(0, summary.cash));
+      const owner = account.owner_type === "partner" ? "PARTNER" : "MAIN_USER";
+      accountValues[account.id] = { value, name: account.account_name, type: account.account_type, owner };
+      byType[account.account_type] = (byType[account.account_type] ?? 0) + value;
+      total += value;
     }
-    const pick = (types: string[]) => types.reduce((t, k) => t + (sums[k] ?? 0), 0);
-    return {
-      tfsa: pick(TFSA_TYPES),
-      rrsp: pick(RRSP_TYPES),
-      lira: pick(LIRA_TYPES),
-      fhsa: pick(FHSA_TYPES),
-      nonreg: pick(NONREG_TYPES),
-    };
-  }, [accounts, transactions, holdings, quotes, fxUsdCad]);
+    return { total, byType, accountValues };
+  }, [accounts, holdings, transactions, quotes, fxUsdCad]);
 
-  // Free plans run on the standard assumptions; saved values are kept untouched
-  // so they come back the moment the plan is upgraded.
-  const p: Profile | null = useMemo(() => {
-    if (!form) return null;
-    if (isPro) return form;
-    return {
-      ...form,
-      target_retirement_age: 65,
-      cpp_start_age: 65,
-      oas_start_age: 65,
-      inflation_rate: 2.5,
-      growth_rate: 10,
-      life_expectancy: 95,
-      marital_status: "Single",
-      manual_override: false,
-      desired_income: form.desired_income ?? 60000,
-    };
-  }, [form, isPro]);
+  useEffect(() => {
+    let cancelled = false;
+    retirementStore.listScenarios().then(async (items) => {
+      if (cancelled || !items[0]) return;
+      setScenario(items[0]);
+      const savedResults = await Promise.all(
+        items.slice(0, 3).map((item) => retirementStore.getResult(item.metadata.scenarioHash ?? "").catch(() => null)),
+      );
+      if (!cancelled) setResult(savedResults.find(Boolean) ?? null);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
-  const balances = useMemo(() => {
-    // RESP and RDSP money belongs to the child or the beneficiary and is taxed
-    // in their hands, so it never joins your own retirement pots.
-    if (p?.manual_override) {
-      return {
-        tfsa: p.override_tfsa ?? 0,
-        rrsp: (p.override_rrsp ?? 0) + (p.override_fhsa ?? 0),
-        lira: p.override_lira ?? 0,
-        nonreg: p.override_nonreg ?? 0,
-      };
+  const activeScenario = scenario ?? createDefaultRetirementScenario();
+
+  useEffect(() => {
+    if (!scenario || accounts.length === 0) return;
+    const retirementTypes = new Set(["TFSA", "RRSP", "Spousal RRSP", "LIRA", "LRSP", "Non-Registered"]);
+    const existing = new Map(scenario.accounts.map((a) => [a.id, a]));
+    const nextAccounts = accounts
+      .filter((account) => retirementTypes.has(account.account_type))
+      .map((account) => {
+        const current = existing.get(account.id);
+        const tracked = portfolio.accountValues[account.id];
+        const type = account.account_type === "TFSA" ? "TFSA"
+          : account.account_type === "RRSP" || account.account_type === "Spousal RRSP" ? "RRSP"
+          : account.account_type === "LIRA" || account.account_type === "LRSP" ? "LIRA"
+          : "NON_REGISTERED";
+        return current ?? {
+          id: account.id,
+          owner: tracked?.owner ?? "MAIN_USER",
+          type,
+          valuation: { mode: "SNAPSHOT" as const, linkedValue: tracked?.value ?? 0, snapshotDate: new Date().toISOString().slice(0, 10) },
+        };
+      });
+    const changed = nextAccounts.length !== scenario.accounts.length ||
+      nextAccounts.some((next) => {
+        const old = existing.get(next.id);
+        return !old || old.valuation.mode === "SNAPSHOT" && old.valuation.linkedValue !== portfolio.accountValues[next.id]?.value;
+      });
+    if (changed) setScenario({ ...scenario, accounts: nextAccounts });
+  }, [accounts, portfolio.accountValues, scenario]);
+  const overview = buildRetirementOverview(result, activeScenario);
+
+  const runOptimization = async () => {
+    setOptimizing(true);
+    try {
+      const { optimizeRetirementPlan } = await import("@/lib/retirement/index");
+      const next = optimizeRetirementPlan({
+        scenario: activeScenario,
+        startingPortfolio: portfolio.total,
+        startYear: new Date().getUTCFullYear(),
+        portfolioByType: portfolio.byType,
+      });
+      setOptimization(next);
+    } finally {
+      setOptimizing(false);
     }
-    return {
-      tfsa: byType.tfsa,
-      rrsp: byType.rrsp + byType.fhsa,
-      lira: byType.lira,
-      nonreg: byType.nonreg,
-    };
-  }, [p, byType]);
-
-
-  const derived = useMemo(() => {
-    if (!p) return null;
-    const currentAge = p.current_age ?? 40;
-    const retireAge = p.target_retirement_age ?? 65;
-    const selfPct = cppPercentFromEarnings({
-      pastAverageIncome: p.cpp_avg_income ?? 0,
-      yearsWorked: p.cpp_years_worked ?? 0,
-      futureIncome: p.cpp_future_income ?? 0,
-      futureYears: Math.max(0, Math.min(retireAge, 65) - currentAge),
-    });
-    const spouseAge = p.spouse_age ?? currentAge;
-    const spouseRetire = p.spouse_retirement_age ?? retireAge;
-    const spousePct = cppPercentFromEarnings({
-      pastAverageIncome: p.spouse_cpp_avg_income ?? 0,
-      yearsWorked: p.spouse_cpp_years_worked ?? 0,
-      futureIncome: p.spouse_cpp_future_income ?? 0,
-      futureYears: Math.max(0, Math.min(spouseRetire, 65) - spouseAge),
-    });
-    const annual = (pct: number) => (CPP_MAX_MONTHLY_65 * 12 * pct) / 100;
-    return {
-      selfPct,
-      spousePct,
-      selfCpp65: annual(selfPct),
-      spouseCpp65: annual(spousePct),
-      selfOasFraction: oasFractionFromResidence(p.oas_years_in_canada ?? 40),
-      spouseOasFraction: oasFractionFromResidence(p.spouse_oas_years_in_canada ?? 40),
-    };
-  }, [p]);
-
-  const inputs: PlannerInputs | null = useMemo(() => {
-    if (!p || !derived) return null;
-    const province = (PROVINCE_CODES as string[]).includes(p.province ?? "")
-      ? (p.province as ProvinceCode)
-      : "AB";
-    const married = (p.marital_status ?? "Single") !== "Single";
-    const currentAge = p.current_age ?? 40;
-    const retireAge = p.target_retirement_age ?? 65;
-
-    const self: PersonSpec = {
-      label: "You",
-      age: currentAge,
-      retirementAge: retireAge,
-      cppStartAge: p.cpp_start_age ?? 65,
-      cppAt65: derived.selfCpp65,
-      oasStartAge: p.oas_start_age ?? 65,
-      oasFraction: derived.selfOasFraction,
-      otherIncome: 0,
-      balances: { ...balances },
-      nonregGainRatio: 0.4,
-    };
-
-    const spouse: PersonSpec | null = married
-      ? {
-          label: "Spouse",
-          age: p.spouse_age ?? currentAge,
-          retirementAge: p.spouse_retirement_age ?? retireAge,
-          cppStartAge: p.spouse_cpp_start_age ?? 65,
-          cppAt65: derived.spouseCpp65,
-          oasStartAge: p.spouse_oas_start_age ?? 65,
-          oasFraction: derived.spouseOasFraction,
-          otherIncome: p.spouse_income ?? 0,
-          balances: {
-            tfsa: p.spouse_tfsa ?? 0,
-            rrsp: p.spouse_rrsp ?? 0,
-            lira: p.spouse_lira ?? 0,
-            nonreg: p.spouse_nonreg ?? 0,
-          },
-          nonregGainRatio: 0.4,
-        }
-      : null;
-
-    return {
-      retirementAge: retireAge,
-      lifeExpectancy: p.life_expectancy ?? 95,
-      province,
-      inflation: p.inflation_rate ?? 2.5,
-      workingGrowth: p.working_growth_rate ?? p.growth_rate ?? 6,
-      retirementGrowth: p.retirement_growth_rate ?? 4.5,
-      desiredIncome: p.desired_income ?? 60000,
-      annualSavings: p.annual_savings ?? 0,
-      savingsSplit: {
-        tfsa: p.save_pct_tfsa ?? 40,
-        rrsp: p.save_pct_rrsp ?? 40,
-        nonreg: p.save_pct_nonreg ?? 20,
-      },
-      clawbackTolerance,
-      withdrawalPolicy: policy,
-      self,
-      spouse,
-    };
-  }, [p, derived, balances, clawbackTolerance, policy]);
-
-  const projection = useMemo(() => (inputs ? projectRetirement(inputs) : null), [inputs]);
-  const earliest = useMemo(() => (inputs ? earliestRetirementAge(inputs) : null), [inputs]);
-  const comparison = useMemo(
-    () => (inputs ? compareWithdrawalStrategies(inputs, objective) : null),
-    [inputs, objective],
-  );
-
-
-  if (!authLoading && !isGuest && profileQuery.isError) {
-    return (
-      <div className="p-6 text-sm text-destructive">
-        We couldn’t load your retirement profile. Please refresh and try again.
-      </div>
-    );
-  }
-
-  if (
-    authLoading ||
-    (!isGuest && (loading || profileQuery.isLoading)) ||
-    !p ||
-    !inputs ||
-    !projection ||
-    !derived
-  ) {
-    return <p className="p-6 text-sm text-muted-foreground">Loading your plan…</p>;
-  }
-
-  const set = (patch: Partial<Profile>) => setForm({ ...(form ?? p), ...patch });
-  const married = (p.marital_status ?? "Single") !== "Single";
-
-  const save = () => {
-    const { id: _id, display_name: _dn, base_currency: _bc, ...rest } = p;
-    if (isGuest) {
-      window.localStorage.setItem(PENDING_PLAN_KEY, JSON.stringify(rest));
-      toast.message("Create a free account or log in to save your retirement plan.");
-      void navigate({ to: "/auth" });
-      return;
-    }
-    updateProfile.mutate(rest as Partial<Profile>, {
-      onSuccess: () => toast.success("Plan saved"),
-      onError: (e) => toast.error((e as Error).message),
-    });
   };
 
-  // The engine models everything in 2026 dollars, so rows need no deflation.
-  const rows = projection.rows;
-  const totalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
-  const totalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
-  const endingBalance = rows.length ? rows[rows.length - 1]!.balances.total : 0;
-  const moneyNote = "in today's dollars";
-  const firstRow = rows[0];
+  const runSimulation = async (nextScenario = activeScenario) => {
+    setRunning(true);
+    try {
+      const effective = getEffectiveRetirementPortfolio(nextScenario, portfolio);
+      const simulation = runBasicSimulation(nextScenario, effective.total, new Date().getUTCFullYear(), effective.byType);
+      await retirementStore.saveResult(simulation);
+      const persistedScenario = { ...nextScenario, metadata: { ...nextScenario.metadata, scenarioHash: simulation.scenarioHash } };
+      await retirementStore.saveScenario(persistedScenario);
+      setScenario(persistedScenario);
+      setResult(simulation);
+      setStressResults(null);
+      setOptimization(null);
+      setSaved(true);
+    } finally {
+      setRunning(false);
+    }
+  };
 
-  const startBalance = firstRow
-    ? firstRow.balances.total +
-      firstRow.rrifDraw +
-      firstRow.lifDraw +
-      firstRow.nonregDraw +
-      firstRow.tfsaDraw
-    : 0;
-  const clawbackYears = rows.filter((r) => r.oasClawback > 1);
-  const todayTotal =
-    balances.tfsa +
-    balances.rrsp +
-    balances.lira +
-    balances.nonreg +
-    (married
-      ? (p.spouse_tfsa ?? 0) + (p.spouse_rrsp ?? 0) + (p.spouse_lira ?? 0) + (p.spouse_nonreg ?? 0)
-      : 0);
+  const updateScenario = (patch: Partial<RetirementScenario>) => {
+    setScenario({ ...activeScenario, ...patch });
+    setResult(null);
+    setSaved(false);
+  };
 
-  const balanceChart = rows.map((r) => ({
-    age: r.age,
-    TFSA: Math.round(r.balances.tfsa),
-    "RRSP / RRIF": Math.round(r.balances.rrsp),
-    "LIRA / LIF": Math.round(r.balances.lira),
-    "Non-Registered": Math.round(r.balances.nonreg),
-  }));
+  const saveScenario = async () => {
+    await retirementStore.saveScenario(activeScenario);
+    setScenario(activeScenario);
+    setSaved(true);
+    await runSimulation(activeScenario);
+  };
 
-  const incomeChart = rows.map((r) => ({
-    age: r.age,
-    CPP: Math.round(r.cpp),
-    OAS: Math.round(r.oas),
-    "RRIF / LIF": Math.round(r.rrifDraw + r.lifDraw),
-    "Non-Reg": Math.round(r.nonregDraw),
-    TFSA: Math.round(r.tfsaDraw),
-    Taxes: -Math.round(r.taxes),
-    Spending: Math.round(r.spending),
-  }));
-
-  const selfOas = oasAt(p.oas_start_age ?? 65, derived.selfOasFraction);
-  const spouseOas = married ? oasAt(p.spouse_oas_start_age ?? 65, derived.spouseOasFraction) : 0;
+  if (loading) return <p className="text-sm text-muted-foreground">Loading your portfolio…</p>;
 
   return (
-    <div className={isGuest ? "mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-6" : "min-h-screen bg-surface"}>
-      {!isGuest && <AppHeader />}
-      <main className={isGuest ? undefined : "mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8"}>
-      {isGuest && <div className="flex items-center justify-between border-b border-border/60 pb-4">
-        <Link to="/">
-          <ApisLogo variant="full" size="sm" />
-        </Link>
-        <div className="flex items-center gap-2">
-          {isGuest ? (
-            <>
-              <Button asChild variant="ghost" size="sm">
-                <Link to="/auth">Log in</Link>
-              </Button>
-              <Button size="sm" className="honey-fill" onClick={save}>
-                Save plan (free account)
-              </Button>
-            </>
-          ) : (
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/dashboard">Back to dashboard</Link>
-            </Button>
-          )}
-        </div>
-      </div>}
-      {isGuest && (
-        <div className="rounded-lg border border-accent/40 bg-accent/10 p-3 text-sm">
-          Try it free — no account needed. Change any number under Inputs and the plan updates
-          instantly. Create a free account only if you want to save it.
-        </div>
-      )}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight">Retirement planner</h1>
-          <p className="text-sm text-muted-foreground">
-            {married ? "Household plan" : "Personal plan"} on 2026 federal and{" "}
-            {PROVINCES[inputs.province].name} tax rates, with CPP from your earnings history and OAS
-            from your years in Canada.
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Retirement</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            A separate retirement workspace that uses your Portfolio Tracker as the current-value source.
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <Button size="sm" onClick={save} disabled={updateProfile.isPending}>
-            {updateProfile.isPending ? "Saving…" : "Save plan"}
+        <Badge variant="outline">{running ? "Calculating…" : result ? "Simulation current" : "Plan not calculated"}</Badge>
+      </header>
+
+      <nav className="flex flex-wrap gap-2 border-b pb-3">
+        {([
+          ["overview", "Overview", ShieldCheck],
+          ["plan", "Plan", Settings2],
+          ["scenarios", "Scenarios", BarChart3],
+          ["analysis", "Analysis", WalletCards],
+          ["reports", "Reports", FileText],
+        ] as const).map(([id, label, Icon]) => (
+          <Button key={id} variant={section === id ? "default" : "ghost"} size="sm" onClick={() => setSection(id)}>
+            <Icon className="mr-2 h-4 w-4" />{label}
+          </Button>
+        ))}
+      </nav>
+
+      {section === "overview" && (
+        <Overview
+          overview={overview}
+          portfolioTotal={portfolio.total}
+          optimization={optimization}
+          optimizing={optimizing}
+          onPlan={() => setSection("plan")}
+          onRun={() => runSimulation()}
+          onOptimize={runOptimization}
+          running={running}
+        />
+      )}
+      {section === "plan" && (
+        <PlanEditor scenario={activeScenario} portfolio={portfolio} onChange={updateScenario} onSave={saveScenario} saved={saved} running={running} />
+      )}
+      {section === "scenarios" && (
+        <ScenarioPanel
+          scenario={activeScenario}
+          portfolio={portfolio}
+          stressResults={stressResults}
+          onStress={setStressResults}
+          onRun={runSimulation}
+          running={running}
+        />
+      )}
+      {section === "analysis" && <Analysis result={result} />}
+      {section === "reports" && <Reports result={result} scenario={scenario} />}
+    </div>
+  );
+}
+
+function Overview({
+  overview,
+  portfolioTotal,
+  optimization,
+  optimizing,
+  onPlan,
+  onRun,
+  onOptimize,
+  running,
+}: {
+  overview: ReturnType<typeof buildRetirementOverview>;
+  portfolioTotal: number;
+  optimization: OptimizationResult | null;
+  optimizing: boolean;
+  onPlan: () => void;
+  onRun: () => Promise<void>;
+  onOptimize: () => Promise<void>;
+  running: boolean;
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="panel p-6">
+        <div className="flex flex-wrap items-start justify-between gap-5">
+          <div className="max-w-2xl">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Retirement readiness</p>
+            <h2 className="mt-2 font-display text-2xl font-semibold">{overview.headline}</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{overview.explanation}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onPlan}>Edit plan</Button>
+            <Button variant="outline" onClick={onOptimize} disabled={running || optimizing}>
+              {optimizing ? "Analyzing strategies…" : "Analyze strategies"}
+            </Button>
+            <Button onClick={onRun} disabled={running}>{running ? "Calculating…" : "Run simulation"}</Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric label="Current tracked portfolio" value={formatCad(portfolioTotal)} />
+        <Metric label="Ending portfolio" value={overview.metrics[0] ? formatCad(Number(overview.metrics[0].value)) : "—"} />
+        <Metric label="Lifetime taxes" value={overview.metrics[2] ? formatCad(Number(overview.metrics[2].value)) : "—"} />
+        <Metric label="Government benefits" value={overview.metrics[3] ? formatCad(Number(overview.metrics[3].value)) : "—"} />
+      </div>
+
+
+      {overview.sections.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {overview.sections.map((section) => (
+            <div key={section.title} className="panel p-5">
+              <h3 className="font-display text-lg font-semibold">{section.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{section.summary}</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {section.metrics.map((metric) => (
+                  <div key={metric.label} className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">{metric.label}</p>
+                    <p className={`num mt-1 font-semibold ${metric.tone === "warning" ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                      {typeof metric.value === "number" ? formatCad(metric.value) : metric.value}
+                    </p>
+                    {metric.note && <p className="mt-1 text-[11px] text-muted-foreground">{metric.note}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {stressResults && <StressOverview stressResults={stressResults} onScenarios={() => setSection("scenarios")} />}
+
+      {optimization && (
+        <div className="panel p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Strategy analysis</p>
+              <h3 className="mt-1 font-display text-lg font-semibold">
+                {optimization.feasiblePlans.length > 0
+                  ? `${optimization.feasiblePlans.length} strategies meet the current constraints`
+                  : "No strategy met the current constraints"}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This compares explicit strategy combinations; it does not represent a probability or guarantee.
+              </p>
+            </div>
+            <Badge variant="outline">{optimization.candidates.length} candidates tested</Badge>
+          </div>
+          {optimization.selectedCandidate && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Metric label="Selected objective" value={optimization.objective.replaceAll("_", " ")} />
+              <Metric label="Lifetime spending" value={formatCad(optimization.selectedCandidate.metrics.lifetimeSpending)} />
+              <Metric label="Lifetime tax" value={formatCad(optimization.selectedCandidate.metrics.lifetimeTax)} />
+              <Metric label="Ending portfolio" value={formatCad(optimization.selectedCandidate.metrics.endingPortfolio)} />
+            </div>
+          )}
+        </div>
+      )}
+\n      {overview.warnings.length > 0 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+          <p className="font-medium">Model limitations</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">{overview.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="panel p-5">
+          <h3 className="font-display text-lg font-semibold">What the Overview answers</h3>
+          <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+            <li>• Can the selected spending goal be funded through the planning age?</li>
+            <li>• How much income comes from the portfolio versus government benefits?</li>
+            <li>• Where are the largest tax and withdrawal pressures?</li>
+            <li>• What changes under lower returns, higher inflation or different benefit timing?</li>
+          </ul>
+        </div>
+        <div className="panel p-5">
+          <h3 className="font-display text-lg font-semibold">Portfolio connection</h3>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Current balances come from Portfolio Tracker. Retirement calculations are stored locally in the browser.
+            Scenario changes never modify the real portfolio.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+function getEffectiveRetirementPortfolio(
+  scenario: RetirementScenario,
+  portfolio: { total: number; byType: Record<string, number>; accountValues: Record<string, { value: number; name: string; type: string; owner: "MAIN_USER" | "PARTNER" }> },
+) {
+  const byType: Record<string, number> = {};
+  let total = 0;
+  for (const account of scenario.accounts) {
+    const tracked = portfolio.accountValues[account.id];
+    const value = account.valuation.mode === "MANUAL"
+      ? Math.max(0, account.valuation.value ?? 0)
+      : Math.max(0, account.valuation.linkedValue ?? tracked?.value ?? 0);
+    byType[account.type] = (byType[account.type] ?? 0) + value;
+    total += value;
+  }
+  return { total, byType };
+}
+
+function PlanEditor({ scenario, portfolio, onChange, onSave, saved, running }: {
+  scenario: RetirementScenario;
+  portfolio: { total: number; byType: Record<string, number>; accountValues: Record<string, { value: number; name: string; type: string; owner: "MAIN_USER" | "PARTNER" }> };
+  onChange: (patch: Partial<RetirementScenario>) => void;
+  onSave: () => Promise<void>;
+  saved: boolean;
+  running: boolean;
+}) {
+  const person = scenario.household.people[0]!;
+  const setGoals = (patch: Partial<RetirementScenario["goals"]>) => onChange({ goals: { ...scenario.goals, ...patch } });
+  const setPerson = (patch: Partial<typeof person>) => onChange({ household: { ...scenario.household, people: [{ ...person, ...patch }, ...scenario.household.people.slice(1)] } });
+
+  return (
+    <div className="space-y-5">
+      <div className="panel p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><h2 className="font-display text-xl font-semibold">Plan inputs</h2><p className="mt-1 text-sm text-muted-foreground">Enter assumptions once; the simulation and Overview consume the same scenario.</p></div>
+          <Button onClick={onSave} disabled={running}>{running ? "Calculating…" : saved ? "Saved & calculated" : "Save & calculate"}</Button>
+        </div>
+      </div>
+
+      <Section title="Household" subtitle="Only retirement-relevant information is stored. No names, SINs or contact information.">
+        <Field label="Province"><Select value={scenario.household.province} onValueChange={(v) => onChange({ household: { ...scenario.household, province: v as RetirementScenario["household"]["province"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"].map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Birth year"><Input type="number" value={person.birthYear} onChange={(e) => setPerson({ birthYear: Number(e.target.value) })} /></Field>
+        <Field label="Birth month"><Input type="number" min={1} max={12} value={person.birthMonth} onChange={(e) => setPerson({ birthMonth: Number(e.target.value) })} /></Field>
+        <Field label="Partner"><Select value={scenario.household.people.length > 1 ? "yes" : "no"} onValueChange={(v) => {
+          const people = v === "yes"
+            ? scenario.household.people.length > 1 ? scenario.household.people : [...scenario.household.people, { role: "PARTNER" as const, birthYear: person.birthYear, birthMonth: person.birthMonth, retirementAge: 65, cppStartAge: "OPTIMIZE" as const, oasStartAge: "OPTIMIZE" as const, oasResidenceYears: 40 }]
+            : [person];
+          onChange({ household: { ...scenario.household, people } });
+        }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="no">No</SelectItem><SelectItem value="yes">Yes</SelectItem></SelectContent></Select></Field>
+      </Section>
+
+      <Section title="Retirement goals" subtitle="Spending is entered in today's dollars and is inflation-adjusted by the engine.">
+        <Field label="Retirement age"><Input type="number" min="50" max="90" value={scenario.goals.retirementAge} onChange={(e) => setGoals({ retirementAge: Number(e.target.value) })} /></Field>
+        <Field label="Annual spending"><Input type="number" min="0" value={scenario.goals.annualSpending} onChange={(e) => setGoals({ annualSpending: Math.max(0, Number(e.target.value) || 0) })} /></Field>
+        <Field label="Planning age"><Input type="number" min="70" max="110" value={scenario.goals.planningAge} onChange={(e) => setGoals({ planningAge: Number(e.target.value) })} /></Field>
+        <Field label="Essential spending"><Input type="number" min="0" value={scenario.goals.essentialSpending ?? ""} onChange={(e) => setGoals({ essentialSpending: e.target.value ? Math.max(0, Number(e.target.value)) : undefined })} /></Field>
+        <Field label="Survivor spending %"><Input type="number" min="0" max="100" step="1" value={(scenario.goals.survivorSpendingRate ?? 75) * 100} onChange={(e) => setGoals({ survivorSpendingRate: Math.min(1, Math.max(0, Number(e.target.value) / 100)) })} /></Field>
+        <Field label="Minimum estate"><Input type="number" min="0" value={scenario.goals.minimumEstate ?? ""} onChange={(e) => setGoals({ minimumEstate: e.target.value ? Math.max(0, Number(e.target.value)) : undefined })} /></Field>
+      </Section>
+
+      <Section title="Government benefits & other income" subtitle="These inputs are used by the CPP/QPP, OAS/GIS and tax engines.">
+        {scenario.household.people.map((member, index) => (
+          <div key={member.role} className="rounded-lg border p-4 sm:col-span-2">
+            <p className="font-medium">{member.role === "MAIN_USER" ? "You" : "Partner"}</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Retirement age"><Input type="number" min="50" max="90" value={member.retirementAge} onChange={(e) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, retirementAge: Number(e.target.value) } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }} /></Field>
+              <Field label="CPP/QPP estimate at 65"><Input type="number" min="0" value={member.cppAt65 ?? ""} onChange={(e) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, cppAt65: e.target.value ? Math.max(0, Number(e.target.value)) : undefined } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }} /></Field>
+              <Field label="CPP/QPP start"><Select value={String(member.cppStartAge)} onValueChange={(v) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, cppStartAge: v === "OPTIMIZE" ? "OPTIMIZE" as const : Number(v) } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["OPTIMIZE","60","65","70"].map((v) => <SelectItem key={v} value={v}>{v === "OPTIMIZE" ? "Optimizer chooses" : v}</SelectItem>)}</SelectContent></Select></Field>
+              <Field label="OAS start"><Select value={String(member.oasStartAge)} onValueChange={(v) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, oasStartAge: v === "OPTIMIZE" ? "OPTIMIZE" as const : Number(v) } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["OPTIMIZE","65","70"].map((v) => <SelectItem key={v} value={v}>{v === "OPTIMIZE" ? "Optimizer chooses" : v}</SelectItem>)}</SelectContent></Select></Field>
+              <Field label="OAS residence years"><Input type="number" min="0" max="50" value={member.oasResidenceYears} onChange={(e) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, oasResidenceYears: Math.min(50, Math.max(0, Number(e.target.value))) } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }} /></Field>
+              <Field label="Other annual income"><Input type="number" min="0" value={member.otherIncome ?? ""} onChange={(e) => {
+                const people = scenario.household.people.map((p, i) => i === index ? { ...p, otherIncome: e.target.value ? Math.max(0, Number(e.target.value)) : undefined } : p);
+                onChange({ household: { ...scenario.household, people } });
+              }} /></Field>
+            </div>
+          </div>
+        ))}
+      </Section>
+
+      <Section title="Portfolio" subtitle="Each retirement account is linked to Portfolio Tracker unless you choose a scenario-only override.">
+        <div className="space-y-3 sm:col-span-2">
+          {scenario.accounts.map((account) => {
+            const tracked = portfolio.accountValues[account.id];
+            if (!tracked) return null;
+            const manual = account.valuation.mode === "MANUAL";
+            return (
+              <div key={account.id} className="rounded-lg border p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{tracked.name}</p>
+                    <p className="text-xs text-muted-foreground">{tracked.type} · {account.owner === "PARTNER" ? "Partner" : "You"}</p>
+                  </div>
+                  <Badge variant={manual ? "secondary" : "outline"}>{manual ? "Scenario override" : "Linked"}</Badge>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_180px]">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Portfolio Tracker value</p>
+                    <p className="num mt-1 font-semibold">{formatCad(tracked.value)}</p>
+                  </div>
+                  <div>
+                    <Label>Scenario value</Label>
+                    <Input
+                      className="mt-1"
+                      type="number"
+                      min="0"
+                      value={manual ? account.valuation.value ?? "" : tracked.value}
+                      onChange={(e) => {
+                        const value = Math.max(0, Number(e.target.value) || 0);
+                        onChange({
+                          accounts: scenario.accounts.map((item) => item.id === account.id
+                            ? { ...item, valuation: { ...item.valuation, mode: "MANUAL" as const, value, linkedValue: tracked.value, snapshotDate: new Date().toISOString().slice(0, 10) } }
+                            : item),
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onChange({
+                      accounts: scenario.accounts.map((item) => item.id === account.id
+                        ? { ...item, valuation: { mode: "SNAPSHOT" as const, linkedValue: tracked.value, snapshotDate: new Date().toISOString().slice(0, 10), value: undefined } }
+                        : item),
+                    })}
+                  >
+                    Use Tracker value
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+          <div className="rounded-lg border p-4">
+            <p className="text-xs text-muted-foreground">Effective retirement starting portfolio</p>
+            <p className="num mt-1 text-lg font-semibold">{formatCad(getEffectiveRetirementPortfolio(scenario, portfolio).total)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Scenario overrides never change Portfolio Tracker.</p>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Investment assumptions" subtitle="Economic assumptions are separate from government rules.">
+        <Field label="Expected annual return"><Input type="number" step="0.1" value={scenario.assumptions.investmentReturn} onChange={(e) => onChange({ assumptions: { ...scenario.assumptions, investmentReturn: Number(e.target.value) } })} /></Field>
+        <Field label="Inflation"><Input type="number" step="0.1" value={scenario.assumptions.inflationRate} onChange={(e) => onChange({ assumptions: { ...scenario.assumptions, inflationRate: Number(e.target.value) } })} /></Field>
+        <Field label="Investment fees"><Input type="number" step="0.1" value={scenario.assumptions.investmentFeeRate} onChange={(e) => onChange({ assumptions: { ...scenario.assumptions, investmentFeeRate: Number(e.target.value) } })} /></Field>
+      </Section>
+
+      <Section title="Strategy" subtitle="Withdrawal policies and optimization objectives are explicit inputs.">
+        <Field label="Withdrawal policy"><Select value={scenario.strategy.withdrawalPolicy} onValueChange={(v) => onChange({ strategy: { ...scenario.strategy, withdrawalPolicy: v as RetirementScenario["strategy"]["withdrawalPolicy"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["OPTIMIZE","USER_DEFINED","TAX_TARGETED","REGISTERED_FIRST","TFSA_FIRST","NON_REGISTERED_FIRST"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Optimization objective"><Select value={scenario.strategy.objective} onValueChange={(v) => onChange({ strategy: { ...scenario.strategy, objective: v as RetirementScenario["strategy"]["objective"] } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["MAX_SUSTAINABLE_SPENDING","MAX_LIFETIME_AFTER_TAX_CASH","MAX_ESTATE","MIN_DEPLETION_RISK","MIN_TAX","CUSTOM"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Minimum cash reserve"><Input type="number" min="0" value={scenario.strategy.cashReserve ?? 0} onChange={(e) => onChange({ strategy: { ...scenario.strategy, cashReserve: Math.max(0, Number(e.target.value) || 0) } })} /></Field>
+        <Field label="Target taxable income"><Input type="number" min="0" value={scenario.strategy.taxableIncomeTarget ?? ""} onChange={(e) => onChange({ strategy: { ...scenario.strategy, taxableIncomeTarget: e.target.value ? Math.max(0, Number(e.target.value)) : undefined } })} /></Field>
+        <Field label="Pension split %"><Input type="number" min="0" max="100" value={(scenario.strategy.pensionSplitPercent ?? 0) * 100} onChange={(e) => onChange({ strategy: { ...scenario.strategy, pensionSplitPercent: Math.min(1, Math.max(0, Number(e.target.value) / 100)) } })} /></Field>
+        <Field label="Estate target"><Input type="number" min="0" value={scenario.strategy.estateTarget ?? ""} onChange={(e) => onChange({ strategy: { ...scenario.strategy, estateTarget: e.target.value ? Math.max(0, Number(e.target.value)) : undefined } })} /></Field>
+      </Section>
+
+      <Section title="Debt" subtitle="Debt payments reduce available retirement cash flow and balances remain part of net worth. Interest deductions apply only to the verified eligible share.">
+        {(scenario.debts ?? []).map((debt, index) => (
+          <div key={debt.id} className="rounded-lg border p-4 sm:col-span-2">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Type"><Select value={debt.type} onValueChange={(v) => {
+                const debts = [...(scenario.debts ?? [])]; debts[index] = { ...debt, type: v as typeof debt.type }; onChange({ debts });
+              }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["MORTGAGE","HELOC","LINE_OF_CREDIT","PERSONAL_LOAN","OTHER"].map((v) => <SelectItem key={v} value={v}>{v.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></Field>
+              <Field label="Balance"><Input type="number" min="0" value={debt.startingBalance} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,startingBalance:Math.max(0,Number(e.target.value)||0)};onChange({debts}); }} /></Field>
+              <Field label="Interest rate %"><Input type="number" min="0" step="0.1" value={debt.annualInterestRate} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,annualInterestRate:Math.max(0,Number(e.target.value)||0)};onChange({debts}); }} /></Field>
+              <Field label="Monthly payment"><Input type="number" min="0" value={debt.paymentAmount ?? ""} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,paymentAmount:e.target.value?Math.max(0,Number(e.target.value)):undefined};onChange({debts}); }} /></Field>
+              <Field label="Owner"><Select value={debt.owner ?? "MAIN_USER"} onValueChange={(v) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,owner:v as "MAIN_USER"|"PARTNER"};onChange({debts}); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{scenario.household.people.map((person) => <SelectItem key={person.role} value={person.role}>{person.role === "MAIN_USER" ? "You" : "Partner"}</SelectItem>)}</SelectContent></Select></Field>
+              <Field label="Eligible interest %"><Input type="number" min="0" max="100" step="1" value={debt.deductibleInterestPercent ?? 0} onChange={(e) => { const debts=[...(scenario.debts ?? [])]; debts[index]={...debt,deductibleInterestPercent:Math.min(100,Math.max(0,Number(e.target.value)||0))};onChange({debts}); }} /></Field>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">Use only the share you can trace to borrowing for eligible income-earning property. Personal use, registered-account contributions, and borrowing where the only expected return is a capital gain generally do not qualify. <a className="underline" href="https://www.canada.ca/en/revenue-agency/services/tax/technical-information/income-tax/income-tax-folios-index/series-3-property-investments-savings-plans/series-3-property-investments-savings-plan-folio-6-interest/income-tax-folio-s3-f6-c1-interest-deductibility.html" target="_blank" rel="noreferrer">CRA guidance</a>.</p>
+          </div>
+        ))}
+        <Button variant="outline" onClick={() => onChange({ debts: [...(scenario.debts ?? []), { id: crypto.randomUUID(), type: "MORTGAGE", startingBalance: 0, annualInterestRate: 0, paymentAmount: 0 }] })}>
+          Add debt
+        </Button>
+      </Section>
+    </div>
+  );
+}
+
+function ScenarioPanel({
+  scenario,
+  portfolio,
+  stressResults,
+  onRun,
+  onStress,
+  running,
+}: {
+  scenario: RetirementScenario;
+  portfolio: { total: number; byType: Record<string, number> };
+  stressResults: ScenarioStressTestResult | null;
+  onRun: (scenario?: RetirementScenario) => Promise<void>;
+  onStress: (result: ScenarioStressTestResult) => void;
+  running: boolean;
+}) {
+  const runDefinition = (definition: (typeof DEFAULT_STRESS_TESTS)[number]) => {
+    const next = definition.apply(scenario);
+    next.id = crypto.randomUUID();
+    next.name = definition.name;
+    next.metadata = { ...next.metadata, createdAt: new Date().toISOString() };
+    void onRun(next);
+  };
+
+  const runAllStressTests = () => {
+    onStress(runStressTests(scenario, portfolio.total, portfolio.byType));
+  };
+
+  const summaries = stressResults
+    ? summarizeStressTests(stressResults)
+    : [];
+
+  const groups = [
+    {
+      title: "Retirement & spending",
+      kinds: ["EARLIER_RETIREMENT", "LATER_RETIREMENT", "LOWER_SPENDING", "HIGHER_SPENDING"],
+    },
+    {
+      title: "Government benefit timing",
+      kinds: ["CPP_60", "CPP_65", "CPP_70", "OAS_65", "OAS_70"],
+    },
+    {
+      title: "Economic & longevity",
+      kinds: ["LOW_RETURN", "HIGH_INFLATION", "POOR_SEQUENCE", "LONGER_LIFE", "SURVIVOR"],
+    },
+  ] as const;
+
+  return (
+    <div className="space-y-5">
+      <div className="panel p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="font-display text-xl font-semibold">Scenarios</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Create reproducible what-if versions of the current plan. Each scenario is calculated independently and does not change the Portfolio Tracker.
+            </p>
+          </div>
+          <Button onClick={runAllStressTests} disabled={running}>
+            {running ? "Calculating…" : "Run all scenarios"}
           </Button>
         </div>
       </div>
 
-      <div className="sticky top-0 z-30 -mx-4 grid gap-4 border-b border-border/60 bg-background/95 px-4 py-3 shadow-sm backdrop-blur sm:grid-cols-2 lg:grid-cols-5 md:-mx-6 md:px-6">
-        <StatCard
-          icon={<CalendarClock className="h-4 w-4" />}
-          label="Earliest sustainable retirement"
-          value={earliest ? `Age ${earliest}` : "Not before 80"}
-          hint={
-            earliest && earliest <= inputs.retirementAge
-              ? `Your target of ${inputs.retirementAge} works`
-              : `Your target of ${inputs.retirementAge} runs short`
-          }
-          tone={earliest && earliest <= inputs.retirementAge ? "good" : "warn"}
-        />
-        <StatCard
-          icon={<PiggyBank className="h-4 w-4" />}
-          label={`Projected at retirement (age ${inputs.retirementAge})`}
-          value={formatCad(startBalance)}
-          hint="All figures in today’s purchasing power (adjusted for inflation)."
-        />
-        <StatCard
-          icon={<ShieldCheck className="h-4 w-4" />}
-          label="Plan outcome"
-          value={projection.success ? "Fully funded" : `Runs short at ${projection.depletionAge}`}
-          hint={`Ending balance ${formatCad(endingBalance)} ${moneyNote}`}
-          tone={projection.success ? "good" : "warn"}
-        />
-        <StatCard
-          icon={<TriangleAlert className="h-4 w-4" />}
-          label="Lifetime tax & clawback"
-          value={formatCad(totalTaxes)}
-          hint={
-            totalClawback > 1
-              ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
-              : "No OAS clawback in this plan"
-          }
-          tone={totalClawback > 1 ? "warn" : "good"}
-        />
-        <StatCard
-          icon={<Landmark className="h-4 w-4" />}
-          label="Tax owed by your estate"
-          value={formatCad(projection.estateTax)}
-          hint={`${formatCad(projection.estateRegistered)} left in RRIF/LIF at ${inputs.lifeExpectancy} is fully taxed in that year`}
-          tone={projection.estateTax > 1 ? "warn" : "good"}
-        />
+      {groups.map((group) => (
+        <div key={group.title} className="panel p-5">
+          <h3 className="font-display text-lg font-semibold">{group.title}</h3>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {group.kinds.map((kind) => {
+              const definition = DEFAULT_STRESS_TESTS.find((item) => item.kind === kind);
+              if (!definition) return null;
+              return (
+                <ScenarioCard
+                  key={definition.kind}
+                  title={definition.name}
+                  text={definition.description}
+                  onClick={() => runDefinition(definition)}
+                  disabled={running}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
 
+      {summaries.length > 0 && (
+        <ScenarioResults summaries={summaries} />
+      )}
+
+      {stressResults?.warnings.length ? (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+          <p className="font-medium">Scenario limitations</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+            {stressResults.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StressOverview({ stressResults, onScenarios }: { stressResults: ScenarioStressTestResult; onScenarios: () => void }) {
+  const summaries = summarizeStressTests(stressResults).filter(s => s.kind !== "BASE");
+  const attention = summaries.filter(s => s.status === "DEPLETES" || s.status === "SHORTFALL").length;
+  return <div className="panel p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stress testing</p><h3 className="mt-1 font-display text-lg font-semibold">{attention === 0 ? "Base plan holds across the selected stress tests" : `${attention} stress scenario${attention === 1 ? "" : "s"} need attention`}</h3><p className="mt-1 text-sm text-muted-foreground">These are deterministic what-if cases, not probabilities.</p></div><Button variant="outline" onClick={onScenarios}>View scenarios</Button></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{summaries.slice(0,3).map(s => <div key={s.kind} className="rounded-lg border p-3"><p className="font-medium">{s.name}</p><p className="mt-1 text-xs text-muted-foreground">{scenarioStatusText(s)}</p></div>)}</div></div>;
+}
+function ScenarioResults({ summaries }: { summaries: ScenarioSummary[] }) {
+  return <div className="panel p-5"><h3 className="font-display text-lg font-semibold">Stress-test results</h3><div className="mt-4 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2 pr-4">Scenario</th><th className="pb-2 pr-4">Result</th><th className="pb-2 pr-4">Ending portfolio</th><th className="pb-2 pr-4">Max shortfall</th><th className="pb-2">Change vs base</th></tr></thead><tbody>{summaries.map(s => <tr key={s.kind} className="border-b last:border-0"><td className="py-3 pr-4 font-medium">{s.name}</td><td className="py-3 pr-4">{scenarioStatusText(s)}</td><td className="py-3 pr-4 num">{formatCad(s.endingPortfolio)}</td><td className="py-3 pr-4 num">{formatCad(s.maximumShortfall)}</td><td className="py-3 num">{formatCad(s.deltaEndingPortfolio)}</td></tr>)}</tbody></table></div></div>;
+}
+function Analysis({ result }: { result: SimulationResult | null }) {
+  const analysis = buildRetirementAnalysis(result);
+  if (!result || !analysis) {
+    return <ComingSoon title="Analysis" text="Run the plan from Overview or Plan first. Detailed cash flow, withdrawals, taxes, benefits, portfolio trajectory, debt and reconciliation diagnostics will appear here." />;
+  }
+
+  const maxPortfolio = Math.max(1, ...analysis.annual.map((row) => row.endingPortfolio));
+  const maxTax = Math.max(1, ...analysis.annual.map((row) => row.taxes));
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric label="Ending portfolio" value={formatCad(result.metrics.endingPortfolio)} />
+        <Metric label="Ending net worth" value={formatCad(result.metrics.endingNetWorth)} />
+        <Metric label="Lifetime spending" value={formatCad(result.metrics.lifetimeSpending)} />
+        <Metric label="Lifetime tax" value={formatCad(result.metrics.lifetimeTax)} />
+        <Metric label="Government benefits" value={formatCad(result.metrics.totalBenefits)} />
+        <Metric label="Maximum shortfall" value={formatCad(result.metrics.maximumSpendingShortfall)} />
+        <Metric label="Minimum portfolio" value={formatCad(result.metrics.minimumPortfolio)} />
+        <Metric label="Plan status" value={result.metrics.feasible ? "No modeled shortfall" : "Shortfall detected"} />
       </div>
 
-      <Tabs defaultValue="plan">
-        <TabsList>
-          <TabsTrigger value="plan">The plan</TabsTrigger>
-          <TabsTrigger value="inputs">Your details</TabsTrigger>
-          <TabsTrigger value="schedule">Year-by-year</TabsTrigger>
-        </TabsList>
-
-        {/* --------------------------------- PLAN --------------------------------- */}
-        <TabsContent value="plan" className="space-y-6 pt-4">
-          {comparison ? (
-            <div className="rounded-xl border bg-card p-4 space-y-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-semibold">Withdrawal strategy optimizer</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Compare how the order you spend your accounts changes tax, clawback and what is
-                    left at the end.
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Goal</Label>
-                  <Select
-                    value={objective}
-                    onValueChange={(v) => setObjective(v as StrategyObjective)}
-                  >
-                    <SelectTrigger className="w-56">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MIN_TAX">Pay the least tax</SelectItem>
-                      <SelectItem value="MAX_ESTATE">Leave the most behind</SelectItem>
-                      <SelectItem value="MAX_SUSTAINABLE_SPENDING">
-                        Keep the income going longest
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {comparison.results.map((r) => {
-                  const selected = r.policy === policy;
-                  return (
-                    <button
-                      key={r.policy}
-                      type="button"
-                      onClick={() => setPolicy(r.policy)}
-                      className={`rounded-lg border p-3 text-left transition ${
-                        selected ? "border-primary ring-2 ring-primary/30" : "hover:border-primary/50"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{r.label}</span>
-                        {r.policy === comparison.best ? (
-                          <Badge variant="secondary">Recommended</Badge>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{r.blurb}</p>
-                      <dl className="mt-3 space-y-1 text-xs">
-                        <div className="flex justify-between">
-                          <dt className="text-muted-foreground">Lifetime tax</dt>
-                          <dd>{formatCad(r.totalTaxes)}</dd>
-                        </div>
-                        <div className="flex justify-between">
-                          <dt className="text-muted-foreground">OAS clawback</dt>
-                          <dd>{formatCad(r.totalClawback)}</dd>
-                        </div>
-                        <div className="flex justify-between">
-                          <dt className="text-muted-foreground">Left after tax</dt>
-                          <dd>{formatCad(r.estateAfterTax)}</dd>
-                        </div>
-                        <div className="flex justify-between">
-                          <dt className="text-muted-foreground">Money lasts</dt>
-                          <dd>{r.depletionAge == null ? "To plan end" : `To age ${r.depletionAge}`}</dd>
-                        </div>
-                      </dl>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="max-h-[22rem] overflow-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Strategy</TableHead>
-                      <TableHead className="text-right">Lifetime tax</TableHead>
-                      <TableHead className="text-right">OAS clawback</TableHead>
-                      <TableHead className="text-right">Ending balance</TableHead>
-                      <TableHead className="text-right">Tax at death</TableHead>
-                      <TableHead className="text-right">Left after tax</TableHead>
-                      <TableHead className="text-right">Money lasts</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {comparison.results.map((r) => (
-                      <TableRow key={r.policy} className={r.policy === policy ? "bg-muted/50" : ""}>
-                        <TableCell className="font-medium">
-                          {r.label}
-                          {r.policy === comparison.best ? " ★" : ""}
-                        </TableCell>
-                        <TableCell className="text-right">{formatCad(r.totalTaxes)}</TableCell>
-                        <TableCell className="text-right">{formatCad(r.totalClawback)}</TableCell>
-                        <TableCell className="text-right">{formatCad(r.endingBalance)}</TableCell>
-                        <TableCell className="text-right">{formatCad(r.estateTax)}</TableCell>
-                        <TableCell className="text-right">{formatCad(r.estateAfterTax)}</TableCell>
-                        <TableCell className="text-right">
-                          {r.depletionAge == null ? "To plan end" : `Age ${r.depletionAge}`}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <p className="text-xs text-muted-foreground">
-                  Showing:{" "}
-                  <span className="font-medium text-foreground">
-                    {WITHDRAWAL_POLICIES.find((w) => w.key === policy)?.label}
-                  </span>{" "}
-                  — the charts and year-by-year table below use this order.
-                </p>
-                {policy !== comparison.best ? (
-                  <Button size="sm" variant="outline" onClick={() => setPolicy(comparison.best)}>
-                    Use the recommended strategy
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <BenefitCard
-              title="Your government benefits"
-              cppPct={derived.selfPct}
-              cppStart={p.cpp_start_age ?? 65}
-              cppAnnual={(CPP_MAX_MONTHLY_65 * 12 * derived.selfPct) / 100}
-              oasStart={p.oas_start_age ?? 65}
-              oasAnnual={selfOas}
-              oasYears={p.oas_years_in_canada ?? 40}
-            />
-            {married ? (
-              <BenefitCard
-                title="Spouse government benefits"
-                cppPct={derived.spousePct}
-                cppStart={p.spouse_cpp_start_age ?? 65}
-                cppAnnual={(CPP_MAX_MONTHLY_65 * 12 * derived.spousePct) / 100}
-                oasStart={p.spouse_oas_start_age ?? 65}
-                oasAnnual={spouseOas}
-                oasYears={p.spouse_oas_years_in_canada ?? 40}
-              />
-            ) : (
-              <div className="panel space-y-2 p-5 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2 text-foreground">
-                  <Landmark className="h-4 w-4" /> Single plan
-                </div>
-                <p>
-                  Set your marital status to married or common-law under “Your details” to plan both
-                  CPP and OAS entitlements together and use pension splitting after 65.
-                </p>
-              </div>
-            )}
-            <div className="panel space-y-2 p-5">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Coins className="h-4 w-4" /> How the money is drawn
-              </div>
-              <ul className="space-y-1.5 text-sm text-muted-foreground">
-                <li>1. RRIF and LIF minimums once you turn 71.</li>
-                <li>
-                  2. Extra RRSP/LIRA income taken early and evenly, kept inside the low brackets and
-                  under the OAS clawback line, so forced withdrawals later stay small.
-                </li>
-                <li>3. Non-registered next, with only the gain portion taxed.</li>
-                <li>4. TFSA tops up the rest — tax-free and invisible to the clawback.</li>
-              </ul>
-            </div>
+      <div className="panel p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Portfolio trajectory</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Year-end portfolio and net worth across the selected planning horizon.</p>
           </div>
-
-          <div className="panel space-y-3 p-5">
-            <div>
-              <h2 className="font-display text-lg font-semibold">Where your income comes from</h2>
-              <p className="text-sm text-muted-foreground">
-                Each bar is a retirement year: benefits and withdrawals stacked against the spending
-                line, with tax shown below the axis. Amounts {moneyNote}.
-              </p>
-            </div>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={incomeChart}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="age" tickLine={false} fontSize={12} />
-                  <YAxis
-                    tickFormatter={(v: number) => `${Math.round(v / 1000)}k`}
-                    tickLine={false}
-                    fontSize={12}
-                  />
-                  <Tooltip formatter={(v: number) => formatCad(Math.abs(v))} />
-                  <Legend />
-                  <Bar dataKey="CPP" stackId="i" fill="var(--series-1)" />
-                  <Bar dataKey="OAS" stackId="i" fill="var(--series-2)" />
-                  <Bar dataKey="RRIF / LIF" stackId="i" fill="var(--series-3)" />
-                  <Bar dataKey="Non-Reg" stackId="i" fill="var(--series-4)" />
-                  <Bar dataKey="TFSA" stackId="i" fill="var(--series-5)" />
-                  <Bar dataKey="Taxes" stackId="i" fill="var(--series-6)" />
-
-                  <Line
-                    type="monotone"
-                    dataKey="Spending"
-                    stroke="var(--foreground)"
-                    dot={false}
-                    strokeWidth={2}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="panel space-y-3 p-5">
-            <div>
-              <h2 className="font-display text-lg font-semibold">What is left each year</h2>
-              <p className="text-sm text-muted-foreground">
-                Balances by account type from age {inputs.retirementAge} to {inputs.lifeExpectancy},
-                using a real return of{" "}
-                {(((1 + (inputs.workingGrowth ?? 6) / 100) / (1 + inputs.inflation / 100) - 1) * 100).toFixed(2)}% working-years real return and {(((1 + (inputs.retirementGrowth ?? 6) / 100) / (1 + inputs.inflation / 100) - 1) * 100).toFixed(2)}% retirement-years real return. Amounts {moneyNote}.
-              </p>
-            </div>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={balanceChart}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="age" tickLine={false} fontSize={12} />
-                  <YAxis
-                    tickFormatter={(v: number) => `${Math.round(v / 1000)}k`}
-                    tickLine={false}
-                    fontSize={12}
-                  />
-                  <Tooltip formatter={(v: number) => formatCad(v)} />
-                  <Legend />
-                  {(
-                    [
-                      ["RRSP / RRIF", "var(--series-3)"],
-                      ["LIRA / LIF", "var(--series-2)"],
-                      ["TFSA", "var(--series-5)"],
-                      ["Non-Registered", "var(--series-4)"],
-                    ] as const
-                  ).map(([key, color]) => (
-                    <Area
-                      key={key}
-                      type="monotone"
-                      dataKey={key}
-                      stackId="1"
-                      stroke={color}
-                      fill={color}
-                      fillOpacity={0.45}
-                    />
-                  ))}
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* -------------------------------- INPUTS -------------------------------- */}
-        <TabsContent value="inputs" className="space-y-6 pt-4">
-          <Section
-            title="About you"
-            subtitle="The basics that set the length and shape of the plan."
-          >
-            <Field label="Your age">
-              <Input
-                type="number"
-                value={p.current_age ?? ""}
-                onChange={(e) => set({ current_age: num(e.target.value, 40) })}
-              />
-            </Field>
-            <Field label="Target retirement age" {...lockProps}>
-              <RetirementAgeInput
-                value={p.target_retirement_age ?? 65}
-                onChange={(age) => set({ target_retirement_age: age })}
-              />
-            </Field>
-            <Field label="Desired after-tax household income (today's $)">
-              <Input
-                type="number"
-                value={p.desired_income ?? 0}
-                onChange={(e) => set({ desired_income: num(e.target.value) })}
-              />
-            </Field>
-            <Field label="Province">
-              <Select value={inputs.province} onValueChange={(v) => set({ province: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROVINCE_CODES.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {PROVINCES[c].name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Inflation %" {...lockProps}>
-              <Input
-                type="number"
-                step="0.1"
-                value={p.inflation_rate ?? 2.5}
-                onChange={(e) => set({ inflation_rate: num(e.target.value, 2.5) })}
-              />
-            </Field>
-            <Field label="Working years growth rate (%)" {...lockProps}>
-              <Input
-                type="number"
-                step="0.1"
-                value={p.working_growth_rate ?? 6}
-                onChange={(e) => set({ working_growth_rate: num(e.target.value, 6) })}
-              />
-            </Field>
-            <Field label="Retirement years growth rate (%)" {...lockProps}>
-              <Input
-                type="number"
-                step="0.1"
-                value={p.retirement_growth_rate ?? 4.5}
-                onChange={(e) => set({ retirement_growth_rate: num(e.target.value, 4.5) })}
-              />
-            </Field>
-            <Field label="Life expectancy" {...lockProps}>
-              <Input
-                type="number"
-                value={p.life_expectancy ?? 95}
-                onChange={(e) => set({ life_expectancy: num(e.target.value, 95) })}
-              />
-            </Field>
-            <Field label="Marital status" {...plusProps}>
-              <Select
-                value={p.marital_status ?? "Single"}
-                onValueChange={(v) => set({ marital_status: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Single">Single</SelectItem>
-                  <SelectItem value="Married">Married / common-law</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-          </Section>
-
-          <Section
-            title="Your earnings history — this sets your CPP"
-            subtitle={`We credit each year at your income divided by the yearly maximum, over the best 39 years. Estimated entitlement: ${derived.selfPct}% of the maximum.`}
-          >
-            <Field label="Typical income in past working years (today's $)">
-              <Input
-                type="number"
-                value={p.cpp_avg_income ?? 0}
-                onChange={(e) => set({ cpp_avg_income: num(e.target.value) })}
-              />
-            </Field>
-            <Field label="Years worked in Canada so far">
-              <Input
-                type="number"
-                value={p.cpp_years_worked ?? 0}
-                onChange={(e) => set({ cpp_years_worked: num(e.target.value) })}
-              />
-            </Field>
-            <Field label="Expected income until retirement (today's $)">
-              <Input
-                type="number"
-                value={p.cpp_future_income ?? 0}
-                onChange={(e) => set({ cpp_future_income: num(e.target.value) })}
-              />
-            </Field>
-            <Field label="CPP start age (60–70)" {...lockProps}>
-              <AgeSelect
-                value={p.cpp_start_age ?? 65}
-                options={CPP_AGE_OPTIONS}
-                onChange={(age) => set({ cpp_start_age: age })}
-              />
-            </Field>
-            <Field label="Years living in Canada after age 18 (sets OAS)">
-              <Input
-                type="number"
-                value={p.oas_years_in_canada ?? 40}
-                onChange={(e) => set({ oas_years_in_canada: num(e.target.value, 40) })}
-              />
-            </Field>
-            <Field label="OAS start age (65–70)" {...lockProps}>
-              <AgeSelect
-                value={p.oas_start_age ?? 65}
-                options={OAS_AGE_OPTIONS}
-                onChange={(age) => set({ oas_start_age: age })}
-              />
-            </Field>
-          </Section>
-
-          <Section
-            title="Saving until retirement"
-            subtitle="Where each dollar you save lands changes the tax you pay later."
-          >
-            <Field label="Annual savings (today's $)">
-              <Input
-                type="number"
-                value={p.annual_savings ?? 0}
-                onChange={(e) => set({ annual_savings: num(e.target.value) })}
-              />
-            </Field>
-            <Field label="% to TFSA" {...plusProps}>
-              <Input
-                type="number"
-                value={p.save_pct_tfsa ?? 40}
-                onChange={(e) => set({ save_pct_tfsa: num(e.target.value) })}
-              />
-            </Field>
-            <Field label="% to RRSP / FHSA" {...plusProps}>
-              <Input
-                type="number"
-                value={p.save_pct_rrsp ?? 40}
-                onChange={(e) => set({ save_pct_rrsp: num(e.target.value) })}
-              />
-            </Field>
-            <Field label="% to non-registered" {...plusProps}>
-              <Input
-                type="number"
-                value={p.save_pct_nonreg ?? 20}
-                onChange={(e) => set({ save_pct_nonreg: num(e.target.value) })}
-              />
-            </Field>
-
-            <p className="col-span-full text-xs text-muted-foreground">
-              Splits are normalised, so they do not have to add to exactly 100. Today they total{" "}
-              {(p.save_pct_tfsa ?? 0) + (p.save_pct_rrsp ?? 0) + (p.save_pct_nonreg ?? 0)}%.
-            </p>
-          </Section>
-
-          {married && isProPlus && (
-            <Section
-              title="Your spouse"
-              subtitle={`Their CPP and OAS count towards the household income. Estimated CPP entitlement: ${derived.spousePct}% of the maximum.`}
-            >
-              <Field label="Spouse age">
-                <Input
-                  type="number"
-                  value={p.spouse_age ?? ""}
-                  onChange={(e) => set({ spouse_age: num(e.target.value, 40) })}
-                />
-              </Field>
-              <Field label="Spouse retirement age">
-                <RetirementAgeInput
-                  value={p.spouse_retirement_age ?? 65}
-                  onChange={(age) => set({ spouse_retirement_age: age })}
-                />
-              </Field>
-              <Field label="Spouse typical past income (today's $)">
-                <Input
-                  type="number"
-                  value={p.spouse_cpp_avg_income ?? 0}
-                  onChange={(e) => set({ spouse_cpp_avg_income: num(e.target.value) })}
-                />
-              </Field>
-              <Field label="Spouse years worked so far">
-                <Input
-                  type="number"
-                  value={p.spouse_cpp_years_worked ?? 0}
-                  onChange={(e) => set({ spouse_cpp_years_worked: num(e.target.value) })}
-                />
-              </Field>
-              <Field label="Spouse expected income until retirement">
-                <Input
-                  type="number"
-                  value={p.spouse_cpp_future_income ?? 0}
-                  onChange={(e) => set({ spouse_cpp_future_income: num(e.target.value) })}
-                />
-              </Field>
-              <Field label="Spouse years in Canada after 18">
-                <Input
-                  type="number"
-                  value={p.spouse_oas_years_in_canada ?? 40}
-                  onChange={(e) => set({ spouse_oas_years_in_canada: num(e.target.value, 40) })}
-                />
-              </Field>
-              <Field label="Spouse CPP start age">
-                <AgeSelect
-                  value={p.spouse_cpp_start_age ?? 65}
-                  options={CPP_AGE_OPTIONS}
-                  onChange={(age) => set({ spouse_cpp_start_age: age })}
-                />
-              </Field>
-              <Field label="Spouse OAS start age">
-                <AgeSelect
-                  value={p.spouse_oas_start_age ?? 65}
-                  options={OAS_AGE_OPTIONS}
-                  onChange={(age) => set({ spouse_oas_start_age: age })}
-                />
-              </Field>
-
-              <Field label="Spouse RRSP">
-                <Input
-                  type="number"
-                  value={p.spouse_rrsp ?? 0}
-                  onChange={(e) => set({ spouse_rrsp: num(e.target.value) })}
-                />
-              </Field>
-              <Field label="Spouse LIRA / LIF">
-                <Input
-                  type="number"
-                  value={p.spouse_lira ?? 0}
-                  onChange={(e) => set({ spouse_lira: num(e.target.value) })}
-                />
-              </Field>
-              <Field label="Spouse TFSA">
-                <Input
-                  type="number"
-                  value={p.spouse_tfsa ?? 0}
-                  onChange={(e) => set({ spouse_tfsa: num(e.target.value) })}
-                />
-              </Field>
-              <Field label="Spouse non-registered">
-                <Input
-                  type="number"
-                  value={p.spouse_nonreg ?? 0}
-                  onChange={(e) => set({ spouse_nonreg: num(e.target.value) })}
-                />
-              </Field>
-              <Field label="Spouse other pension income in retirement">
-                <Input
-                  type="number"
-                  value={p.spouse_income ?? 0}
-                  onChange={(e) => set({ spouse_income: num(e.target.value) })}
-                />
-              </Field>
-            </Section>
+          {analysis.depletionAge !== undefined && (
+            <Badge variant="outline">Portfolio reaches zero around age {analysis.depletionAge}</Badge>
           )}
-
-          <div className="panel space-y-4 p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium">Manual override mode</p>
-                <p className="text-xs text-muted-foreground">
-                  Off: your balances sync from your accounts. On: type your own numbers.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {isProPlus ? null : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                    <Lock className="h-2.5 w-2.5" />
-                    Pro+
-                  </span>
-                )}
-                <Switch
-                  checked={p.manual_override ?? false}
-                  onCheckedChange={(v) => {
-                    if (!isProPlus) {
-                      openPrompt(PLUS_REASON);
-                      return;
-                    }
-                    set({ manual_override: v });
-                  }}
+        </div>
+        <div className="mt-5 space-y-3">
+          {analysis.annual.map((row) => (
+            <div key={row.year} className="grid grid-cols-[52px_1fr_auto] items-center gap-3 text-sm">
+              <span className="num text-muted-foreground">{row.year}</span>
+              <div className="h-7 overflow-hidden rounded-md bg-muted">
+                <div
+                  className="h-full rounded-md bg-foreground/70"
+                  style={{ width: `${Math.max(2, (row.endingPortfolio / maxPortfolio) * 100)}%` }}
+                  title={formatCad(row.endingPortfolio)}
                 />
               </div>
+              <span className="num w-28 text-right">{formatCad(row.endingPortfolio)}</span>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-              {(
-                [
-                  ["TFSA", "override_tfsa", byType.tfsa],
-                  ["RRSP", "override_rrsp", byType.rrsp],
-                  ["LIRA / LRSP", "override_lira", byType.lira],
-                  ["FHSA", "override_fhsa", byType.fhsa],
-                  ["Non-Registered", "override_nonreg", byType.nonreg],
-                ] as const
-              ).map(([label, key, synced]) => (
-                <Field key={key} label={label}>
-                  <Input
-                    type="number"
-                    disabled={!p.manual_override}
-                    value={p.manual_override ? ((p[key] as number) ?? 0) : Math.round(synced)}
-                    onChange={(e) => set({ [key]: num(e.target.value) } as Partial<Profile>)}
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="panel p-5">
+          <h2 className="font-display text-lg font-semibold">Withdrawal sources</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Actual modeled withdrawals recorded by the simulation engine.</p>
+          <div className="mt-4 space-y-3">
+            {[
+              ["Registered", analysis.withdrawal.registered],
+              ["TFSA", analysis.withdrawal.tfsa],
+              ["Non-registered", analysis.withdrawal.nonRegistered],
+              ["Portfolio cash", analysis.withdrawal.otherCash],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="flex items-center justify-between gap-4 border-b pb-2 last:border-0">
+                <span className="text-sm">{String(label)}</span>
+                <span className="num font-semibold">{formatCad(Number(value))}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">Total modeled withdrawals</p>
+            <p className="num mt-1 text-lg font-semibold">{formatCad(analysis.withdrawal.total)}</p>
+          </div>
+        </div>
+
+        <div className="panel p-5">
+          <h2 className="font-display text-lg font-semibold">Tax by year</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Annual tax liability generated by the simulation's tax ledger.</p>
+          <div className="mt-4 space-y-3">
+            {analysis.annual.map((row) => (
+              <div key={row.year} className="grid grid-cols-[52px_1fr_auto] items-center gap-3 text-sm">
+                <span className="num text-muted-foreground">{row.year}</span>
+                <div className="h-5 overflow-hidden rounded-md bg-muted">
+                  <div
+                    className="h-full rounded-md bg-foreground/50"
+                    style={{ width: `${Math.max(2, (row.taxes / maxTax) * 100)}%` }}
+                    title={formatCad(row.taxes)}
                   />
-                </Field>
+                </div>
+                <span className="num w-28 text-right">{formatCad(row.taxes)}</span>
+              </div>
+            ))}
+          </div>
+          {analysis.peakTaxYear && (
+            <p className="mt-4 text-xs text-muted-foreground">
+              Highest modeled annual tax: {formatCad(analysis.peakTaxYear.taxes)} in {analysis.peakTaxYear.year}.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="panel p-5">
+        <h2 className="font-display text-lg font-semibold">Annual cash flow</h2>
+        <p className="mt-1 text-sm text-muted-foreground">This table separates spending, benefits, withdrawals, taxes and debt service.</p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead>
+              <tr className="border-b text-left text-xs text-muted-foreground">
+                <th className="pb-2 pr-4">Year</th>
+                <th className="pb-2 pr-4 text-right">Benefits</th>
+                <th className="pb-2 pr-4 text-right">Withdrawals</th>
+                <th className="pb-2 pr-4 text-right">Taxes</th>
+                <th className="pb-2 pr-4 text-right">Spending</th>
+                <th className="pb-2 pr-4 text-right">Debt payments</th>
+                <th className="pb-2 text-right">Shortfall</th>
+              </tr>
+            </thead>
+            <tbody>
+              {analysis.annual.map((row) => (
+                <tr key={row.year} className="border-b last:border-0">
+                  <td className="py-3 pr-4 num">{row.year}</td>
+                  <td className="py-3 pr-4 text-right num">{formatCad(row.benefits)}</td>
+                  <td className="py-3 pr-4 text-right num">{formatCad(row.withdrawals)}</td>
+                  <td className="py-3 pr-4 text-right num">{formatCad(row.taxes)}</td>
+                  <td className="py-3 pr-4 text-right num">{formatCad(row.spending)}</td>
+                  <td className="py-3 pr-4 text-right num">{formatCad(row.debtPayments)}</td>
+                  <td className="py-3 text-right num">{formatCad(row.shortfall)}</td>
+                </tr>
               ))}
-            </div>
-          </div>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-
-          <div className="flex justify-end">
-            <Button onClick={save} disabled={updateProfile.isPending}>
-              {updateProfile.isPending ? "Saving…" : "Save plan"}
-            </Button>
-          </div>
-        </TabsContent>
-
-        {/* ------------------------------- SCHEDULE ------------------------------- */}
-        <TabsContent value="schedule" className="space-y-4 pt-4">
-          <div className="panel space-y-3 p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="font-display text-lg font-semibold">
-                  Tax-efficient withdrawal plan
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {married ? "Household totals" : "Your withdrawals"}, year by year. Rows in red
-                  fall short of the spending target; amber rows lose some OAS to the clawback.
-                </p>
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="panel p-5">
+          <h3 className="font-display font-semibold">Government benefits</h3>
+          <p className="mt-2 text-sm text-muted-foreground">Lifetime modeled benefits total <span className="num font-medium text-foreground">{formatCad(result.metrics.totalBenefits)}</span>.</p>
+          <div className="mt-4 space-y-2 text-sm">
+            {[
+              ["CPP / QPP", analysis.annual.reduce((sum, row) => sum + row.cpp, 0)],
+              ["OAS", analysis.annual.reduce((sum, row) => sum + row.oas, 0)],
+              ["GIS", analysis.annual.reduce((sum, row) => sum + row.gis, 0)],
+              ["Allowance", analysis.annual.reduce((sum, row) => sum + row.allowance, 0)],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="flex justify-between border-b pb-2 last:border-0">
+                <span>{String(label)}</span><span className="num font-semibold">{formatCad(Number(value))}</span>
               </div>
-              {projection.totalClawback > 1 ? (
-                <Badge variant="outline" className="border-amber-500 text-amber-600">
-                  {formatCad(projection.totalClawback)} OAS clawed back
-                </Badge>
-              ) : (
-                <Badge variant="outline">No OAS clawback</Badge>
-              )}
-            </div>
-            <div className="max-h-[560px] overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Age</TableHead>
-                    <TableHead>Year</TableHead>
-                    <TableHead className="text-right">RRSP / RRIF</TableHead>
-                    <TableHead className="text-right">LIRA / LIF</TableHead>
-                    <TableHead className="text-right">Non-Reg</TableHead>
-                    <TableHead className="text-right">TFSA</TableHead>
-                    <TableHead className="text-right">CPP</TableHead>
-                    <TableHead className="text-right">OAS (net)</TableHead>
-                    <TableHead className="text-right">Clawback</TableHead>
-                    <TableHead className="text-right">Taxes</TableHead>
-                    <TableHead className="text-right">Spending</TableHead>
-                    <TableHead className="text-right">Ending balance</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((r) => (
-                    <TableRow
-                      key={r.age}
-                      className={
-                        r.shortfall > 1
-                          ? "bg-destructive/10"
-                          : r.oasClawback > 1
-                            ? "bg-amber-500/10"
-                            : undefined
-                      }
-                    >
-                      <TableCell className="num">{r.age}</TableCell>
-                      <TableCell className="num text-muted-foreground">{r.year}</TableCell>
-                      <TableCell className="num text-right">{formatCad(r.rrifDraw)}</TableCell>
-                      <TableCell className="num text-right">{formatCad(r.lifDraw)}</TableCell>
-                      <TableCell className="num text-right">{formatCad(r.nonregDraw)}</TableCell>
-                      <TableCell className="num text-right">{formatCad(r.tfsaDraw)}</TableCell>
-                      <TableCell className="num text-right">{formatCad(r.cpp)}</TableCell>
-                      <TableCell className="num text-right">{formatCad(r.oas)}</TableCell>
-                      <TableCell className="num text-right">
-                        {r.oasClawback > 1 ? formatCad(r.oasClawback) : "—"}
-                      </TableCell>
-                      <TableCell className="num text-right">{formatCad(r.taxes)}</TableCell>
-                      <TableCell className="num text-right">{formatCad(r.spending)}</TableCell>
-                      <TableCell className="num text-right">
-                        {formatCad(r.balances.total)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              All amounts {moneyNote}. Planning estimates on projected 2026 tax brackets. RRSPs
-              become a RRIF and LIRAs a LIF at 71 with the mandatory minimums; eligible pension
-              income is split with a spouse after 65 wherever that lowers household tax.
+            ))}
+          </div>
+        </div>
+        <div className="panel p-5">
+          <h3 className="font-display font-semibold">Debt</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {analysis.peakDebtYear
+              ? `Peak modeled debt is ${formatCad(analysis.peakDebtYear.debt)} around ${analysis.peakDebtYear.year}.`
+              : "No modeled debt balance remains in the simulation."}
+          </p>
+        </div>
+        <div className="panel p-5">
+          <h3 className="font-display font-semibold">Survivor & estate</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {analysis.survivor.begins
+              ? `Survivor stage begins in ${yearOfAnalysisDate(analysis.survivor.begins)}; maximum modeled survivor shortfall is ${formatCad(analysis.survivor.maximumShortfall)}.`
+              : "No survivor transition was modeled in this scenario."}
+          </p>
+          {analysis.estate.value !== undefined && (
+            <p className="mt-2 text-sm text-muted-foreground">Modeled estate value: <span className="num font-medium text-foreground">{formatCad(analysis.estate.value)}</span>.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="panel p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Calculation diagnostics</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Reconciliation checks run against every simulated month.</p>
+          </div>
+          <Badge variant={analysis.reconciliation.maxAbsoluteError <= 0.01 ? "outline" : "destructive"}>
+            {analysis.reconciliation.maxAbsoluteError <= 0.01 ? "Reconciled" : "Review required"}
+          </Badge>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Metric label="Months checked" value={String(analysis.reconciliation.monthsChecked)} />
+          <Metric label="Cash issues" value={String(analysis.reconciliation.cashIssues)} />
+          <Metric label="Asset issues" value={String(analysis.reconciliation.assetIssues)} />
+          <Metric label="Debt issues" value={String(analysis.reconciliation.debtIssues)} />
+          <Metric label="Max error" value={analysis.reconciliation.maxAbsoluteError.toFixed(4)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function yearOfAnalysisDate(date: string): number {
+  return new Date(date).getUTCFullYear();
+}
+
+function Reports({ result, scenario }: { result: SimulationResult | null; scenario: RetirementScenario | null }) {
+  if (!result || !scenario) {
+    return <ComingSoon title="Reports" text="Run a simulation to generate a readable retirement report and a detailed reproducibility export. The report preserves assumptions, rules version and engine version." />;
+  }
+
+  const report = buildRetirementReport(result, scenario);
+
+  const downloadFile = (content: string, type: string, filename: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadJson = () => downloadFile(
+    serializeRetirementReport(report),
+    "application/json",
+    `retirement-report-${result.simulationId}.json`,
+  );
+
+  const downloadPrintable = () => downloadFile(
+    buildPrintableRetirementReport(result, scenario),
+    "text/html",
+    `retirement-report-${result.simulationId}.html`,
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="panel p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-2xl">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Retirement report</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold">Your modeled retirement plan</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              A human-readable summary is provided alongside a detailed JSON export that preserves the scenario and reproducibility metadata.
             </p>
           </div>
-
-          {married && (
-            <div className="panel space-y-3 p-5">
-              <h2 className="font-display text-lg font-semibold">
-                Split between you and your spouse
-              </h2>
-              <div className="max-h-[420px] overflow-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Year</TableHead>
-                      <TableHead>Who</TableHead>
-                      <TableHead>Age</TableHead>
-                      <TableHead className="text-right">Registered draw</TableHead>
-                      <TableHead className="text-right">Non-Reg</TableHead>
-                      <TableHead className="text-right">TFSA</TableHead>
-                      <TableHead className="text-right">CPP + OAS</TableHead>
-                      <TableHead className="text-right">Taxable income</TableHead>
-                      <TableHead className="text-right">Tax</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.flatMap((r) =>
-                      r.people.map((x) => (
-                        <TableRow key={`${r.age}-${x.label}`}>
-                          <TableCell className="num text-muted-foreground">{r.year}</TableCell>
-                          <TableCell>{x.label}</TableCell>
-                          <TableCell className="num">{x.age}</TableCell>
-                          <TableCell className="num text-right">
-                            {formatCad(x.rrifDraw + x.lifDraw)}
-                          </TableCell>
-                          <TableCell className="num text-right">
-                            {formatCad(x.nonregDraw)}
-                          </TableCell>
-                          <TableCell className="num text-right">{formatCad(x.tfsaDraw)}</TableCell>
-                          <TableCell className="num text-right">
-                            {formatCad(x.cpp + x.oas)}
-                          </TableCell>
-                          <TableCell className="num text-right">
-                            {formatCad(x.taxableIncome)}
-                          </TableCell>
-                          <TableCell className="num text-right">{formatCad(x.taxes)}</TableCell>
-                        </TableRow>
-                      )),
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
-      </main>
-
-      <UpgradeDialog
-        open={proPromptOpen}
-        onOpenChange={setProPromptOpen}
-        reason={promptReason || PRO_REASON}
-      />
-    </div>
-  );
-}
-
-function Section({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="panel space-y-4 p-5">
-      <div>
-        <h2 className="font-display text-lg font-semibold">{title}</h2>
-        <p className="text-sm text-muted-foreground">{subtitle}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={downloadJson}>Export detailed JSON</Button>
+            <Button onClick={downloadPrintable}>Export printable report</Button>
+          </div>
+        </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{children}</div>
-    </div>
-  );
-}
 
-function Field({
-  label,
-  children,
-  locked = false,
-  planLabel = "Pro",
-  onLocked,
-}: {
-  label: string;
-  children: React.ReactNode;
-  locked?: boolean;
-  planLabel?: string;
-  onLocked?: () => void;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        {label}
-        {locked ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-            <Lock className="h-2.5 w-2.5" />
-            {planLabel}
-          </span>
-        ) : null}
-      </Label>
-      {locked ? (
-        <button
-          type="button"
-          className="w-full text-left"
-          title={`Upgrade to ${planLabel} to change this`}
-          onClick={onLocked}
-        >
-          <div className="pointer-events-none opacity-60">{children}</div>
-        </button>
-      ) : (
-        children
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric label="Ending portfolio" value={formatCad(report.summary.endingPortfolio)} />
+        <Metric label="Ending net worth" value={formatCad(report.summary.endingNetWorth)} />
+        <Metric label="Lifetime spending" value={formatCad(report.summary.lifetimeSpending)} />
+        <Metric label="Lifetime after-tax cash" value={formatCad(report.summary.lifetimeAfterTaxCash)} />
+        <Metric label="Lifetime tax" value={formatCad(report.summary.lifetimeTax)} />
+        <Metric label="Government benefits" value={formatCad(report.summary.totalBenefits)} />
+        <Metric label="Maximum shortfall" value={formatCad(report.summary.maximumSpendingShortfall)} />
+        <Metric label="Minimum portfolio" value={formatCad(report.summary.minimumPortfolio)} />
+      </div>
+
+      <div className="panel p-5">
+        <h3 className="font-display text-lg font-semibold">Report metadata</h3>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Status" value={report.status} />
+          <Metric label="Engine" value={report.engineVersion} />
+          <Metric label="Rules" value={report.rulesVersion} />
+          <Metric label="Simulation" value={report.simulationId.slice(0, 16)} />
+        </div>
+      </div>
+
+      {report.analysis && (
+        <div className="panel p-5">
+          <h3 className="font-display text-lg font-semibold">Annual analysis</h3>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="pb-2 pr-4">Year</th>
+                  <th className="pb-2 pr-4">Ending portfolio</th>
+                  <th className="pb-2 pr-4">Spending</th>
+                  <th className="pb-2 pr-4">Taxes</th>
+                  <th className="pb-2">Benefits</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.analysis.annual.map((row) => (
+                  <tr key={row.year} className="border-b last:border-0">
+                    <td className="py-2 pr-4">{row.year}</td>
+                    <td className="py-2 pr-4 num">{formatCad(row.endingPortfolio)}</td>
+                    <td className="py-2 pr-4 num">{formatCad(row.spending)}</td>
+                    <td className="py-2 pr-4 num">{formatCad(row.taxes)}</td>
+                    <td className="py-2 num">{formatCad(row.benefits)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {report.warnings.length > 0 && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+          <p className="font-medium">Model notes</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+            {report.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </div>
       )}
     </div>
   );
 }
 
-function BenefitCard({
-  title,
-  cppPct,
-  cppStart,
-  cppAnnual,
-  oasStart,
-  oasAnnual,
-  oasYears,
-}: {
-  title: string;
-  cppPct: number;
-  cppStart: number;
-  cppAnnual: number;
-  oasStart: number;
-  oasAnnual: number;
-  oasYears: number;
-}) {
-  return (
-    <div className="panel space-y-3 p-5">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Wallet className="h-4 w-4" /> {title}
-      </div>
-      <div className="space-y-1 text-sm">
-        <div className="flex items-baseline justify-between">
-          <span className="text-muted-foreground">CPP from age {cppStart}</span>
-          <span className="num font-semibold">{formatCad(cppAnnual)}/yr</span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {cppPct}% of the maximum, from the earnings history entered.
-        </p>
-        <div className="flex items-baseline justify-between pt-2">
-          <span className="text-muted-foreground">OAS from age {oasStart}</span>
-          <span className="num font-semibold">{formatCad(oasAnnual)}/yr</span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {Math.min(40, Math.max(0, oasYears))} of 40 years of Canadian residence.
-        </p>
-      </div>
-    </div>
-  );
-}
 
-function StatCard({
-  icon,
-  label,
-  value,
-  hint,
-  subhint,
-  tone,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  hint: string;
-  subhint?: string;
-  tone?: "good" | "warn";
-}) {
-  return (
-    <div className="panel min-h-[6.5rem] p-5">
-      <div className="flex flex-wrap items-center gap-2 text-xs leading-snug break-words text-muted-foreground">
-        {icon}
-        {label}
-      </div>
-      <p
-        className={`num mt-2 text-xl font-semibold ${
-          tone === "warn" ? "text-destructive" : tone === "good" ? "text-emerald-600" : ""
-        }`}
-      >
-        {value}
-      </p>
-      <p className="mt-1 text-xs leading-snug break-words text-muted-foreground">{hint}</p>
-      {subhint ? <p className="mt-1 text-[11px] leading-snug break-words text-muted-foreground">{subhint}</p> : null}
-    </div>
-  );
+function ScenarioCard({ title, text, onClick, disabled }: { title: string; text: string; onClick: () => void; disabled: boolean }) {
+  return <button type="button" onClick={onClick} disabled={disabled} className="panel p-5 text-left transition hover:-translate-y-0.5 hover:border-foreground/20 disabled:opacity-50"><p className="font-display font-semibold">{title}</p><p className="mt-2 text-sm text-muted-foreground">{text}</p></button>;
+}
+function Section({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+  return <div className="panel space-y-4 p-5"><div><h2 className="font-display text-lg font-semibold">{title}</h2><p className="text-sm text-muted-foreground">{subtitle}</p></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{children}</div></div>;
+}
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">{label}</Label>{children}</div>;
+}
+function Metric({ label, value }: { label: string; value: string }) {
+  return <div className="panel p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="num mt-2 text-xl font-semibold break-all">{value}</p></div>;
+}
+function ComingSoon({ title, text }: { title: string; text: string }) {
+  return <div className="panel p-8"><h2 className="font-display text-xl font-semibold">{title}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{text}</p></div>;
 }
