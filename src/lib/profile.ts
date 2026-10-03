@@ -35,6 +35,10 @@ export type Profile = {
   cpp_avg_income: number;
   cpp_years_worked: number;
   cpp_future_income: number;
+  // Detailed CPP earnings history (new - uses CppCalculator)
+  cpp_detailed_history?: Array<{ year: number; earnings: number }>;
+  cpp_detailed_future_earnings?: number;
+  cpp_detailed_child_rearing?: number[];
   oas_years_in_canada: number;
   spouse_retirement_age: number | null;
   spouse_cpp_avg_income: number;
@@ -133,9 +137,11 @@ export function useUpdateProfile() {
       const id = auth.user?.id;
       if (!id) throw new Error("Not signed in");
 
+      // Strip detailed CPP history fields (not in Supabase schema yet - stored in-memory only)
+      const { cpp_detailed_history, cpp_detailed_future_earnings, cpp_detailed_child_rearing, ...supabasePatch } = patch;
       const { error } = await supabase
         .from("profiles")
-        .upsert({ id, ...patch }, { onConflict: "id" });
+        .upsert({ id, ...supabasePatch }, { onConflict: "id" });
 
       if (error) throw error;
     },
