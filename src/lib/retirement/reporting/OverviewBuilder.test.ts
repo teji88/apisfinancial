@@ -52,6 +52,7 @@ describe("buildRetirementOverview", () => {
       "Portfolio longevity",
       "Taxes & government benefits",
       "Survivor & estate",
+      "Withdrawal sequence",
     ]);
   });
 

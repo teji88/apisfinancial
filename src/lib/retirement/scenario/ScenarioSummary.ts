@@ -57,6 +57,11 @@ export function scenarioStatusText(summary: ScenarioSummary): string {
   return "No spending shortfall in the simulation";
 }
 
+export function scenarioPasses(summary: ScenarioSummary): boolean | null {
+  if (summary.status === "INCOMPLETE") return null;
+  return summary.status !== "DEPLETES" && summary.status !== "SHORTFALL";
+}
+
 export function scenarioMetricDelta(
   run: ScenarioRun,
   metric: keyof SimulationResult["metrics"],
