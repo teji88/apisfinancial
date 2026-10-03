@@ -28,6 +28,11 @@ export function useSimulationWorker() {
   // Stress jobs are fired as a batch (one per scenario), so their replies must
   // accumulate instead of the single-latest-wins filter used by other kinds.
   const pendingStressRef = useRef<Set<number>>(new Set());
+  // Fallback timers for when the worker doesn't respond (e.g. Safari issue).
+  const compareFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stressFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Severities for the current stress batch (for main-thread fallback).
+  const stressSeveritiesRef = useRef<Record<string, StressSeverity>>({});
 
   const [projection, setProjection] = useState<Projection | null>(null);
   const [projecting, setProjecting] = useState(false);
@@ -105,6 +110,10 @@ export function useSimulationWorker() {
         setEarliest(result as number | null);
         setEarliestLoading(false);
       } else if (kind === "compare") {
+        if (compareFallbackRef.current) {
+          clearTimeout(compareFallbackRef.current);
+          compareFallbackRef.current = null;
+        }
         setComparison(
           result as { results: StrategyComparison[]; best: WithdrawalPolicy },
         );
@@ -113,7 +122,13 @@ export function useSimulationWorker() {
         const r = result as StressTestResult;
         pendingStressRef.current.delete(id);
         setStressResults((prev) => ({ ...prev, [`${r.scenarioId}-${r.severity}`]: r }));
-        if (pendingStressRef.current.size === 0) setStressing(false);
+        if (pendingStressRef.current.size === 0) {
+          if (stressFallbackRef.current) {
+            clearTimeout(stressFallbackRef.current);
+            stressFallbackRef.current = null;
+          }
+          setStressing(false);
+        }
       }
     };
 
@@ -126,6 +141,8 @@ export function useSimulationWorker() {
     };
 
     return () => {
+      if (compareFallbackRef.current) clearTimeout(compareFallbackRef.current);
+      if (stressFallbackRef.current) clearTimeout(stressFallbackRef.current);
       worker.terminate();
       workerRef.current = null;
     };
@@ -173,22 +190,83 @@ export function useSimulationWorker() {
   const runCompare = useCallback(
     (inputs: PlannerInputs, objective: StrategyObjective) => {
       setComparing(true);
-      post("compare", inputs, objective);
+      setWorkerError(null);
+      const workerId = post("compare", inputs, objective);
+      // Fallback: if the worker doesn't respond in 20s (e.g. Safari worker
+      // issue), compute on the main thread instead.
+      const fallbackTimer = setTimeout(async () => {
+        // Check if still waiting (comparing still true and no result yet)
+        let stillWaiting = false;
+        setComparing((prev) => {
+          stillWaiting = prev;
+          return prev;
+        });
+        if (!stillWaiting) return;
+        try {
+          const { compareWithdrawalStrategies } = await import(
+            "@/lib/retirement/adapter/oldApiAdapter"
+          );
+          const result = compareWithdrawalStrategies(inputs, objective);
+          setComparison(result);
+          setComparing(false);
+        } catch (err) {
+          setWorkerError(err instanceof Error ? err.message : "Comparison failed");
+          setComparing(false);
+        }
+      }, 20000);
+      // Clear the fallback timer if the worker responds (handled in onmessage
+      // via setComparing(false) — but we need to clear the timer too).
+      // We store it on a ref so onmessage can clear it.
+      compareFallbackRef.current = fallbackTimer;
     },
     [post],
   );
 
   /** Clear a stale comparison (inputs changed). */
   const clearComparison = useCallback(() => {
+    if (compareFallbackRef.current) {
+      clearTimeout(compareFallbackRef.current);
+      compareFallbackRef.current = null;
+    }
     setComparison(null);
   }, []);
 
   /** On-demand: run a single stress test scenario. */
   const runStress = useCallback(
     (inputs: PlannerInputs, scenarioId: StressScenario["id"], severity: StressSeverity) => {
+      const isFirstOfBatch = pendingStressRef.current.size === 0;
+      if (isFirstOfBatch) stressSeveritiesRef.current = {};
+      stressSeveritiesRef.current[scenarioId] = severity;
       setStressing(true);
+      setWorkerError(null);
       const id = post("stress", inputs, undefined, { scenarioId, severity });
       if (id > 0) pendingStressRef.current.add(id);
+      // Fallback: if the worker doesn't respond in 25s, compute on the main thread.
+      if (isFirstOfBatch) {
+        if (stressFallbackRef.current) clearTimeout(stressFallbackRef.current);
+        const batchInputs = inputs;
+        stressFallbackRef.current = setTimeout(async () => {
+          if (pendingStressRef.current.size === 0) return;
+          try {
+            const { runStressTest, STRESS_SCENARIOS } = await import(
+              "@/lib/retirement/adapter/oldApiAdapter"
+            );
+            const severities = stressSeveritiesRef.current;
+            const results: Record<string, StressTestResult> = {};
+            for (const s of STRESS_SCENARIOS) {
+              const r = runStressTest(batchInputs, s.id, severities[s.id] ?? "moderate");
+              results[`${r.scenarioId}-${r.severity}`] = r;
+            }
+            pendingStressRef.current.clear();
+            setStressResults(results);
+            setStressing(false);
+          } catch (err) {
+            setWorkerError(err instanceof Error ? err.message : "Stress test failed");
+            pendingStressRef.current.clear();
+            setStressing(false);
+          }
+        }, 25000);
+      }
     },
     [post],
   );
@@ -196,6 +274,10 @@ export function useSimulationWorker() {
   /** Clear stress test results (e.g. when inputs change). */
   const clearStress = useCallback(() => {
     pendingStressRef.current.clear();
+    if (stressFallbackRef.current) {
+      clearTimeout(stressFallbackRef.current);
+      stressFallbackRef.current = null;
+    }
     setStressResults({});
   }, []);
 
