@@ -183,6 +183,8 @@ export function runRetirementSimulation(
     let investmentGrowthThisMonth = 0;
     const date = new Date(start.getTime());
     date.setUTCMonth(start.getUTCMonth() + i);
+    // Inflation-adjust the spending target each month (spending is entered in today's dollars)
+    if (i > 0) spending *= (1 + monthlyInflation);
     const ages = Object.fromEntries(
       people.map((person) => [person.role, ageAtMonth(person.birthYear, person.birthMonth, date)]),
     ) as Partial<Record<PersonRole, number>>;
