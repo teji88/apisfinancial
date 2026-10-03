@@ -499,6 +499,7 @@ function RetirementPage() {
     stressing,
     runStress,
     clearStress,
+    workerError,
   } = useSimulationWorker();
 
   // Stress test severity per scenario (user-adjustable)
@@ -537,6 +538,17 @@ function RetirementPage() {
     !projection ||
     !derived
   ) {
+    if (workerError) {
+      return (
+        <div className="p-6 space-y-3">
+          <p className="text-sm font-medium text-destructive">Couldn't load your plan</p>
+          <p className="text-sm text-muted-foreground">{workerError}</p>
+          <p className="text-xs text-muted-foreground">
+            Try refreshing the page. If this keeps happening, please let us know.
+          </p>
+        </div>
+      );
+    }
     return <p className="p-6 text-sm text-muted-foreground">Loading your plan…</p>;
   }
 
@@ -1111,11 +1123,7 @@ function RetirementPage() {
             subtitle="The basics that set the length and shape of the plan."
           >
             <Field label="Your age">
-              <Input
-                type="number"
-                value={p.current_age ?? ""}
-                onChange={(e) => set({ current_age: num(e.target.value, 40) })}
-              />
+              <NumInput value={p.current_age} onCommit={(n) => set({ current_age: n })} />
             </Field>
             <Field label="Target retirement age" {...lockProps}>
               <RetirementAgeInput
@@ -1124,11 +1132,7 @@ function RetirementPage() {
               />
             </Field>
             <Field label="Desired after-tax household income (today's $)">
-              <Input
-                type="number"
-                value={p.desired_income ?? 0}
-                onChange={(e) => set({ desired_income: num(e.target.value) })}
-              />
+              <NumInput value={p.desired_income} onCommit={(n) => set({ desired_income: n })} />
             </Field>
             <Field label="Province">
               <Select value={inputs.province} onValueChange={(v) => set({ province: v })}>
@@ -1145,35 +1149,16 @@ function RetirementPage() {
               </Select>
             </Field>
             <Field label="Inflation %" {...lockProps}>
-              <Input
-                type="number"
-                step="0.1"
-                value={p.inflation_rate ?? 2.5}
-                onChange={(e) => set({ inflation_rate: num(e.target.value, 2.5) })}
-              />
+              <NumInput value={p.inflation_rate} onCommit={(n) => set({ inflation_rate: n })} step="0.1" />
             </Field>
             <Field label="Working years growth rate (%)" {...lockProps}>
-              <Input
-                type="number"
-                step="0.1"
-                value={p.working_growth_rate ?? 6}
-                onChange={(e) => set({ working_growth_rate: num(e.target.value, 6) })}
-              />
+              <NumInput value={p.working_growth_rate} onCommit={(n) => set({ working_growth_rate: n })} step="0.1" />
             </Field>
             <Field label="Retirement years growth rate (%)" {...lockProps}>
-              <Input
-                type="number"
-                step="0.1"
-                value={p.retirement_growth_rate ?? 4.5}
-                onChange={(e) => set({ retirement_growth_rate: num(e.target.value, 4.5) })}
-              />
+              <NumInput value={p.retirement_growth_rate} onCommit={(n) => set({ retirement_growth_rate: n })} step="0.1" />
             </Field>
             <Field label="Life expectancy" {...lockProps}>
-              <Input
-                type="number"
-                value={p.life_expectancy ?? 95}
-                onChange={(e) => set({ life_expectancy: num(e.target.value, 95) })}
-              />
+              <NumInput value={p.life_expectancy} onCommit={(n) => set({ life_expectancy: n })} />
             </Field>
             <Field label="Marital status" {...plusProps}>
               <Select
@@ -1196,25 +1181,13 @@ function RetirementPage() {
             subtitle={`We credit each year at your income divided by the yearly maximum, over the best 39 years. Estimated entitlement: ${derived.selfPct}% of the maximum.`}
           >
             <Field label="Typical income in past working years (today's $)">
-              <Input
-                type="number"
-                value={p.cpp_avg_income ?? 0}
-                onChange={(e) => set({ cpp_avg_income: num(e.target.value) })}
-              />
+              <NumInput value={p.cpp_avg_income} onCommit={(n) => set({ cpp_avg_income: n })} />
             </Field>
             <Field label="Years worked in Canada so far">
-              <Input
-                type="number"
-                value={p.cpp_years_worked ?? 0}
-                onChange={(e) => set({ cpp_years_worked: num(e.target.value) })}
-              />
+              <NumInput value={p.cpp_years_worked} onCommit={(n) => set({ cpp_years_worked: n })} />
             </Field>
             <Field label="Expected income until retirement (today's $)">
-              <Input
-                type="number"
-                value={p.cpp_future_income ?? 0}
-                onChange={(e) => set({ cpp_future_income: num(e.target.value) })}
-              />
+              <NumInput value={p.cpp_future_income} onCommit={(n) => set({ cpp_future_income: n })} />
             </Field>
             <Field label="CPP start age (60–70)" {...lockProps}>
               <AgeSelect
@@ -1224,11 +1197,7 @@ function RetirementPage() {
               />
             </Field>
             <Field label="Years living in Canada after age 18 (sets OAS)">
-              <Input
-                type="number"
-                value={p.oas_years_in_canada ?? 40}
-                onChange={(e) => set({ oas_years_in_canada: num(e.target.value, 40) })}
-              />
+              <NumInput value={p.oas_years_in_canada} onCommit={(n) => set({ oas_years_in_canada: n })} />
             </Field>
             <Field label="OAS start age (65–70)" {...lockProps}>
               <AgeSelect
@@ -1255,32 +1224,16 @@ function RetirementPage() {
             subtitle="Where each dollar you save lands changes the tax you pay later."
           >
             <Field label="Annual savings (today's $)">
-              <Input
-                type="number"
-                value={p.annual_savings ?? 0}
-                onChange={(e) => set({ annual_savings: num(e.target.value) })}
-              />
+              <NumInput value={p.annual_savings} onCommit={(n) => set({ annual_savings: n })} />
             </Field>
             <Field label="% to TFSA" {...plusProps}>
-              <Input
-                type="number"
-                value={p.save_pct_tfsa ?? 40}
-                onChange={(e) => set({ save_pct_tfsa: num(e.target.value) })}
-              />
+              <NumInput value={p.save_pct_tfsa} onCommit={(n) => set({ save_pct_tfsa: n })} />
             </Field>
             <Field label="% to RRSP / FHSA" {...plusProps}>
-              <Input
-                type="number"
-                value={p.save_pct_rrsp ?? 40}
-                onChange={(e) => set({ save_pct_rrsp: num(e.target.value) })}
-              />
+              <NumInput value={p.save_pct_rrsp} onCommit={(n) => set({ save_pct_rrsp: n })} />
             </Field>
             <Field label="% to non-registered" {...plusProps}>
-              <Input
-                type="number"
-                value={p.save_pct_nonreg ?? 20}
-                onChange={(e) => set({ save_pct_nonreg: num(e.target.value) })}
-              />
+              <NumInput value={p.save_pct_nonreg} onCommit={(n) => set({ save_pct_nonreg: n })} />
             </Field>
 
             <p className="col-span-full text-xs text-muted-foreground">
@@ -1295,11 +1248,7 @@ function RetirementPage() {
               subtitle={`Their CPP and OAS count towards the household income. Estimated CPP entitlement: ${derived.spousePct}% of the maximum.`}
             >
               <Field label="Spouse age">
-                <Input
-                  type="number"
-                  value={p.spouse_age ?? ""}
-                  onChange={(e) => set({ spouse_age: num(e.target.value, 40) })}
-                />
+                              <NumInput value={p.spouse_age} onCommit={(n) => set({ spouse_age: n })} />
               </Field>
               <Field label="Spouse retirement age">
                 <RetirementAgeInput
@@ -1308,32 +1257,16 @@ function RetirementPage() {
                 />
               </Field>
               <Field label="Spouse typical past income (today's $)">
-                <Input
-                  type="number"
-                  value={p.spouse_cpp_avg_income ?? 0}
-                  onChange={(e) => set({ spouse_cpp_avg_income: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_cpp_avg_income} onCommit={(n) => set({ spouse_cpp_avg_income: n })} />
               </Field>
               <Field label="Spouse years worked so far">
-                <Input
-                  type="number"
-                  value={p.spouse_cpp_years_worked ?? 0}
-                  onChange={(e) => set({ spouse_cpp_years_worked: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_cpp_years_worked} onCommit={(n) => set({ spouse_cpp_years_worked: n })} />
               </Field>
               <Field label="Spouse expected income until retirement">
-                <Input
-                  type="number"
-                  value={p.spouse_cpp_future_income ?? 0}
-                  onChange={(e) => set({ spouse_cpp_future_income: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_cpp_future_income} onCommit={(n) => set({ spouse_cpp_future_income: n })} />
               </Field>
               <Field label="Spouse years in Canada after 18">
-                <Input
-                  type="number"
-                  value={p.spouse_oas_years_in_canada ?? 40}
-                  onChange={(e) => set({ spouse_oas_years_in_canada: num(e.target.value, 40) })}
-                />
+                              <NumInput value={p.spouse_oas_years_in_canada} onCommit={(n) => set({ spouse_oas_years_in_canada: n })} />
               </Field>
               <Field label="Spouse CPP start age">
                 <AgeSelect
@@ -1351,39 +1284,19 @@ function RetirementPage() {
               </Field>
 
               <Field label="Spouse RRSP">
-                <Input
-                  type="number"
-                  value={p.spouse_rrsp ?? 0}
-                  onChange={(e) => set({ spouse_rrsp: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_rrsp} onCommit={(n) => set({ spouse_rrsp: n })} />
               </Field>
               <Field label="Spouse LIRA / LIF">
-                <Input
-                  type="number"
-                  value={p.spouse_lira ?? 0}
-                  onChange={(e) => set({ spouse_lira: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_lira} onCommit={(n) => set({ spouse_lira: n })} />
               </Field>
               <Field label="Spouse TFSA">
-                <Input
-                  type="number"
-                  value={p.spouse_tfsa ?? 0}
-                  onChange={(e) => set({ spouse_tfsa: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_tfsa} onCommit={(n) => set({ spouse_tfsa: n })} />
               </Field>
               <Field label="Spouse non-registered">
-                <Input
-                  type="number"
-                  value={p.spouse_nonreg ?? 0}
-                  onChange={(e) => set({ spouse_nonreg: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_nonreg} onCommit={(n) => set({ spouse_nonreg: n })} />
               </Field>
               <Field label="Spouse other pension income in retirement">
-                <Input
-                  type="number"
-                  value={p.spouse_income ?? 0}
-                  onChange={(e) => set({ spouse_income: num(e.target.value) })}
-                />
+                              <NumInput value={p.spouse_income} onCommit={(n) => set({ spouse_income: n })} />
               </Field>
             </Section>
           )}
@@ -1426,12 +1339,7 @@ function RetirementPage() {
                 ] as const
               ).map(([label, key, synced]) => (
                 <Field key={key} label={label}>
-                  <Input
-                    type="number"
-                    disabled={!p.manual_override}
-                    value={p.manual_override ? ((p[key] as number) ?? 0) : Math.round(synced)}
-                    onChange={(e) => set({ [key]: num(e.target.value) } as Partial<Profile>)}
-                  />
+                  <NumInput value={p[key]} onCommit={(n) => set({ [key]: n } as Partial<Profile>)} />
                 </Field>
               ))}
             </div>
@@ -1620,6 +1528,55 @@ function Section({
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{children}</div>
     </div>
+  );
+}
+
+/**
+ * Numeric input that lets the user clear the field while typing.
+ *
+ * Problem it solves: a directly-controlled `value={p.x}` input snaps back to
+ * the old number the moment the field is emptied (because `num("")` falls back
+ * to the previous value), so the user can never delete-to-retype.
+ *
+ * How it works: keeps local text state while editing. Commits to the profile
+ * on every parseable keystroke (so the plan stays live), but an empty or
+ * invalid field doesn't commit — and on blur the display reverts to the last
+ * committed value instead of getting stuck on "".
+ */
+function NumInput({
+  value,
+  onCommit,
+  step,
+  min,
+  max,
+  placeholder,
+}: {
+  value: number | null | undefined;
+  onCommit: (n: number) => void;
+  step?: string;
+  min?: string;
+  max?: string;
+  placeholder?: string;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const display = text ?? (value ?? "");
+
+  return (
+    <Input
+      type="number"
+      value={display}
+      step={step}
+      min={min}
+      max={max}
+      placeholder={placeholder}
+      onChange={(e) => {
+        const t = e.target.value;
+        setText(t);
+        const n = num(t, NaN);
+        if (Number.isFinite(n)) onCommit(n);
+      }}
+      onBlur={() => setText(null)}
+    />
   );
 }
 
