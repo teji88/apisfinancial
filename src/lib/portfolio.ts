@@ -1,8 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getQuotes } from "./market.functions";
 import type { Account, Holding, Quote, Transaction } from "./finance";
+
+// Module-level empty singletons. `data ?? []` in a hook body creates a
+// brand-new array on every render, which breaks referential stability for
+// downstream useMemo/useEffect deps and can cause infinite render loops.
+// These singletons keep the reference stable when there's no data.
+// (Never mutated — treated as read-only by convention.)
+const EMPTY_ACCOUNTS: Account[] = [];
+const EMPTY_HOLDINGS: Holding[] = [];
+const EMPTY_TRANSACTIONS: Transaction[] = [];
+const EMPTY_QUOTE_LIST: {
+  symbol: string;
+  price: number | null;
+  previousClose: number | null;
+  currency: string;
+  name: string;
+  dividendRate: number | null;
+  dividendYield: number | null;
+  exDivDate: string | null;
+  exDivAmount: number | null;
+}[] = [];
 
 export function useAccounts() {
   return useQuery({
@@ -122,41 +143,74 @@ export function usePortfolio(): PortfolioData {
   const accounts = useAccounts();
   const holdings = useHoldings();
   const transactions = useTransactions();
-  const symbols = (holdings.data ?? []).map((h) => h.symbol);
+
+  // Stable references: holdings.data may be undefined while loading; use the
+  // frozen singleton so downstream memos don't see a new array each render.
+  const holdingsData = holdings.data ?? EMPTY_HOLDINGS;
+  const symbols = useMemo(() => holdingsData.map((h) => h.symbol), [holdingsData]);
+
   const quotes = useQuotes(symbols);
   const refresh = useRefreshPrices(symbols);
 
-  const quoteMap: Record<string, Quote> = {};
-  for (const q of quotes.data?.quotes ?? []) {
-    quoteMap[q.symbol.toUpperCase()] = {
-      symbol: q.symbol,
-      price: q.price,
-      previousClose: q.previousClose,
-      currency: q.currency,
-      name: q.name,
-      dividendRate: q.dividendRate,
-      dividendYield: q.dividendYield,
-      exDivDate: q.exDivDate,
-      exDivAmount: q.exDivAmount,
-    };
-  }
+  // Memoized: previously rebuilt on every render, breaking referential
+  // stability for everything downstream (balances -> inputs -> effects).
+  const quoteMap: Record<string, Quote> = useMemo(() => {
+    const map: Record<string, Quote> = {};
+    for (const q of quotes.data?.quotes ?? EMPTY_QUOTE_LIST) {
+      map[q.symbol.toUpperCase()] = {
+        symbol: q.symbol,
+        price: q.price,
+        previousClose: q.previousClose,
+        currency: q.currency,
+        name: q.name,
+        dividendRate: q.dividendRate,
+        dividendYield: q.dividendYield,
+        exDivDate: q.exDivDate,
+        exDivAmount: q.exDivAmount,
+      };
+    }
+    return map;
+  }, [quotes.data]);
 
-  const missingPrices = Array.from(new Set(symbols.map((s) => s.toUpperCase()))).filter(
-    (s) => quoteMap[s]?.price == null,
+  const missingPrices = useMemo(
+    () =>
+      Array.from(new Set(symbols.map((s) => s.toUpperCase()))).filter(
+        (s) => quoteMap[s]?.price == null,
+      ),
+    [symbols, quoteMap],
   );
 
-  return {
-    accounts: accounts.data ?? [],
-    holdings: holdings.data ?? [],
-    transactions: transactions.data ?? [],
-    quotes: quoteMap,
-    fxUsdCad: quotes.data?.fxUsdCad ?? 1.37,
-    pricesAsOf: quotes.data?.pricesAsOf ?? null,
-    missingPrices,
-    refreshingPrices: refresh.isPending || quotes.isFetching,
-    refreshPrices: () => refresh.mutate(),
-    loading: accounts.isLoading || holdings.isLoading || transactions.isLoading,
-  };
+  const refreshPrices = useCallback(() => refresh.mutate(), [refresh]);
+  const quotesData = quotes.data;
+
+  return useMemo(
+    () => ({
+      accounts: accounts.data ?? EMPTY_ACCOUNTS,
+      holdings: holdingsData,
+      transactions: transactions.data ?? EMPTY_TRANSACTIONS,
+      quotes: quoteMap,
+      fxUsdCad: quotesData?.fxUsdCad ?? 1.37,
+      pricesAsOf: quotesData?.pricesAsOf ?? null,
+      missingPrices,
+      refreshingPrices: refresh.isPending || quotes.isFetching,
+      refreshPrices,
+      loading: accounts.isLoading || holdings.isLoading || transactions.isLoading,
+    }),
+    [
+      accounts.data,
+      accounts.isLoading,
+      holdingsData,
+      holdings.isLoading,
+      transactions.data,
+      transactions.isLoading,
+      quoteMap,
+      quotesData,
+      quotes.isFetching,
+      missingPrices,
+      refresh.isPending,
+      refreshPrices,
+    ],
+  );
 }
 
 export function useInvalidatePortfolio() {

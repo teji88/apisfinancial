@@ -548,7 +548,7 @@ function RetirementPage() {
       self,
       spouse,
     };
-  }, [p, derived, balances, clawbackTolerance, policy]);
+  }, [p, derived, balances, clawbackTolerance, policy, gainRatioOverride]);
 
   /* All heavy engine work runs in a Web Worker — the UI thread never blocks.
      The projection updates live (debounced); earliest-age and strategy
@@ -581,16 +581,20 @@ function RetirementPage() {
     longLife: "moderate",
   });
 
-  // Clear stress results when inputs change (they're stale) — but never
-  // mid-run, or results get wiped just as they arrive.
+  // Clear stress/comparison results when inputs change (they're stale) — but
+  // never mid-run, or results get wiped just as they arrive.
+  // Keyed on the serialized inputs (not object identity) as belt-and-suspenders:
+  // even if a memo above hands us a new-but-deeply-equal object, we don't
+  // nuke valid results.
   const stressingRef = useRef(stressing);
   stressingRef.current = stressing;
   const comparingRef = useRef(comparing);
   comparingRef.current = comparing;
+  const inputsKey = inputs ? JSON.stringify(inputs) : null;
   useEffect(() => {
     if (!stressingRef.current) clearStress();
     if (!comparingRef.current) clearComparison();
-  }, [inputs, clearStress, clearComparison]);
+  }, [inputsKey, clearStress, clearComparison]);
 
   // Quick estimate runs immediately (no debounce) for instant feedback.
   // Full projection follows after 400ms of inactivity and overwrites it.
@@ -659,14 +663,22 @@ function RetirementPage() {
   const totalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
   const endingBalance = rows.length ? rows[rows.length - 1]!.balances.total : 0;
   const moneyNote = "in today's dollars";
-  const firstRow = rows[0];
 
-  const startBalance = firstRow
-    ? firstRow.balances.total +
-      firstRow.rrifDraw +
-      firstRow.lifDraw +
-      firstRow.nonregDraw +
-      firstRow.tfsaDraw
+  // "At {retirementAge}" should show the projected balance at retirement age,
+  // not the current year's balance. Find the row for the retirement age,
+  // falling back to the first row at or after that age.
+  const retirementAge = inputs?.retirementAge ?? 65;
+  const retirementRow =
+    rows.find((r) => r.age === retirementAge) ??
+    rows.find((r) => r.age >= retirementAge) ??
+    rows[0];
+
+  const startBalance = retirementRow
+    ? retirementRow.balances.total +
+      retirementRow.rrifDraw +
+      retirementRow.lifDraw +
+      retirementRow.nonregDraw +
+      retirementRow.tfsaDraw
     : 0;
   const clawbackYears = rows.filter((r) => r.oasClawback > 1);
   const todayTotal =
@@ -853,8 +865,8 @@ function RetirementPage() {
             tone: totalClawback > 1 ? "warn" : "good",
             detail:
               totalClawback > 1
-                ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years`
-                : "No OAS clawback in this plan",
+                ? `${formatCad(totalClawback)} of OAS clawed back over ${clawbackYears.length} years. Tax counted from retirement onward.`
+                : "No OAS clawback in this plan. Tax counted from retirement onward.",
           },
           {
             key: "estate",
@@ -1633,8 +1645,6 @@ function RetirementPage() {
                       <TableHead className="text-right">Non-Reg</TableHead>
                       <TableHead className="text-right">TFSA</TableHead>
                       <TableHead className="text-right">CPP + OAS</TableHead>
-                      <TableHead className="text-right">Taxable income</TableHead>
-                      <TableHead className="text-right">Tax</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1654,10 +1664,6 @@ function RetirementPage() {
                           <TableCell className="num text-right">
                             {formatCad(x.cpp + x.oas)}
                           </TableCell>
-                          <TableCell className="num text-right">
-                            {formatCad(x.taxableIncome)}
-                          </TableCell>
-                          <TableCell className="num text-right">{formatCad(x.taxes)}</TableCell>
                         </TableRow>
                       )),
                     )}

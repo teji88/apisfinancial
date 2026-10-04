@@ -502,8 +502,12 @@ function simulationToProjection(
 
   // Summary figures are also in today's dollars. Lifetime tax is the sum of
   // the already-deflated yearly taxes (not the deflated nominal total).
-  const deflatedTotalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
-  const deflatedTotalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
+  // Count retirement years only: taxes paid while working are not part of
+  // the retirement plan's cost.
+  const retirementAge = input.retirementAge ?? 65;
+  const retirementRows = rows.filter((r) => r.age >= retirementAge);
+  const deflatedTotalTaxes = retirementRows.reduce((t, r) => t + r.taxes, 0);
+  const deflatedTotalClawback = retirementRows.reduce((t, r) => t + r.oasClawback, 0);
   const lastYear = sortedYears.length ? sortedYears[sortedYears.length - 1]! : currentYear;
   const endDeflator = deflatorFor(lastYear);
   const lastRow = rows.length ? rows[rows.length - 1]! : null;
