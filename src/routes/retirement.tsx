@@ -543,7 +543,7 @@ function RetirementPage() {
         nonreg: p.save_pct_nonreg ?? 20,
       },
       clawbackTolerance,
-      pensionSplitPercent: p.pension_split_percent ?? 0,
+      pensionSplitPercent: ((p as unknown as Record<string, number | null>)["pension_split_percent"] ?? 0),
       withdrawalPolicy: policy,
       self,
       spouse,
@@ -560,6 +560,7 @@ function RetirementPage() {
     earliestLoading,
     earliestProgress,
     runEarliest,
+    clearEarliest,
     comparison,
     comparing,
     runCompare,
@@ -594,7 +595,8 @@ function RetirementPage() {
   useEffect(() => {
     if (!stressingRef.current) clearStress();
     if (!comparingRef.current) clearComparison();
-  }, [inputsKey, clearStress, clearComparison]);
+    clearEarliest();
+  }, [inputsKey, clearStress, clearComparison, clearEarliest]);
 
   // Quick estimate runs immediately (no debounce) for instant feedback.
   // Full projection follows after 400ms of inactivity and overwrites it.
@@ -1468,7 +1470,7 @@ function RetirementPage() {
               </Field>
               <Field label="Pension income split % (0-50)">
                 <NumInput
-                  value={p.pension_split_percent ?? 0}
+                  value={((p as unknown as Record<string, number | null>)["pension_split_percent"] ?? 0)}
                   onCommit={(n) => set({ pension_split_percent: Math.min(50, Math.max(0, n)) } as Partial<Profile>)}
                 />
                 <p className="text-xs text-muted-foreground mt-1">

@@ -350,11 +350,16 @@ function optimizeEarliestRetirement(
   problem: OptimizationProblem,
 ): OptimizationResult {
   const objective = "MIN_RETIREMENT_AGE" as const;
+  // Spending is the user's stated goal — never relax it to make an age "work".
   const baseVariables = (problem.variables ?? defaultVariables(problem.scenario)).filter(
-    (v) => v.path !== "retirementAge",
+    (v) => v.path !== "retirementAge" && v.path !== "annualSpending",
   );
 
-  const MIN_AGE = 35;
+  const primary = problem.scenario.household.people[0];
+  const currentAge = primary
+    ? (problem.startYear ?? new Date().getFullYear()) - primary.birthYear
+    : 35;
+  const MIN_AGE = Math.max(35, Math.min(85, currentAge));
   const MAX_AGE = 85;
 
   const isFeasibleAtAge = (age: number): { feasible: boolean; candidates: OptimizationCandidate[] } => {

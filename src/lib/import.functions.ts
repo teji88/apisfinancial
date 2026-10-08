@@ -10,7 +10,7 @@ import {
 // The canonical schemas live in ./gemini-parse (pure, unit-tested). They are
 // re-exported here so existing imports from "@/lib/import.functions" — the
 // import page's ParsedTransaction type — keep working unchanged.
-export { ParsedTransaction } from "./gemini-parse";
+export { ParsedTransaction as ParsedTransactionSchema } from "./gemini-parse";
 export type { ParsedTransaction, ParseResult } from "./gemini-parse";
 import type { ParseResult } from "./gemini-parse";
 
