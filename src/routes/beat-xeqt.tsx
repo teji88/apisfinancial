@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/beat-xeqt")({
   staticData: { sitemap: true },
   head: () => ({
+    links: [{ rel: "canonical", href: "https://www.apisfinancial.app/beat-xeqt" }],
     meta: [
       { title: "Did I beat XEQT? — free benchmark simulator | Apis Financial" },
       {
