@@ -890,6 +890,7 @@ export function runRetirementSimulation(
     "Death ages now transition the household through BOTH_ALIVE → SURVIVOR → ESTATE; CPP survivor and account death treatment are modelled at a planning level, while final-return tax, beneficiary paperwork, ACB and detailed provincial estate rules remain simplified.",
     "GIS and Allowance use the official July-September 2026 income-band schedules with prior-year income and the earnings exemption; quarterly updates and current-year income reassessments are not modeled.",
     "OAS recovery is modelled as an income-based estimate and is not yet tied to the actual OAS amount paid in each recovery period.",
+    "OAS recovery timing: in reality the tax is computed on the prior calendar year's income and withheld monthly over the July–June recovery period (trued up at filing), a ~1-year cash-flow lag. This model attributes the recovery to the income year as a documented simplification.",
   ];
 
   return {

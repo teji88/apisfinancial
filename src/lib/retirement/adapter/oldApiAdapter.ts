@@ -623,7 +623,7 @@ export function cppFromDetailedHistory(
     childRearingYears,
     cppStartAge: 65,
   });
-  return result.cppAt65Monthly;
+  return result.cppBaseMonthly;
 }
 
 /**
@@ -655,24 +655,35 @@ export function cppPrbInfo(
 
 /**
  * OAS fraction based on years of Canadian residence (40 years = full).
+ * OAS Act s.3(4): only completed whole years count — a fraction is nothing.
  */
 export function oasFractionFromResidence(years: number): number {
-  return Math.min(1, Math.max(0, years / 40));
+  return Math.min(1, Math.max(0, Math.floor(Math.max(0, years)) / 40));
 }
 
 /**
  * Calculate OAS annual amount at the chosen start age.
  * Deferral bonus mirrors BenefitEngine: 0.6% per month after 65, capped at +36% (age 70).
+ * Applies OAS Act s.7.1(3)'s "greatest of": frozen fraction × deferral boost
+ * vs. fresh fraction at approval (residence earned while deferring counts,
+ * without the boost). Needs 10 completed years at approval (s.3).
  */
 export function oasAt(
   startAge: number,
   residenceYears: number,
 ): number {
-  // 2026 OAS max: $751.97/mo ($9,023.64/yr) for 65-74
-  const baseAnnual = 751.97 * 12;
-  const fraction = oasFractionFromResidence(residenceYears);
-  const deferralMonths = Math.min(60, Math.max(0, (startAge - 65) * 12));
-  return baseAnnual * fraction * (1 + 0.006 * deferralMonths);
+  // Oct-Dec 2026 OAS max: $762.50/mo ($9,150/yr) for 65-74
+  const baseAnnual = 762.50 * 12;
+  const frozenFraction = oasFractionFromResidence(residenceYears);
+  const deferralYears = Math.max(0, startAge - 65);
+  const deferralMonths = Math.min(60, Math.floor(deferralYears * 12));
+  const deferralFactor = 1 + deferralMonths * 0.006;
+  const freshYears = Math.min(
+    40,
+    Math.floor(Math.max(0, residenceYears)) + Math.floor(deferralYears),
+  );
+  if (freshYears < 10) return 0;
+  return baseAnnual * Math.max(frozenFraction * deferralFactor, freshYears / 40);
 }
 
 /**

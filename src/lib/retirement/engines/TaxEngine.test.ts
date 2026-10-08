@@ -60,10 +60,24 @@ describe("TaxEngine Canadian retirement ledgers", () => {
     expect(result.totalTax).toBeGreaterThanOrEqual(result.oasRecovery);
   });
 
-  it("uses the 2026 tax-year OAS recovery upper threshold", () => {
-    const belowUpper = calculateTaxFromIncome({ oas: 10_000, rrspRrif: 145_108 }, "AB", 65);
-    const aboveUpper = calculateTaxFromIncome({ oas: 10_000, rrspRrif: 145_110 }, "AB", 65);
-    expect(aboveUpper.oasRecovery - belowUpper.oasRecovery).toBeCloseTo(0.15, 2);
+  it("keeps growing recovery at 15% past the old 'upper threshold' until OAS is fully recovered (ITA s.180.2)", () => {
+    // s.180.2 has no intermediate upper-income cap: recovery = min(OAS received,
+    // 15% × excess). The published "upper thresholds" are just where 15% of the
+    // excess catches up to a FULL pension — not an operative cap.
+    const lower = calculateTaxFromIncome({ oas: 10_000, rrspRrif: 145_108 }, "AB", 65);
+    const higher = calculateTaxFromIncome({ oas: 10_000, rrspRrif: 150_000 }, "AB", 65);
+    // 0.15 × (155,108 − 95,323) = 8,967.75 vs 0.15 × (160,000 − 95,323) = 9,701.55
+    expect(lower.oasRecovery).toBeCloseTo(8_967.75, 2);
+    expect(higher.oasRecovery).toBeCloseTo(9_701.55, 2);
+  });
+
+  it("does not cap recovery of a deferred (boosted) OAS pension at the full-pension amount", () => {
+    // Deferred to 70 (+36%): $9,023.64 × 1.36 ≈ $12,272 received.
+    // s.180.2(a) is benefits RECEIVED, so recovery can exceed 15% × (upper − threshold).
+    const result = calculateTaxFromIncome({ oas: 12_272, rrspRrif: 147_728 }, "AB", 70);
+    // 0.15 × (160,000 − 95,323) = 9,701.55 < 12,272 → recovery = 9,701.55
+    // (the old intermediate cap would have wrongly given 8,967.90)
+    expect(result.oasRecovery).toBeCloseTo(9_701.55, 2);
   });
 
   it("indexes OAS recovery threshold to the tax year", () => {
