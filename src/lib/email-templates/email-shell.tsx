@@ -21,7 +21,7 @@ interface EmailShellProps {
 export function EmailShell({
   preview,
   siteName = "Apis Financial",
-  siteUrl = "https://apisfinancial.app",
+  siteUrl = "https://www.apisfinancial.app",
   children,
 }: EmailShellProps) {
   return (

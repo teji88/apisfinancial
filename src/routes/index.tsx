@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/")({
   staticData: { sitemap: true },
   head: () => ({
+    links: [{ rel: "canonical", href: "https://www.apisfinancial.app/" }],
     meta: [
       { title: "Apis Financial — Canadian portfolio tracker & retirement planner" },
       {
