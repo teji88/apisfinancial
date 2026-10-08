@@ -115,7 +115,7 @@ export function OldUiCppHistoryEditor({
 
       {calculation && (
         <div className="rounded bg-muted p-2 text-sm">
-          <span className="font-medium">Calculated CPP at 65: {formatCad(calculation.cppAt65Monthly)}/mo</span>
+          <span className="font-medium">Calculated CPP base: {formatCad(calculation.cppBaseMonthly)}/mo</span>
           <span className="ml-2 text-xs text-muted-foreground">
             ({calculation.contributoryYears} years, {calculation.dropoutYears} dropped)
           </span>
