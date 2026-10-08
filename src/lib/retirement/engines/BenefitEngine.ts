@@ -1,7 +1,7 @@
 import { CANADA_2026_PARAMETERS } from "../rules/canada2026";
 import { GIS_TABLES_2026_Q3, type GisBand } from "../rules/gisTables2026Q3";
 import type { Money, PersonScenario, PersonRole } from "../domain/types";
-import { resolveCppAt65, resolveCppPrb } from "../benefits/resolveCpp";
+import { resolveCppBase, resolveCppPrb } from "../benefits/resolveCpp";
 
 export interface BenefitEstimate {
   cpp: Money;
@@ -78,7 +78,19 @@ export function estimateGovernmentBenefits(
     ? 1 + cppMonthsFrom65 * Math.abs(CANADA_2026_PARAMETERS.cpp.before65MonthlyAdjustment)
     : 1 + cppMonthsFrom65 * CANADA_2026_PARAMETERS.cpp.after65MonthlyAdjustment;
 
-  const cppAt65Annual = resolveCppAt65(person) * 12;
+  const cppBaseAnnual = resolveCppBase(person) * 12;
+  // s.51(1): with earnings history the CPP base is in start-year dollars
+  // (MPEA of the pension start year), so price inflation runs from the
+  // start year. The manual fallback is a today's-dollars age-65 estimate,
+  // so it inflates from 2026 as before.
+  const hasCppHistory = !!person.cppEarningsHistory && person.cppEarningsHistory.length > 0;
+  const cppBaseYear = hasCppHistory && typeof person.birthYear === "number"
+    ? person.birthYear + Math.min(cppStartAge, CANADA_2026_PARAMETERS.cpp.startMaxAge)
+    : 2026;
+  const cppIndexFactor = Math.pow(
+    1 + inflationRate / 100,
+    Math.max(0, calendarYear - cppBaseYear),
+  );
   // PRBs: earned by working while collecting CPP. Each PRB starts the January
   // after its contribution year. Only include PRBs for years already worked.
   const prbInfo = resolveCppPrb(person);
@@ -87,26 +99,50 @@ export function estimateGovernmentBenefits(
     ? (prbInfo.monthly * 12 * earnedPrbYears.length) / prbInfo.years.length
     : 0;
   const cppAnnual = age >= cppStartAge
-    ? (cppAt65Annual * Math.max(0, cppAdjustment) + prbAnnual) * indexFactor
+    ? (cppBaseAnnual * Math.max(0, cppAdjustment) + prbAnnual) * cppIndexFactor
     : 0;
 
   const oasStartAge = typeof person.oasStartAge === "number"
     ? Math.min(CANADA_2026_PARAMETERS.oas.startMaxAge, Math.max(CANADA_2026_PARAMETERS.oas.startMinAge, person.oasStartAge))
     : 65;
 
-  const residenceFactor = Math.min(1, Math.max(0, person.oasResidenceYears / 40));
+  // OAS Act s.3(4): partial pensions use only COMPLETED years of residence —
+  // a fraction of a year counts as nothing (whole years, floored).
+  const wholeResidenceYears = Math.floor(Math.max(0, person.oasResidenceYears));
   const oasDeferralMonths = Math.round(Math.max(0, oasStartAge - 65) * 12);
   const oasDeferralFactor = 1 + Math.min(
     oasDeferralMonths * CANADA_2026_PARAMETERS.oas.deferralMonthlyAdjustment,
     CANADA_2026_PARAMETERS.oas.maxDeferralAdjustment,
   );
 
+  // OAS Act s.7.1(3) "greatest of" for deferred pensions (the default unless
+  // the person elects otherwise):
+  //   (a) deferral-increased full pension (only if qualified for a full pension),
+  //   (b) deferral-increased FROZEN partial pension (residence at qualification),
+  //   (c) partial pension recalculated at approval — residence earned during
+  //       the deferral counts, but the deferral boost does NOT (never both).
+  // Crossover: each deferral year adds 7.2% to (b) but at most 1/40th to (c);
+  // below ~14/40ths, (c) can win in early deferral years. (b) may exceed 100%
+  // of the base full pension (e.g. 30/40 × 1.36 = 1.02) — no cap at the full
+  // amount. Assumes continued Canadian residence during deferral for (c).
+  const deferralYears = Math.max(0, oasStartAge - 65);
+  const frozenFraction = Math.min(1, wholeResidenceYears / 40);
+  const freshYears = Math.min(40, wholeResidenceYears + Math.floor(deferralYears));
+  const freshFraction = freshYears / 40;
+  const oasFactor = Math.max(frozenFraction * oasDeferralFactor, freshFraction);
+
   const baseOasMonthly = age >= 75
     ? CANADA_2026_PARAMETERS.oas.maxMonthly75Plus
     : CANADA_2026_PARAMETERS.oas.maxMonthly65To74;
 
-  const oasAnnual = age >= oasStartAge
-    ? baseOasMonthly * 12 * residenceFactor * oasDeferralFactor * indexFactor
+  // OAS Act s.3: a partial pension needs at least 10 years of residence when
+  // applying from inside Canada (20 from outside — not modelled; the app
+  // assumes a Canadian resident applicant). Assessed at approval, so residence
+  // earned during deferral can lift someone over the minimum. Below 10
+  // completed years there is no pension at all, not a sub-10/40 fraction.
+  const oasEligible = freshYears >= 10;
+  const oasAnnual = age >= oasStartAge && oasEligible
+    ? baseOasMonthly * 12 * oasFactor * indexFactor
     : 0;
 
   // GIS/Allowance use the prior year's income for the July-to-June entitlement period.
@@ -130,10 +166,11 @@ export function estimateGovernmentBenefits(
   const partnerAge = context.partnerAge ?? 0;
   const partnerReceivesOas = Boolean(context.partnerReceivesOas);
 
+  const wholePartnerResidenceYears = Math.floor(Math.max(0, context.partnerOasResidenceYears ?? 0));
   const hasPartner = (context.householdSize ?? 1) > 1;
   const partnerCanReceiveAllowance = partnerAge >= 60 && partnerAge < 65 &&
-    (context.partnerOasResidenceYears ?? 0) >= 10;
-  const ownResidenceEligible = person.oasResidenceYears >= 10;
+    wholePartnerResidenceYears >= 10;
+  const ownResidenceEligible = oasEligible;
   const gisEligible = age >= 65 && age >= oasStartAge && oasAnnual > 0 && ownResidenceEligible;
   const incomeAt2025Dollars = hasPartner ? combinedIncome / indexFactor : adjustedPriorYearIncome / indexFactor;
   const table = !hasPartner ? GIS_TABLES_2026_Q3.single
@@ -145,7 +182,7 @@ export function estimateGovernmentBenefits(
     : 0;
   const survivorAllowanceEligible = Boolean(context.survivor) && age >= 60 && age < 65 && ownResidenceEligible;
   const coupleAllowanceEligible = hasPartner && age >= 60 && age < 65 && partnerReceivesOas && ownResidenceEligible &&
-    (context.partnerOasResidenceYears ?? 0) >= 10;
+    wholePartnerResidenceYears >= 10;
   const allowanceAnnual = survivorAllowanceEligible
     ? monthlyPublishedBenefit(GIS_TABLES_2026_Q3.survivorAllowance, adjustedPriorYearIncome / indexFactor, 2) * 12 * indexFactor
     : coupleAllowanceEligible

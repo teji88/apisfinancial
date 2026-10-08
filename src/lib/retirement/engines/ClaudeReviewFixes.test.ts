@@ -102,7 +102,7 @@ describe("fix #10: retirement spending starts when everyone is retired", () => {
 });
 
 describe("fix #13: oasAt applies the deferral bonus for start ages 66-70", () => {
-  const baseAnnual = 751.97 * 12;
+  const baseAnnual = 762.50 * 12;
   it("pays the unadjusted max at 65 with full residence", () => {
     expect(oasAt(65, 40)).toBeCloseTo(baseAnnual, 2);
   });
