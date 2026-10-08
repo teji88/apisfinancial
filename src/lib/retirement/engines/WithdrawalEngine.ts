@@ -173,7 +173,7 @@ export interface RegisteredWithdrawalAllocationInput {
   pensionSplitPercent?: number;
   registeredAccountType?: "RRSP" | "RRIF" | "LIRA";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  taxInputs?: Record<string, any>;
+  taxInputs?: Partial<Record<PersonRole, any>>;
 }
 
 export interface RegisteredWithdrawalAllocationResult {

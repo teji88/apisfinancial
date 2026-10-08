@@ -120,6 +120,7 @@ export interface RetirementScenario {
 
 export interface MonthlyCashFlowSnapshot {
   oasRecovery?: number;
+  cashShortfall?: number;
   beginningPortfolio: Money;
   beginningHouseholdCash: Money;
   investmentGrowth: Money;
