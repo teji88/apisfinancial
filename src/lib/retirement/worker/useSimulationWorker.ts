@@ -222,6 +222,14 @@ export function useSimulationWorker() {
     [post],
   );
 
+  /** Clear a stale earliest-age result (inputs changed); ignores in-flight replies. */
+  const clearEarliest = useCallback(() => {
+    latestRef.current.earliest = ++seqRef.current;
+    setEarliest(null);
+    setEarliestLoading(false);
+    setEarliestProgress(null);
+  }, []);
+
   /** Clear a stale comparison (inputs changed). */
   const clearComparison = useCallback(() => {
     if (compareFallbackRef.current) {
@@ -287,6 +295,7 @@ export function useSimulationWorker() {
     earliest,
     earliestLoading,
     runEarliest,
+    clearEarliest,
     comparison,
     comparing,
     runCompare,

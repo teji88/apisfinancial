@@ -560,6 +560,7 @@ function RetirementPage() {
     earliestLoading,
     earliestProgress,
     runEarliest,
+    clearEarliest,
     comparison,
     comparing,
     runCompare,
@@ -594,7 +595,8 @@ function RetirementPage() {
   useEffect(() => {
     if (!stressingRef.current) clearStress();
     if (!comparingRef.current) clearComparison();
-  }, [inputsKey, clearStress, clearComparison]);
+    clearEarliest();
+  }, [inputsKey, clearStress, clearComparison, clearEarliest]);
 
   // Quick estimate runs immediately (no debounce) for instant feedback.
   // Full projection follows after 400ms of inactivity and overwrites it.
