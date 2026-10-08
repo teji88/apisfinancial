@@ -1,6 +1,7 @@
 import type { Money } from "../domain/types";
 
 export interface MonthlyFinancialLedgerInput {
+  oasRecovery?: number;
   beginningPortfolio: Money;
   beginningHouseholdCash: Money;
   investmentGrowth: Money;

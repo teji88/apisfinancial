@@ -543,7 +543,7 @@ function RetirementPage() {
         nonreg: p.save_pct_nonreg ?? 20,
       },
       clawbackTolerance,
-      pensionSplitPercent: p.pension_split_percent ?? 0,
+      pensionSplitPercent: ((p as unknown as Record<string, number | null>)["pension_split_percent"] ?? 0),
       withdrawalPolicy: policy,
       self,
       spouse,
@@ -1470,7 +1470,7 @@ function RetirementPage() {
               </Field>
               <Field label="Pension income split % (0-50)">
                 <NumInput
-                  value={p.pension_split_percent ?? 0}
+                  value={((p as unknown as Record<string, number | null>)["pension_split_percent"] ?? 0)}
                   onCommit={(n) => set({ pension_split_percent: Math.min(50, Math.max(0, n)) } as Partial<Profile>)}
                 />
                 <p className="text-xs text-muted-foreground mt-1">

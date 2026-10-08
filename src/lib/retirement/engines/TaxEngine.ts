@@ -220,7 +220,7 @@ export function calculateTaxFromIncome(
   const federalPensionIncomeCredit = Math.min(pensionIncomeCreditBase, 2000 * indexFactor) * CANADA_2026_PARAMETERS.tax.federalPensionIncomeCreditRate;
   const provincialPensionIncomeCreditBase = Math.min(
     pensionIncomeCreditBase,
-    (CANADA_2026_PARAMETERS.tax.provincialPensionIncomeAmount[province] ?? 0) * indexFactor,
+    ((CANADA_2026_PARAMETERS.tax.provincialPensionIncomeAmount as Record<string, number>)[province] ?? 0) * indexFactor,
   );
   const provincialPensionIncomeCredit = provincialPensionIncomeCreditBase * provincialBasicCreditRate(province);
   // Federal age credit: 65+, indexed amount reduced by 15% of net income above threshold

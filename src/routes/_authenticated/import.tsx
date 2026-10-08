@@ -340,7 +340,7 @@ function ImportPage() {
             portfolio: t.portfolio,
             fx: t.fx,
             accountId: "",
-          })),
+          })) as Row[],
         );
         setPortfolios(result.portfolios);
         setMapping(defaultMapping(result.portfolios));
@@ -1003,7 +1003,7 @@ function ImportPage() {
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={row.currency}
+                          value={row.currency ?? undefined}
                           onValueChange={(v) => update(row.rowId, { currency: v })}
                         >
                           <SelectTrigger className="h-8 w-24">

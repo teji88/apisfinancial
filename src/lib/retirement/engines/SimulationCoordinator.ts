@@ -308,7 +308,7 @@ export function runRetirementSimulation(
     let otherIncome = 0;
     let nonRegisteredInvestmentIncome = 0;
     let nonRegisteredCapitalGains = 0;
-    const monthlyTaxInputs: Record<PersonRole, TaxIncomeComponents> = {};
+    const monthlyTaxInputs = {} as Record<PersonRole, TaxIncomeComponents>;
     for (const person of alivePeople) {
       monthlyTaxInputs[person.role] = { age: ages[person.role] ?? 0 };
       monthlyTaxInputs[person.role].deductions = deductibleInterestByOwner[person.role];
