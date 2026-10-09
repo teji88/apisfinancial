@@ -1,6 +1,7 @@
 import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole, PersonScenario } from "../domain/types";
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
+import { dbPensionMonthlyAt, dbSurvivorMonthlyAt } from "./DbPensionEngine";
 import { calculateBasicTax, calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
 import { planWithdrawalSequence } from "./WithdrawalEngine";
 import { CANADA_2026_PARAMETERS } from "../rules/canada2026";
@@ -409,6 +410,25 @@ export function runRetirementSimulation(
       const monthlyOtherIncome = (person.otherIncome ?? 0) / 12;
       otherIncome += monthlyOtherIncome;
       monthlyTaxInputs[person.role].pension = (monthlyTaxInputs[person.role].pension ?? 0) + monthlyOtherIncome;
+      // Defined-benefit pensions: first-class income stream, taxed as pension
+      // income and eligible for pension splitting (the TaxEngine gates the
+      // split itself; pre-65 DB splitting is a known gap).
+      for (const db of scenario.dbPensions ?? []) {
+        if (db.owner !== person.role) continue;
+        const monthlyDb = dbPensionMonthlyAt(
+          db,
+          ages[person.role] ?? 0,
+          date.getUTCFullYear(),
+          scenario.assumptions.inflationRate,
+          person.birthYear,
+        );
+        if (monthlyDb <= 0) continue;
+        otherIncome += monthlyDb;
+        monthlyTaxInputs[person.role].pension =
+          (monthlyTaxInputs[person.role].pension ?? 0) + monthlyDb;
+        monthlyTaxInputs[person.role].eligiblePensionIncome =
+          (monthlyTaxInputs[person.role].eligiblePensionIncome ?? 0) + monthlyDb;
+      }
     }
 
     if (stage === "SURVIVOR") {
@@ -424,6 +444,26 @@ export function runRetirementSimulation(
         benefits += survivorBenefits;
         benefitSources.cpp += survivorBenefits;
         taxableBenefits += survivorBenefits;
+        // DB pension survivor benefits: % of the member's indexed pension at
+        // death (bridge excluded). Taxed as pension income to the survivor.
+        for (const db of scenario.dbPensions ?? []) {
+          if (db.owner !== deceased.role) continue;
+          const monthlyDbSurvivor = dbSurvivorMonthlyAt(
+            db,
+            date.getUTCFullYear(),
+            scenario.assumptions.inflationRate,
+            deceased.birthYear,
+            deceasedP.deathAge ?? 0,
+            deceased.birthYear + Math.floor(deceasedP.deathAge ?? 0),
+          );
+          if (monthlyDbSurvivor <= 0) continue;
+          otherIncome += monthlyDbSurvivor;
+          taxableBenefits += monthlyDbSurvivor;
+          monthlyTaxInputs[survivor.role].pension =
+            (monthlyTaxInputs[survivor.role].pension ?? 0) + monthlyDbSurvivor;
+          monthlyTaxInputs[survivor.role].eligiblePensionIncome =
+            (monthlyTaxInputs[survivor.role].eligiblePensionIncome ?? 0) + monthlyDbSurvivor;
+        }
       }
     }
 
