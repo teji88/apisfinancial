@@ -366,11 +366,16 @@ function evaluateCandidate(
  * scenarios) and partner income is not modelled (single/couple threshold
  * only). Both are documented; the candidate list remains inspectable.
  */
-function oasDeferralForfeitsGis(person: PersonScenario, householdSize: number): string | null {
+export function oasDeferralForfeitsGis(person: PersonScenario, householdSize: number): string | null {
   const startAge = person.oasStartAge;
   if (typeof startAge !== "number" || startAge <= 65) return null;
 
-  const at65 = estimateGovernmentBenefits({ ...person, oasStartAge: 65 }, 65, 0, {
+  // Probe: would this person receive GIS at 65 with OAS at 65?
+  // CPP is probed at 65 (not the combo's delayed start) so the test detects
+  // the person's fundamental retirement-income regime, not a transient
+  // zero-income year caused by delaying CPP itself.
+  const probePerson = { ...person, cppStartAge: 65, oasStartAge: 65 };
+  const at65 = estimateGovernmentBenefits(probePerson, 65, 0, {
     calendarYear: 2026,
     inflationRate: 0,
     householdSize,
@@ -380,7 +385,7 @@ function oasDeferralForfeitsGis(person: PersonScenario, householdSize: number): 
     ? (person.employmentIncome ?? 0) + (person.selfEmploymentIncome ?? 0)
     : 0;
   const probeIncome = (person.otherIncome ?? 0) + at65.cpp + employmentIncome;
-  const gisProbe = estimateGovernmentBenefits({ ...person, oasStartAge: 65 }, 65, probeIncome, {
+  const gisProbe = estimateGovernmentBenefits(probePerson, 65, probeIncome, {
     calendarYear: 2026,
     inflationRate: 0,
     householdSize,

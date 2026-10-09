@@ -176,7 +176,7 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
   };
 }
 
-function oasRecoveryForIncome(income: number, oasReceived = 0, indexFactor = 1): number {
+export function oasRecoveryForIncome(income: number, oasReceived = 0, indexFactor = 1): number {
   const threshold = CANADA_2026_PARAMETERS.oasRecovery.startIncome * indexFactor;
   // ITA s.180.2: the recovery tax is the LESSER of (a) the OAS benefits
   // included in income for the year and (b) 15% of income above the threshold.
