@@ -76,6 +76,7 @@ import {
 export const Route = createFileRoute("/retirement")({
   staticData: { sitemap: true },
   head: () => ({
+    links: [{ rel: "canonical", href: "https://www.apisfinancial.app/retirement" }],
     meta: [
       { title: "Retirement Planner — Apis Financial" },
       {
@@ -200,6 +201,7 @@ const GUEST_PROFILE: Profile = {
   spouse_rrsp: 0,
   spouse_tfsa: 0,
   spouse_income: 0,
+  income: 0,
   desired_income: 60000,
   cpp_start_age: 65,
   cpp_pct: 75,
@@ -502,7 +504,7 @@ function RetirementPage() {
       cppAt65: derived.selfCpp65,
       oasStartAge: p.oas_start_age ?? 65,
       oasFraction: derived.selfOasFraction,
-      otherIncome: 0,
+      otherIncome: p.income ?? 0,
       balances: { ...balances },
       // Use portfolio ACB if available, else user override, else 0.4 estimate.
       nonregGainRatio: gainRatioOverride ?? byType.nonregGainRatio ?? 0.4,
@@ -1350,6 +1352,9 @@ function RetirementPage() {
                 options={OAS_AGE_OPTIONS}
                 onChange={(age) => set({ oas_start_age: age })}
               />
+            </Field>
+            <Field label="Your other pension income in retirement (today's $/yr)">
+              <NumInput value={p.income ?? 0} onCommit={(n) => set({ income: n })} />
             </Field>
             <div className="sm:col-span-2">
               {(p.cpp_detailed_history?.length ?? 0) > 0 && (
