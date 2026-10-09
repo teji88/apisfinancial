@@ -65,6 +65,8 @@ export interface HoldingScore {
   bestAccount: LocAccount;
   /** Annual $ saved by moving to the best account (0 if already optimal). */
   annualSavingsIfMoved: number;
+  /** Factual "why" text for the info/eye button — tax treatment, not advice. */
+  explainer: string;
 }
 
 export interface LocationResult {
@@ -79,7 +81,61 @@ export interface LocationResult {
   }>;
   totalAnnualSavings: number;
   warnings: string[];
+  /** The UI must display this wherever results are shown. */
+  disclaimer: string;
 }
+
+export const LOCATION_DISCLAIMER =
+  "Tax-drag estimates based on current Canadian tax law and the assumptions shown. " +
+  "For information only — not financial, tax, or investment advice. " +
+  "Consider your full situation and consult a qualified professional.";
+
+/**
+ * Factual explainer per holding type, written for the info/eye button.
+ * Describes tax treatment only — never a recommendation.
+ */
+export const HOLDING_EXPLAINERS: Record<HoldingTaxType, string> = {
+  interest:
+    "Interest is fully taxable as income in the year it's earned (ITA 12(1)(c)). " +
+    "Inside a TFSA or RRSP no tax is payable currently, so interest-bearing holdings " +
+    "face their highest annual tax drag in a non-registered account.",
+  eligibleDividend:
+    "Canadian eligible dividends get a gross-up and dividend tax credit in a non-registered " +
+    "account, so they're taxed below your marginal rate. A TFSA pays no tax at all. In an " +
+    "RRSP/RRIF the dividend character is lost — withdrawals are fully taxable as income — " +
+    "so the credit is wasted there.",
+  canadianReit:
+    "Canadian REIT distributions are mostly 'other income' — fully taxable with no dividend " +
+    "credit. That makes the non-registered account the highest-drag location; registered " +
+    "accounts shelter the full amount currently. (Distribution breakdowns vary by fund.)",
+  usDirect:
+    "The US withholds 15% on dividends paid to Canadians. In an RRSP holding US securities " +
+    "directly, the Canada-US treaty (Art. XXI(2)) reduces this to 0%. In a TFSA the 15% is " +
+    "unrecoverable. In a non-registered account you can claim a foreign tax credit for it.",
+  canadianListedUS:
+    "When a Canadian ETF holds US stocks, the 15% US withholding happens inside the ETF " +
+    "before you receive anything — and it can't be recovered, even in an RRSP. Only US " +
+    "securities held directly by your RRSP get the 0% treaty rate. In a non-registered " +
+    "account the foreign tax flows through to you for the credit.",
+  foreignNonUS:
+    "Foreign dividends generally face 15% withholding under Canada's tax treaties, " +
+    "unrecoverable in TFSA/RRSP (except direct US holdings in an RRSP). In a non-registered " +
+    "account the foreign tax credit offsets it — so non-registered wins only when your " +
+    "marginal rate is below the withholding rate.",
+  usReit:
+    "US REIT dividends face 15% US withholding (treaty Art. X(7)(c)). Direct holdings in an " +
+    "RRSP get 0% under Art. XXI(2); in a TFSA the 15% is unrecoverable; in a non-registered " +
+    "account the foreign tax credit applies.",
+  growthEquity:
+    "A low-distribution equity ETF's main tax event is the eventual capital gain — 50% " +
+    "inclusion, deferred until you sell. In a non-registered account you also pay tax on any " +
+    "annual distributions. A TFSA shelters everything; an RRSP defers tax but converts the " +
+    "gain to fully-taxable income on withdrawal.",
+  swapBased:
+    "Swap-based ETFs convert distributions into deferred capital gains — but that only matters " +
+    "in a non-registered account. In a TFSA or RRSP the growth is already sheltered, so the " +
+    "structure adds nothing there.",
+};
 
 const PROV_DTC_DEFAULT = 0.08117; // Alberta 2026, derived from published tables
 const FEDERAL_DTC_GROSSUP_FACTOR = 0.38 * (6 / 11); // 0.20727
@@ -191,6 +247,7 @@ export function scoreAssetLocation(inputs: LocationInputs): LocationResult {
       ranking: rank,
       bestAccount,
       annualSavingsIfMoved,
+      explainer: HOLDING_EXPLAINERS[h.taxType],
     };
   });
 
@@ -210,5 +267,6 @@ export function scoreAssetLocation(inputs: LocationInputs): LocationResult {
     moves,
     totalAnnualSavings: moves.reduce((sum, m) => sum + m.annualSavings, 0),
     warnings,
+    disclaimer: LOCATION_DISCLAIMER,
   };
 }

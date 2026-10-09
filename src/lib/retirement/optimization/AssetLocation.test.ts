@@ -122,3 +122,26 @@ describe("scoreAssetLocation", () => {
     expect(r.warnings.some((w) => w.includes("48%"))).toBe(true);
   });
 });
+
+describe("explainers and disclaimer", () => {
+  it("provides a factual explainer for every holding type", async () => {
+    const { HOLDING_EXPLAINERS, LOCATION_DISCLAIMER } = await import("./AssetLocation");
+    const types = Object.keys(HOLDING_EXPLAINERS);
+    expect(types).toHaveLength(9);
+    for (const t of types) {
+      const text = HOLDING_EXPLAINERS[t as keyof typeof HOLDING_EXPLAINERS];
+      expect(text.length).toBeGreaterThan(50);
+      // Factual tone: no prescriptive advice language.
+      expect(text.toLowerCase()).not.toMatch(/you should|we recommend|move your/);
+    }
+  });
+
+  it("attaches the explainer and disclaimer to results", () => {
+    const r = scoreAssetLocation({
+      holdings: [holding({ taxType: "canadianListedUS", yield: 0.017647 })],
+      marginalRate: 0.3,
+    });
+    expect(r.scores[0]!.explainer).toContain("0% treaty rate");
+    expect(r.disclaimer).toContain("not financial, tax, or investment advice");
+  });
+});
