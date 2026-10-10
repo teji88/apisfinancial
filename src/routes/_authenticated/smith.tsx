@@ -23,6 +23,7 @@ import {
 import { marginalRateAt } from "@/lib/retirement/marginalRate";
 import { computeSmithSavings } from "@/lib/retirement/optimization/SmithSavings";
 import { assessSmithLedger, CRA_FILING_DISCLAIMER } from "@/lib/retirement/optimization/SmithTracker";
+import { computeRoom } from "@/lib/retirement/optimization/SmithRoom";
 import { SmithTrackerCard } from "@/components/retirement/DebtNetWorth";
 
 export const Route = createFileRoute("/_authenticated/smith")({
@@ -47,7 +48,15 @@ function SmithPage() {
   const p = profile ?? null;
   const tranches = p?.smith_tranches ?? [];
   const debts = p?.debts ?? [];
-  const settings = p?.smith_settings ?? { priorInterestClaimed: 0, helocDebtId: "" };
+  const settings = p?.smith_settings ?? {
+    priorInterestClaimed: 0,
+    helocDebtId: "",
+    mortgageDebtId: "",
+    startDate: null,
+    startMortgageBalance: 0,
+    bocRateLastSeen: null,
+    bocCheckedDate: null,
+  };
 
   const save = (patch: Parameters<typeof updateProfile.mutate>[0]) =>
     updateProfile.mutate(patch);
@@ -61,6 +70,28 @@ function SmithPage() {
     debts.find((d) => d.id === settings.helocDebtId) ??
     debts.find((d) => d.kind === "heloc") ??
     null;
+
+  // Readvanceable pair for the Smith flow
+  const pairMortgage = debts.find((d) => d.id === settings.mortgageDebtId) ?? null;
+  const pairHeloc = debts.find((d) => d.id === settings.helocDebtId) ?? null;
+  const pairReady = !!(pairMortgage && pairHeloc && settings.startDate);
+
+  const totalDrawn = tranches.reduce((s, t) => s + Math.max(0, t.principal), 0);
+  const room = useMemo(
+    () =>
+      pairReady && pairMortgage && settings.startDate
+        ? computeRoom({
+            startBalance: settings.startMortgageBalance,
+            rate: pairMortgage.rate,
+            payment: pairMortgage.payment,
+            frequency: pairMortgage.paymentFrequency ?? "monthly",
+            startDate: settings.startDate,
+            totalDrawn,
+            today: new Date().toISOString().slice(0, 10),
+          })
+        : null,
+    [pairReady, pairMortgage, settings.startDate, settings.startMortgageBalance, totalDrawn],
+  );
 
   const interestPaidYtd = tranches.reduce((s, t) => s + Math.max(0, t.interestPaidYtd), 0);
   const deductibleOutstanding = tranches.reduce(
@@ -119,6 +150,22 @@ function SmithPage() {
           keep the tracing clean, and watch the tax savings compound.
         </p>
       </div>
+
+      {/* BoC rate nudge */}
+      {pairHeloc ? (
+        <BocNudge
+          heloc={pairHeloc}
+          lastChecked={settings.bocCheckedDate}
+          onChecked={() =>
+            save({
+              smith_settings: {
+                ...settings,
+                bocCheckedDate: new Date().toISOString().slice(0, 10),
+              },
+            })
+          }
+        />
+      ) : null}
 
       {/* Morale dashboard */}
       {tranches.length === 0 ? (
@@ -186,6 +233,7 @@ function SmithPage() {
           tranches={tranches}
           holdings={p?.asset_holdings ?? []}
           drawn={deductibleOutstanding}
+          distributionsYtd={ledger.distributions.total}
         />
       </div>
 
@@ -218,44 +266,66 @@ function SmithPage() {
         )}
       </div>
 
-      {/* Monthly check-in */}
-      <CheckInCard
-        heloc={heloc}
-        debts={debts}
-        helocDebtId={settings.helocDebtId}
-        lastTranche={tranches.length > 0 ? tranches[tranches.length - 1] : null}
-        onHelocChange={(id) => save({ smith_settings: { ...settings, helocDebtId: id } })}
-        onCreateHeloc={(debt) => {
-          save({
-            debts: [...debts, debt],
-            smith_settings: { ...settings, helocDebtId: debt.id },
-          });
-        }}
-        onRateChange={(debtId, newRate) => {
-          const today = new Date().toISOString().slice(0, 10);
-          save({
-            debts: debts.map((d) =>
-              d.id === debtId
-                ? {
-                    ...d,
-                    rate: newRate,
-                    rateHistory: [...(d.rateHistory ?? []), { date: today, rate: newRate }],
-                  }
-                : d,
-            ),
-          });
-        }}
-        onDraw={(tranche, drawnAmount) => {
-          const next = [...tranches, tranche];
-          const patch: Parameters<typeof updateProfile.mutate>[0] = { smith_tranches: next };
-          if (heloc) {
-            patch.debts = debts.map((d) =>
-              d.id === heloc.id ? { ...d, balance: d.balance + drawnAmount } : d,
-            );
+      {/* Smith flow: pair setup → room → draws */}
+      {pairReady && pairMortgage && pairHeloc && room ? (
+        <RoomDrawCard
+          mortgage={pairMortgage}
+          heloc={pairHeloc}
+          room={room}
+          tranches={tranches}
+          lastTranche={tranches.length > 0 ? tranches[tranches.length - 1] : null}
+          onDraw={(tranche, drawnAmount) => {
+            const next = [...tranches, tranche];
+            save({
+              smith_tranches: next,
+              debts: debts.map((d) =>
+                d.id === pairHeloc.id ? { ...d, balance: d.balance + drawnAmount } : d,
+              ),
+            });
+          }}
+          onRefinance={(snapshot, newTerms) => {
+            save({
+              debts: debts.map((d) =>
+                d.id === pairMortgage.id
+                  ? {
+                      ...d,
+                      ...newTerms,
+                      termHistory: [...(d.termHistory ?? []), snapshot],
+                    }
+                  : d,
+              ),
+            });
+          }}
+          onUnlink={() =>
+            save({
+              smith_settings: { ...settings, mortgageDebtId: "", helocDebtId: "", startDate: null },
+            })
           }
-          save(patch);
-        }}
-      />
+        />
+      ) : (
+        <PairSetupCard
+          debts={debts}
+          onSetup={(mortgageId, helocId, startDate, startBalance) =>
+            save({
+              smith_settings: {
+                ...settings,
+                mortgageDebtId: mortgageId,
+                helocDebtId: helocId,
+                startDate,
+                startMortgageBalance: startBalance,
+              },
+              debts: debts.map((d) =>
+                d.id === mortgageId
+                  ? { ...d, linkedDebtId: helocId }
+                  : d.id === helocId
+                    ? { ...d, linkedDebtId: mortgageId }
+                    : d,
+              ),
+            })
+          }
+          onCreateDebt={(debt) => save({ debts: [...debts, debt] })}
+        />
+      )}
 
       {/* Prior interest */}
       <div className="rounded-xl border p-4">
@@ -310,115 +380,325 @@ function SmithPage() {
   );
 }
 
+function BocNudge({
+  heloc,
+  lastChecked,
+  onChecked,
+}: {
+  heloc: DebtInput;
+  lastChecked: string | null;
+  onChecked: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const daysSince = lastChecked
+    ? Math.floor((new Date(today).getTime() - new Date(lastChecked + "T00:00:00").getTime()) / 86_400_000)
+    : 999;
+  // BoC announces 8×/year (~every 6 weeks). Nudge if never checked or > 45 days.
+  if (daysSince <= 45) return null;
+  return (
+    <div className="rounded-xl border border-sky-300 bg-sky-50 p-4 space-y-2">
+      <h3 className="text-sm font-semibold">Has your HELOC rate changed?</h3>
+      <p className="text-sm text-muted-foreground">
+        The Bank of Canada sets rates 8 times a year, and banks usually follow within
+        days. Your HELOC is at {(heloc.rate * 100).toFixed(2)}%
+        {lastChecked ? ` (last confirmed ${lastChecked})` : ""}. If your bank moved
+        it, update the rate on the{" "}
+        <Link to="/debts" className="underline">Debts tab</Link> — future
+        projections and the room math will use the new rate.
+      </p>
+      <Button size="sm" variant="outline" onClick={onChecked}>
+        Rate is still correct
+      </Button>
+    </div>
+  );
+}
+
 function SmithPerformanceCard({
   tranches,
   holdings,
   drawn,
+  distributionsYtd,
 }: {
   tranches: SmithTranche[];
   holdings: Array<{ id: string; name: string; value: number }>;
   drawn: number;
+  distributionsYtd: number;
 }) {
   const linkedIds = new Set(
     tranches.map((t) => t.holdingId).filter((id): id is string => !!id),
   );
-  const linkedValue = holdings
-    .filter((h) => linkedIds.has(h.id))
-    .reduce((s, h) => s + Math.max(0, h.value), 0);
+  const linkedHoldings = holdings.filter((h) => linkedIds.has(h.id));
+  const linkedValue = linkedHoldings.reduce((s, h) => s + Math.max(0, h.value), 0);
   const gain = linkedValue - drawn;
+  const gainPct = drawn > 0 ? (gain / drawn) * 100 : 0;
+  const yieldPct = linkedValue > 0 ? (distributionsYtd / linkedValue) * 100 : 0;
   if (linkedIds.size === 0) {
     return (
       <div className="rounded-xl border p-4">
-        <div className="text-xs text-muted-foreground">Borrowed money performance</div>
+        <div className="text-xs text-muted-foreground">Smith investment account</div>
         <div className="text-sm text-muted-foreground mt-1">
-          Link tranches to investment holdings to see how the borrowed money is doing.
+          Link tranches to investment holdings (in the tracker below) to see how the
+          borrowed money is doing.
         </div>
       </div>
     );
   }
   return (
-    <div className="rounded-xl border p-4">
-      <div className="text-xs text-muted-foreground">Borrowed money performance</div>
+    <div className="rounded-xl border p-4 space-y-1">
+      <div className="text-xs text-muted-foreground">Smith investment account</div>
       <div className="text-2xl font-bold">{formatCad(linkedValue)}</div>
-      <div className={`text-[11px] font-medium ${gain >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-        {gain >= 0 ? "+" : ""}{formatCad(gain)} vs {formatCad(drawn)} drawn
+      <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+        {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn
       </div>
-      <div className="text-[11px] text-muted-foreground mt-1">
-        Current value of linked holdings against the deductible balance.
+      <div className="text-[11px] text-muted-foreground">
+        {formatCad(distributionsYtd)} distributions YTD
+        {yieldPct > 0 ? ` · ${yieldPct.toFixed(1)}% yield` : ""}
+      </div>
+      <div className="text-[11px] text-muted-foreground">
+        {linkedHoldings.length} holding{linkedIds.size === 1 ? "" : "s"} linked
+        {linkedHoldings.length > 0 ? `: ${linkedHoldings.map((h) => h.name || "Holding").join(", ")}` : ""}
       </div>
     </div>
   );
 }
 
-function CheckInCard({
-  heloc,
+function PairSetupCard({
   debts,
-  helocDebtId,
-  lastTranche,
-  onHelocChange,
-  onCreateHeloc,
-  onRateChange,
-  onDraw,
+  onSetup,
+  onCreateDebt,
 }: {
-  heloc: { id: string; name: string; rate: number; balance: number; rateHistory?: Array<{ date: string; rate: number }> } | null;
-  debts: Array<{ id: string; name: string; kind: string }>;
-  helocDebtId: string;
-  lastTranche: SmithTranche | null;
-  onHelocChange: (id: string) => void;
-  onCreateHeloc: (debt: DebtInput) => void;
-  onRateChange: (debtId: string, newRate: number) => void;
-  onDraw: (tranche: SmithTranche, drawnAmount: number) => void;
+  debts: DebtInput[];
+  onSetup: (mortgageId: string, helocId: string, startDate: string, startBalance: number) => void;
+  onCreateDebt: (debt: DebtInput) => void;
 }) {
-  const [principalPaid, setPrincipalPaid] = useState(0);
+  const mortgages = debts.filter((d) => d.kind === "mortgage");
+  const helocs = debts.filter((d) => d.kind === "heloc");
+  const [mortgageId, setMortgageId] = useState("");
+  const [helocId, setHelocId] = useState("");
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [showNewMortgage, setShowNewMortgage] = useState(false);
+  const [showNewHeloc, setShowNewHeloc] = useState(false);
+
+  const mortgage = debts.find((d) => d.id === mortgageId) ?? null;
+
+  const canStart = mortgageId && helocId && startDate;
+
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-4">
+      <div>
+        <h3 className="text-base font-semibold">Set up your Smith flow</h3>
+        <p className="text-sm text-muted-foreground">
+          Link your readvanceable mortgage and HELOC. Every principal payment creates
+          room you can draw — the debts stay in sync automatically.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2 rounded-lg border p-3">
+          <h4 className="text-sm font-medium">Readvanceable mortgage</h4>
+          {mortgages.length > 0 && !showNewMortgage ? (
+            <Select value={mortgageId} onValueChange={setMortgageId}>
+              <SelectTrigger><SelectValue placeholder="Select mortgage" /></SelectTrigger>
+              <SelectContent>
+                {mortgages.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name || "Mortgage"} — {formatCad(d.balance)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+          {showNewMortgage ? (
+            <NewDebtForm
+              kind="mortgage"
+              onCreate={(debt) => {
+                onCreateDebt(debt);
+                setMortgageId(debt.id);
+                setShowNewMortgage(false);
+              }}
+              onCancel={() => setShowNewMortgage(false)}
+            />
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setShowNewMortgage(true)}>
+              {mortgages.length > 0 ? "Add new mortgage" : "Add mortgage"}
+            </Button>
+          )}
+        </div>
+        <div className="space-y-2 rounded-lg border p-3">
+          <h4 className="text-sm font-medium">HELOC</h4>
+          {helocs.length > 0 && !showNewHeloc ? (
+            <Select value={helocId} onValueChange={setHelocId}>
+              <SelectTrigger><SelectValue placeholder="Select HELOC" /></SelectTrigger>
+              <SelectContent>
+                {helocs.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name || "HELOC"} — {formatCad(d.balance)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+          {showNewHeloc ? (
+            <NewDebtForm
+              kind="heloc"
+              onCreate={(debt) => {
+                onCreateDebt(debt);
+                setHelocId(debt.id);
+                setShowNewHeloc(false);
+              }}
+              onCancel={() => setShowNewHeloc(false)}
+            />
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setShowNewHeloc(true)}>
+              {helocs.length > 0 ? "Add new HELOC" : "Add HELOC"}
+            </Button>
+          )}
+        </div>
+      </div>
+      <div className="space-y-1 max-w-xs">
+        <Label className="text-xs">Smith start date</Label>
+        <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        <p className="text-[11px] text-muted-foreground">Room accrues from this date.</p>
+      </div>
+      <Button
+        size="sm"
+        disabled={!canStart}
+        onClick={() =>
+          canStart &&
+          onSetup(mortgageId, helocId, startDate, mortgage ? mortgage.balance : 0)
+        }
+      >
+        Start tracking
+      </Button>
+    </div>
+  );
+}
+
+function NewDebtForm({
+  kind,
+  onCreate,
+  onCancel,
+}: {
+  kind: "mortgage" | "heloc";
+  onCreate: (debt: DebtInput) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [balance, setBalance] = useState(0);
+  const [ratePct, setRatePct] = useState(kind === "mortgage" ? 5 : 5.5);
+  const [payment, setPayment] = useState(0);
+  const [frequency, setFrequency] = useState<"weekly" | "biweekly" | "monthly">("monthly");
+
+  return (
+    <div className="space-y-2">
+      <div className="space-y-1">
+        <Label className="text-xs">Name</Label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={kind === "mortgage" ? "e.g. Readvanceable mortgage" : "e.g. HELOC"}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Balance ($)</Label>
+          <NumInput value={balance} onCommit={(n) => setBalance(Math.max(0, n))} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Rate (%/yr)</Label>
+          <NumInput value={ratePct} onCommit={(n) => setRatePct(Math.max(0, n))} />
+        </div>
+      </div>
+      {kind === "mortgage" ? (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Payment ($)</Label>
+            <NumInput value={payment} onCommit={(n) => setPayment(Math.max(0, n))} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Frequency</Label>
+            <Select value={frequency} onValueChange={(v) => setFrequency(v as typeof frequency)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="weekly">Weekly</SelectItem>
+                <SelectItem value="biweekly">Biweekly</SelectItem>
+                <SelectItem value="monthly">Monthly</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      ) : null}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          onClick={() =>
+            onCreate({
+              id: `d-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+              name: name.trim() || (kind === "mortgage" ? "Mortgage" : "HELOC"),
+              kind,
+              balance: Math.max(0, balance),
+              rate: Math.max(0, ratePct) / 100,
+              payment: Math.max(0, payment),
+              deductible: kind === "heloc",
+              paymentFrequency: kind === "mortgage" ? frequency : undefined,
+              rateHistory:
+                kind === "heloc"
+                  ? [{ date: new Date().toISOString().slice(0, 10), rate: Math.max(0, ratePct) / 100 }]
+                  : undefined,
+            })
+          }
+        >
+          Add
+        </Button>
+        <Button size="sm" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Appears in your Debts tab automatically.
+      </p>
+    </div>
+  );
+}
+
+function RoomDrawCard({
+  mortgage,
+  heloc,
+  room,
+  tranches,
+  lastTranche,
+  onDraw,
+  onRefinance,
+  onUnlink,
+}: {
+  mortgage: DebtInput;
+  heloc: DebtInput;
+  room: { roomCreated: number; roomAvailable: number; paymentsCounted: number };
+  tranches: SmithTranche[];
+  lastTranche: SmithTranche | null;
+  onDraw: (tranche: SmithTranche, drawnAmount: number) => void;
+  onRefinance: (
+    snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number },
+    newTerms: { balance: number; rate: number; payment: number; paymentFrequency: "weekly" | "biweekly" | "monthly" },
+  ) => void;
+  onUnlink: () => void;
+}) {
   const [drawn, setDrawn] = useState(0);
   const [bought, setBought] = useState("");
-  const [ratePct, setRatePct] = useState(heloc && heloc.rate > 0 ? heloc.rate * 100 : 5.5);
-  const [showHelocForm, setShowHelocForm] = useState(false);
-  const [helocName, setHelocName] = useState("");
-  const [helocRatePct, setHelocRatePct] = useState(5.5);
-  const [helocBalance, setHelocBalance] = useState(0);
-
-  const helocDebts = debts.filter((d) => d.kind === "heloc");
-  const rateChanged =
-    heloc && Math.abs(ratePct / 100 - heloc.rate) > 0.0001 && drawn > 0;
+  const [showRefinance, setShowRefinance] = useState(false);
 
   const repeatLast = () => {
     if (!lastTranche) return;
-    setRatePct(Math.round(lastTranche.rate * 1000) / 10);
     setBought(lastTranche.useOfFunds);
   };
 
-  const createHeloc = () => {
-    const debt: DebtInput = {
-      id: `d-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
-      name: helocName.trim() || "HELOC",
-      kind: "heloc",
-      balance: Math.max(0, helocBalance),
-      rate: Math.max(0, helocRatePct) / 100,
-      payment: 0,
-      deductible: true,
-      rateHistory: [
-        { date: new Date().toISOString().slice(0, 10), rate: Math.max(0, helocRatePct) / 100 },
-      ],
-    };
-    onCreateHeloc(debt);
-    setShowHelocForm(false);
-    setHelocName("");
-    setHelocBalance(0);
-  };
-
   const record = () => {
-    if (drawn <= 0) return;
-    const newRate = Math.max(0, ratePct) / 100;
-    if (heloc && Math.abs(newRate - heloc.rate) > 0.0001) {
-      onRateChange(heloc.id, newRate);
-    }
+    if (drawn <= 0 || drawn > room.roomAvailable) return;
     const tranche: SmithTranche = {
       id: `s-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
-      facility: heloc?.name || "HELOC",
+      facility: heloc.name || "HELOC",
       drawDate: new Date().toISOString().slice(0, 10),
       principal: drawn,
-      rate: newRate,
+      rate: heloc.rate,
       useOfFunds: bought,
       eligible: true,
       purposeEvidence: "",
@@ -429,117 +709,207 @@ function CheckInCard({
       commingled: false,
       disposition: null,
       s201Deemed: 0,
-    holdingId: null,
+      holdingId: null,
       distributions: [],
       documents: "",
     };
     onDraw(tranche, drawn);
-    setPrincipalPaid(0);
     setDrawn(0);
     setBought("");
   };
 
+  const pct = room.roomCreated > 0 ? (room.roomAvailable / room.roomCreated) * 100 : 0;
+
   return (
     <div className="rounded-xl border bg-card p-4 space-y-4">
-      <div>
-        <h3 className="text-base font-semibold">Monthly check-in</h3>
-        <p className="text-sm text-muted-foreground">
-          Paid principal → new room → draw → invest. Record the draw and the tranche
-          ledger fills itself.
-        </p>
-      </div>
-      {helocDebts.length > 0 ? (
-        <div className="space-y-1">
-          <Label className="text-xs">HELOC facility</Label>
-          <Select value={helocDebtId || heloc?.id || ""} onValueChange={onHelocChange}>
-            <SelectTrigger className="max-w-xs"><SelectValue placeholder="Select HELOC" /></SelectTrigger>
-            <SelectContent>
-              {helocDebts.map((d) => (
-                <SelectItem key={d.id} value={d.id}>{d.name || "HELOC"}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : showHelocForm ? (
-        <div className="rounded-lg border p-3 space-y-3">
-          <h4 className="text-sm font-medium">Add your HELOC</h4>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Name</Label>
-              <Input
-                value={helocName}
-                onChange={(e) => setHelocName(e.target.value)}
-                placeholder="e.g. Readvanceable HELOC"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Rate (%/yr)</Label>
-              <NumInput value={helocRatePct} onCommit={(n) => setHelocRatePct(Math.max(0, n))} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Current balance ($)</Label>
-              <NumInput value={helocBalance} onCommit={(n) => setHelocBalance(Math.max(0, n))} />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={createHeloc}>Add HELOC</Button>
-            <Button size="sm" variant="outline" onClick={() => setShowHelocForm(false)}>Cancel</Button>
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            It lands in your debts list automatically — draws will update its balance.
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold">HELOC room</h3>
+          <p className="text-sm text-muted-foreground">
+            {mortgage.name || "Mortgage"} → {heloc.name || "HELOC"} ·{" "}
+            {room.paymentsCounted} payments counted
           </p>
         </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-xs text-muted-foreground">
-            No HELOC in your debts yet.
-          </p>
-          <Button size="sm" variant="outline" onClick={() => setShowHelocForm(true)}>
-            Add HELOC
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setShowRefinance((v) => !v)}>
+            {showRefinance ? "Close" : "Refinance"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onUnlink}>
+            Unlink
           </Button>
         </div>
-      )}
-      {lastTranche ? (
-        <Button size="sm" variant="outline" onClick={repeatLast}>
-          Repeat last month
-        </Button>
+      </div>
+
+      {showRefinance ? (
+        <RefinanceForm
+          mortgage={mortgage}
+          onRefinance={(snapshot, newTerms) => {
+            onRefinance(snapshot, newTerms);
+            setShowRefinance(false);
+          }}
+        />
       ) : null}
-      {heloc && heloc.rateHistory && heloc.rateHistory.length > 1 ? (
-        <p className="text-[11px] text-muted-foreground">
-          Rate history: {heloc.rateHistory.map((h) => `${h.date} → ${(h.rate * 100).toFixed(2)}%`).join(" · ")}
-        </p>
-      ) : null}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-1">
-          <Label className="text-xs">Principal paid this month ($)</Label>
-          <NumInput value={principalPaid} onCommit={(n) => setPrincipalPaid(Math.max(0, n))} />
-          <p className="text-[11px] text-muted-foreground">Room created: {formatCad(principalPaid)}</p>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border p-3">
+          <div className="text-xs text-muted-foreground">Room created</div>
+          <div className="text-xl font-bold">{formatCad(room.roomCreated)}</div>
+          <div className="text-[11px] text-muted-foreground">Principal repaid</div>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Amount drawn ($)</Label>
-          <NumInput value={drawn} onCommit={(n) => setDrawn(Math.max(0, n))} />
+        <div className="rounded-lg border p-3">
+          <div className="text-xs text-muted-foreground">Drawn</div>
+          <div className="text-xl font-bold">{formatCad(room.roomCreated - room.roomAvailable)}</div>
+          <div className="text-[11px] text-muted-foreground">{tranches.length} draw(s)</div>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Rate (%/yr)</Label>
-          <NumInput value={ratePct} onCommit={(n) => setRatePct(Math.max(0, n))} />
-          {rateChanged ? (
-            <p className="text-[11px] text-amber-800">
-              Different from the HELOC's current rate — recording will update it.
-            </p>
-          ) : null}
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">What it bought</Label>
-          <Input
-            value={bought}
-            onChange={(e) => setBought(e.target.value)}
-            placeholder="e.g. 100 XIU, non-reg"
-          />
+        <div className="rounded-lg border bg-emerald-50 p-3">
+          <div className="text-xs text-muted-foreground">Available to draw</div>
+          <div className="text-xl font-bold text-emerald-800">{formatCad(room.roomAvailable)}</div>
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-emerald-600 transition-all"
+              style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+            />
+          </div>
         </div>
       </div>
-      <Button size="sm" onClick={record} disabled={drawn <= 0}>
-        Record draw
-      </Button>
+
+      <div className="space-y-3 rounded-lg border p-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-medium">Record a draw</h4>
+          {lastTranche ? (
+            <Button size="sm" variant="outline" onClick={repeatLast}>
+              Repeat last purchase
+            </Button>
+          ) : null}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Amount ($)</Label>
+            <NumInput value={drawn} onCommit={(n) => setDrawn(Math.max(0, n))} />
+            <p className="text-[11px] text-muted-foreground">
+              Up to {formatCad(room.roomAvailable)} — take all or part
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Rate (%/yr)</Label>
+            <NumInput value={Math.round(heloc.rate * 1000) / 10} onCommit={() => {}} />
+            <p className="text-[11px] text-muted-foreground">From HELOC — update it on the Debts tab</p>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">What it bought</Label>
+            <Input
+              value={bought}
+              onChange={(e) => setBought(e.target.value)}
+              placeholder="e.g. 100 XIU, non-reg"
+            />
+          </div>
+        </div>
+        {drawn > room.roomAvailable ? (
+          <p className="text-xs text-red-700">
+            More than the available room — lower the amount or wait for more principal payments.
+          </p>
+        ) : null}
+        <Button size="sm" onClick={record} disabled={drawn <= 0 || drawn > room.roomAvailable}>
+          Record draw
+        </Button>
+        <p className="text-[11px] text-muted-foreground">
+          The HELOC balance on your Debts tab updates automatically.
+        </p>
+      </div>
     </div>
   );
 }
+
+function RefinanceForm({
+  mortgage,
+  onRefinance,
+}: {
+  mortgage: DebtInput;
+  onRefinance: (
+    snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number },
+    newTerms: { balance: number; rate: number; payment: number; paymentFrequency: "weekly" | "biweekly" | "monthly" },
+  ) => void;
+}) {
+  const [balance, setBalance] = useState(mortgage.balance);
+  const [ratePct, setRatePct] = useState(mortgage.rate * 100);
+  const [payment, setPayment] = useState(mortgage.payment);
+  const [frequency, setFrequency] = useState<"weekly" | "biweekly" | "monthly">(
+    mortgage.paymentFrequency ?? "monthly",
+  );
+  const [propertyValue, setPropertyValue] = useState(0);
+
+  return (
+    <div className="rounded-lg border p-3 space-y-3">
+      <h4 className="text-sm font-medium">Refinance — update mortgage terms</h4>
+      <p className="text-[11px] text-muted-foreground">
+        Today's terms are snapshotted to history before the new ones take effect.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="space-y-1">
+          <Label className="text-xs">New balance ($)</Label>
+          <NumInput value={balance} onCommit={(n) => setBalance(Math.max(0, n))} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">New rate (%/yr)</Label>
+          <NumInput value={ratePct} onCommit={(n) => setRatePct(Math.max(0, n))} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">New payment ($)</Label>
+          <NumInput value={payment} onCommit={(n) => setPayment(Math.max(0, n))} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Frequency</Label>
+          <Select value={frequency} onValueChange={(v) => setFrequency(v as typeof frequency)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="weekly">Weekly</SelectItem>
+              <SelectItem value="biweekly">Biweekly</SelectItem>
+              <SelectItem value="monthly">Monthly</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-1 max-w-xs">
+        <Label className="text-xs">Property value at refinance ($)</Label>
+        <NumInput value={propertyValue} onCommit={(n) => setPropertyValue(Math.max(0, n))} />
+      </div>
+      <Button
+        size="sm"
+        onClick={() =>
+          onRefinance(
+            {
+              date: new Date().toISOString().slice(0, 10),
+              balance: mortgage.balance,
+              rate: mortgage.rate,
+              payment: mortgage.payment,
+              propertyValue,
+            },
+            {
+              balance: Math.max(0, balance),
+              rate: Math.max(0, ratePct) / 100,
+              payment: Math.max(0, payment),
+              paymentFrequency: frequency,
+            },
+          )
+        }
+      >
+        Save new terms
+      </Button>
+      {mortgage.termHistory && mortgage.termHistory.length > 0 ? (
+        <div className="text-[11px] text-muted-foreground space-y-1">
+          <p className="font-medium">Past terms:</p>
+          <ul className="list-disc pl-4">
+            {mortgage.termHistory.map((t, i) => (
+              <li key={i}>
+                {t.date}: {formatCad(t.balance)} at {(t.rate * 100).toFixed(2)}%,{" "}
+                {formatCad(t.payment)}/payment
+                {t.propertyValue > 0 ? `, property ${formatCad(t.propertyValue)}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
