@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePortfolio } from "@/lib/portfolio";
-import { useProfile, useUpdateProfile, type Profile } from "@/lib/profile";
+import { useProfile, useUpdateProfile, type Profile, type DbPensionInput, type AssetHoldingInput } from "@/lib/profile";
 import { formatCad, summariseAccount } from "@/lib/finance";
 import {
   cppPercentFromEarnings,
@@ -76,7 +76,20 @@ import {
   optimizeCppOasTiming,
   type TimingOptimizationResult,
 } from "@/lib/retirement/optimization/CppOasTiming";
-import type { PersonScenario } from "@/lib/retirement/domain/types";
+import {
+  suggestSavingsAllocation,
+  type SavingsAllocationResult,
+} from "@/lib/retirement/optimization/SavingsAllocation";
+import {
+  scoreAssetLocation,
+  LOCATION_DISCLAIMER,
+  type HoldingTaxType,
+  type LocAccount,
+  type LocationResult,
+} from "@/lib/retirement/optimization/AssetLocation";
+import { computeTax } from "@/lib/tax";
+import { CANADA_2026_PARAMETERS } from "@/lib/retirement/rules/canada2026";
+import type { PersonScenario, DbPension } from "@/lib/retirement/domain/types";
 
 export const Route = createFileRoute("/retirement")({
   staticData: { sitemap: true },
@@ -242,6 +255,9 @@ const GUEST_PROFILE: Profile = {
   spouse_oas_start_age: 65,
   spouse_lira: 0,
   spouse_nonreg: 0,
+  db_pension: null,
+  asset_holdings: null,
+  employer_match: null,
 };
 
 function RetirementPage() {
@@ -535,6 +551,29 @@ function RetirementPage() {
         }
       : null;
 
+    // Defined-benefit pension (main user, v1) — flows into SimulationCoordinator.
+    const dpi = p.db_pension;
+    const dbPensions: DbPension[] =
+      dpi && dpi.enabled && dpi.monthlyAmountAtNRA > 0
+        ? [
+            {
+              id: "db-main",
+              owner: "MAIN_USER",
+              name: dpi.name || undefined,
+              monthlyAmountAtNRA: dpi.monthlyAmountAtNRA,
+              normalRetirementAge: dpi.normalRetirementAge,
+              startAge: dpi.startAge,
+              earlyReductionPerYear: dpi.earlyReductionPerYear,
+              lateIncreasePerYear: dpi.lateIncreasePerYear,
+              indexing: dpi.indexing,
+              indexingFraction: dpi.indexingFraction,
+              bridgeMonthly: dpi.bridgeMonthly > 0 ? dpi.bridgeMonthly : undefined,
+              bridgeEndAge: dpi.bridgeEndAge ?? undefined,
+              survivorPercent: dpi.survivorPercent,
+            },
+          ]
+        : [];
+
     return {
       retirementAge: retireAge,
       lifeExpectancy: p.life_expectancy ?? 95,
@@ -552,6 +591,7 @@ function RetirementPage() {
       clawbackTolerance,
       pensionSplitPercent: p.pension_split_percent ?? 0,
       withdrawalPolicy: policy,
+      dbPensions,
       self,
       spouse,
     };
@@ -1047,6 +1087,16 @@ function RetirementPage() {
             onApply={(cppAge, oasAge) => set({ cpp_start_age: cppAge, oas_start_age: oasAge })}
           />
 
+          <SavingsAllocatorCard
+            profile={p}
+            onApply={(rrspPct, tfsaPct, nonregPct) =>
+              set({ save_pct_rrsp: rrspPct, save_pct_tfsa: tfsaPct, save_pct_nonreg: nonregPct })
+            }
+            onSaveMatch={(m) => set({ employer_match: m })}
+          />
+
+          <AssetLocationCard profile={p} onSave={(holdings) => set({ asset_holdings: holdings })} />
+
           <div className="grid gap-4 lg:grid-cols-3">
             <BenefitCard
               title="Your government benefits"
@@ -1369,6 +1419,7 @@ function RetirementPage() {
             <Field label="Your other pension income in retirement (today's $/yr)">
               <NumInput value={p.income ?? 0} onCommit={(n) => set({ income: n })} />
             </Field>
+            <DbPensionForm value={p.db_pension ?? null} onChange={(v) => set({ db_pension: v })} />
             <div className="sm:col-span-2">
               {(p.cpp_detailed_history?.length ?? 0) > 0 && (
                 <p className="text-xs text-emerald-700 mb-2">
@@ -1825,6 +1876,585 @@ function Field({
       ) : (
         children
       )}
+    </div>
+  );
+}
+
+const DB_PENSION_DEFAULTS: DbPensionInput = {
+  enabled: true,
+  monthlyAmountAtNRA: 0,
+  normalRetirementAge: 65,
+  startAge: 65,
+  earlyReductionPerYear: 0.03,
+  lateIncreasePerYear: 0,
+  indexing: "none",
+  indexingFraction: 0.5,
+  bridgeMonthly: 0,
+  bridgeEndAge: null,
+  survivorPercent: 60,
+};
+
+function DbPensionForm({
+  value,
+  onChange,
+}: {
+  value: DbPensionInput | null;
+  onChange: (v: DbPensionInput | null) => void;
+}) {
+  const v = value ?? { ...DB_PENSION_DEFAULTS, enabled: false };
+  const setDb = (patch: Partial<DbPensionInput>) => onChange({ ...v, ...patch });
+
+  return (
+    <div className="sm:col-span-2 rounded-xl border p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">Defined-benefit pension</span>
+        <Switch
+          checked={v.enabled}
+          onCheckedChange={(on) =>
+            onChange(on ? { ...DB_PENSION_DEFAULTS } : { ...v, enabled: false })
+          }
+        />
+      </div>
+      {v.enabled ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Plan name (optional)">
+            <Input
+              value={v.name ?? ""}
+              onChange={(e) => setDb({ name: e.target.value })}
+              placeholder="e.g. Employer pension plan"
+            />
+          </Field>
+          <Field label="Monthly amount at normal retirement age (today's $/mo)">
+            <NumInput
+              value={v.monthlyAmountAtNRA}
+              onCommit={(n) => setDb({ monthlyAmountAtNRA: Math.max(0, n) })}
+            />
+          </Field>
+          <Field label="Normal retirement age">
+            <NumInput
+              value={v.normalRetirementAge}
+              onCommit={(n) => setDb({ normalRetirementAge: Math.max(55, Math.min(71, Math.round(n))) })}
+            />
+          </Field>
+          <Field label="Age you'll start collecting">
+            <NumInput
+              value={v.startAge}
+              onCommit={(n) => setDb({ startAge: Math.max(55, Math.min(71, Math.round(n))) })}
+            />
+          </Field>
+          <Field label="Early reduction (%/yr before normal age)">
+            <NumInput
+              value={v.earlyReductionPerYear * 100}
+              onCommit={(n) => setDb({ earlyReductionPerYear: Math.max(0, n) / 100 })}
+            />
+          </Field>
+          <Field label="Late increase (%/yr after normal age)">
+            <NumInput
+              value={v.lateIncreasePerYear * 100}
+              onCommit={(n) => setDb({ lateIncreasePerYear: Math.max(0, n) / 100 })}
+            />
+          </Field>
+          <Field label="Indexing after start">
+            <Select
+              value={v.indexing}
+              onValueChange={(x) => setDb({ indexing: x as DbPensionInput["indexing"] })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="full">Full CPI</SelectItem>
+                <SelectItem value="partial">Partial CPI</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          {v.indexing === "partial" ? (
+            <Field label="Indexing fraction (% of CPI)">
+              <NumInput
+                value={v.indexingFraction * 100}
+                onCommit={(n) =>
+                  setDb({ indexingFraction: Math.max(0, Math.min(100, n)) / 100 })
+                }
+              />
+            </Field>
+          ) : null}
+          <Field label="Bridge benefit ($/mo, 0 = none)">
+            <NumInput
+              value={v.bridgeMonthly}
+              onCommit={(n) => setDb({ bridgeMonthly: Math.max(0, n) })}
+            />
+          </Field>
+          <Field label="Bridge ends at age (blank = none)">
+            <Input
+              value={v.bridgeEndAge ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9]/g, "");
+                setDb({ bridgeEndAge: raw === "" ? null : Number(raw) });
+              }}
+              placeholder="e.g. 65"
+            />
+          </Field>
+          <Field label="Survivor benefit (% of your pension)">
+            <NumInput
+              value={v.survivorPercent}
+              onCommit={(n) => setDb({ survivorPercent: Math.max(0, Math.min(100, n)) })}
+            />
+          </Field>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Turn this on if you have a traditional employer pension that pays a monthly amount.
+          It flows into your projected income, taxes, and survivor scenario.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Numerical marginal rate via the combined federal+provincial tax engine. */
+function marginalRateAt(income: number, province: ProvinceCode, age: number): number {
+  const d = 1000;
+  const base = Math.max(0, income);
+  const t1 = computeTax({ ordinary: base, province, age }).total;
+  const t2 = computeTax({ ordinary: base + d, province, age }).total;
+  return (t2 - t1) / d;
+}
+
+function SavingsAllocatorCard({
+  profile,
+  onApply,
+  onSaveMatch,
+}: {
+  profile: Profile;
+  onApply: (rrspPct: number, tfsaPct: number, nonregPct: number) => void;
+  onSaveMatch: (m: { offered: boolean; matchRatePct: number; maxPctOfSalary: number }) => void;
+}) {
+  const province = (profile.province as ProvinceCode) ?? "AB";
+  const currentAge = profile.current_age ?? 40;
+  const salary = profile.cpp_future_income ?? 0;
+
+  const [matchOffered, setMatchOffered] = useState(profile.employer_match?.offered ?? false);
+  const [matchRatePct, setMatchRatePct] = useState(profile.employer_match?.matchRatePct ?? 50);
+  const [matchMaxPct, setMatchMaxPct] = useState(profile.employer_match?.maxPctOfSalary ?? 6);
+  const [annualSavings, setAnnualSavings] = useState(profile.annual_savings ?? 12000);
+  const [rrspRoom, setRrspRoom] = useState("");
+  const [tfsaRoom, setTfsaRoom] = useState("");
+
+  const defaultCurrentRate = marginalRateAt(salary, province, currentAge) * 100;
+  const defaultRetireRate =
+    marginalRateAt(profile.desired_income ?? 60000, province, 65) * 100;
+  const [currentRatePct, setCurrentRatePct] = useState<number | null>(null);
+  const [retireRatePct, setRetireRatePct] = useState<number | null>(null);
+
+  const [result, setResult] = useState<SavingsAllocationResult | null>(null);
+
+  const married = (profile.marital_status ?? "Single") !== "Single";
+  const incomeGap = Math.abs(salary - (profile.spouse_cpp_future_income ?? 0));
+  const rrspGap = Math.abs((profile.override_rrsp ?? 0) - (profile.spouse_rrsp ?? 0));
+  const oasExposure =
+    (profile.desired_income ?? 0) >= CANADA_2026_PARAMETERS.oasRecovery.startIncome;
+
+  // Clear stale results when inputs change.
+  const inputsKey = JSON.stringify([
+    matchOffered, matchRatePct, matchMaxPct, annualSavings, rrspRoom, tfsaRoom,
+    currentRatePct, retireRatePct, salary, profile.desired_income, married, incomeGap, rrspGap,
+  ]);
+  useEffect(() => {
+    setResult(null);
+  }, [inputsKey]);
+
+  const run = () => {
+    onSaveMatch({ offered: matchOffered, matchRatePct, maxPctOfSalary: matchMaxPct });
+    const r = suggestSavingsAllocation({
+      annualSavings,
+      salary,
+      currentMarginalRate: (currentRatePct ?? defaultCurrentRate) / 100,
+      retirementMarginalRate: (retireRatePct ?? defaultRetireRate) / 100,
+      employerMatch: {
+        offered: matchOffered,
+        matchRate: matchRatePct / 100,
+        maxOfSalary: matchMaxPct / 100,
+      },
+      rrspRoom: rrspRoom === "" ? null : Number(rrspRoom),
+      tfsaRoom: tfsaRoom === "" ? null : Number(tfsaRoom),
+      married,
+      incomeGap,
+      rrspBalanceGap: rrspGap,
+      oasClawbackExposure: oasExposure,
+    });
+    setResult(r);
+  };
+
+  const apply = () => {
+    if (!result || annualSavings <= 0) return;
+    const amt = (b: string) => result.steps.find((s) => s.bucket === b)?.amount ?? 0;
+    const rrspPct = ((amt("employer_match") + amt("rrsp") + amt("spousal_rrsp")) / annualSavings) * 100;
+    const tfsaPct = (amt("tfsa") / annualSavings) * 100;
+    const nonregPct = Math.max(0, 100 - rrspPct - tfsaPct);
+    onApply(Math.round(rrspPct * 10) / 10, Math.round(tfsaPct * 10) / 10, Math.round(nonregPct * 10) / 10);
+  };
+
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-4">
+      <div>
+        <h3 className="text-base font-semibold">Savings allocation</h3>
+        <p className="text-sm text-muted-foreground">
+          Waterfall: capture the employer match, then weigh RRSP vs TFSA by today's marginal
+          rate against the expected rate on withdrawals in retirement, then non-registered last.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Annual savings ($/yr)</Label>
+          <NumInput value={annualSavings} onCommit={(n) => setAnnualSavings(Math.max(0, n))} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">RRSP room ($) — blank = assume room</Label>
+          <Input
+            value={rrspRoom}
+            onChange={(e) => setRrspRoom(e.target.value.replace(/[^0-9]/g, ""))}
+            placeholder="Available"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">TFSA room ($) — blank = assume room</Label>
+          <Input
+            value={tfsaRoom}
+            onChange={(e) => setTfsaRoom(e.target.value.replace(/[^0-9]/g, ""))}
+            placeholder="Available"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Marginal rate today (%)</Label>
+          <NumInput
+            value={currentRatePct ?? Math.round(defaultCurrentRate * 10) / 10}
+            onCommit={(n) => setCurrentRatePct(Math.max(0, Math.min(100, n)))}
+          />
+          <p className="text-[11px] text-muted-foreground">Estimated {defaultCurrentRate.toFixed(1)}% from your income</p>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Marginal rate on withdrawals (%)</Label>
+          <NumInput
+            value={retireRatePct ?? Math.round(defaultRetireRate * 10) / 10}
+            onCommit={(n) => setRetireRatePct(Math.max(0, Math.min(100, n)))}
+          />
+          <p className="text-[11px] text-muted-foreground">Estimated {defaultRetireRate.toFixed(1)}% from retirement spending</p>
+        </div>
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">Employer RRSP match</Label>
+            <Switch checked={matchOffered} onCheckedChange={setMatchOffered} />
+          </div>
+          {matchOffered ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[11px]">Match %</Label>
+                <NumInput value={matchRatePct} onCommit={(n) => setMatchRatePct(Math.max(0, n))} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Up to % of salary</Label>
+                <NumInput value={matchMaxPct} onCommit={(n) => setMatchMaxPct(Math.max(0, n))} />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div>
+        <Button size="sm" onClick={run}>
+          {result ? "Recalculate" : "Suggest allocation"}
+        </Button>
+      </div>
+
+      {result ? (
+        <div className="space-y-3">
+          {result.steps.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No annual savings entered — nothing to allocate.</p>
+          ) : (
+            <ol className="space-y-2">
+              {result.steps.map((s, i) => (
+                <li key={i} className="rounded-lg border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">
+                      {i + 1}. {s.label}
+                    </span>
+                    <span className="text-sm font-semibold">{formatCad(s.amount)}/yr</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{s.reason}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {result.warnings.length > 0 ? (
+            <ul className="space-y-1 text-xs text-amber-800">
+              {result.warnings.map((w, i) => (
+                <li key={i}>⚠ {w}</li>
+              ))}
+            </ul>
+          ) : null}
+
+          {result.steps.length > 0 ? (
+            <Button size="sm" variant="outline" onClick={apply}>
+              Apply to savings split
+            </Button>
+          ) : null}
+
+          <p className="text-xs text-muted-foreground">{result.disclaimer}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const TAX_TYPE_LABELS: Record<HoldingTaxType, string> = {
+  interest: "Interest (GICs, bonds)",
+  eligibleDividend: "Eligible Canadian dividends",
+  canadianReit: "Canadian REITs",
+  usDirect: "US stocks/ETFs held directly",
+  canadianListedUS: "Canadian-listed US equity ETF (e.g. VFV)",
+  foreignNonUS: "International (non-US) dividends",
+  usReit: "US REITs",
+  growthEquity: "Growth equity (minimal distributions)",
+  swapBased: "Swap-based ETF (e.g. HXS)",
+};
+
+const ACCOUNT_LABELS: Record<LocAccount, string> = {
+  TFSA: "TFSA",
+  RRSP: "RRSP/RRIF",
+  NON_REGISTERED: "Non-registered",
+};
+
+function newHolding(): AssetHoldingInput {
+  return {
+    id: `h-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+    name: "",
+    taxType: "growthEquity",
+    value: 0,
+    yield: 0.02,
+    account: "NON_REGISTERED",
+  };
+}
+
+function AssetLocationCard({
+  profile,
+  onSave,
+}: {
+  profile: Profile;
+  onSave: (holdings: AssetHoldingInput[]) => void;
+}) {
+  const province = (profile.province as ProvinceCode) ?? "AB";
+  const salary = profile.cpp_future_income ?? 0;
+  const [holdings, setHoldings] = useState<AssetHoldingInput[]>(
+    profile.asset_holdings ?? [],
+  );
+  const [ratePct, setRatePct] = useState<number | null>(null);
+  const [result, setResult] = useState<LocationResult | null>(null);
+  const [showExplainer, setShowExplainer] = useState<string | null>(null);
+
+  const defaultRate = marginalRateAt(salary, province, profile.current_age ?? 40) * 100;
+
+  // Keep local state in sync if the profile loads after mount.
+  useEffect(() => {
+    if (profile.asset_holdings) setHoldings(profile.asset_holdings);
+  }, [profile.asset_holdings]);
+
+  const updateHolding = (id: string, patch: Partial<AssetHoldingInput>) => {
+    const next = holdings.map((h) => (h.id === id ? { ...h, ...patch } : h));
+    setHoldings(next);
+    setResult(null);
+  };
+
+  const analyze = () => {
+    const clean = holdings.filter((h) => h.value > 0 && h.name.trim() !== "");
+    onSave(clean);
+    const r = scoreAssetLocation({
+      holdings: clean.map((h) => ({
+        id: h.id,
+        name: h.name,
+        taxType: h.taxType,
+        value: h.value,
+        yield: h.yield,
+        account: h.account,
+      })),
+      marginalRate: (ratePct ?? defaultRate) / 100,
+    });
+    setResult(r);
+  };
+
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-4">
+      <div>
+        <h3 className="text-base font-semibold">Asset location</h3>
+        <p className="text-sm text-muted-foreground">
+          Which account each holding sits in changes its annual tax drag. Classify your
+          holdings and see where each one costs the least tax to hold.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        {holdings.map((h) => (
+          <div key={h.id} className="rounded-lg border p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Input
+                value={h.name}
+                onChange={(e) => updateHolding(h.id, { name: e.target.value })}
+                placeholder="Holding name (e.g. VFV)"
+                className="flex-1"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const next = holdings.filter((x) => x.id !== h.id);
+                  setHoldings(next);
+                  setResult(null);
+                }}
+              >
+                Remove
+              </Button>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1">
+                <Label className="text-[11px]">Type</Label>
+                <Select
+                  value={h.taxType}
+                  onValueChange={(v) => updateHolding(h.id, { taxType: v as HoldingTaxType })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(TAX_TYPE_LABELS) as HoldingTaxType[]).map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {TAX_TYPE_LABELS[t]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Value ($)</Label>
+                <NumInput
+                  value={h.value}
+                  onCommit={(n) => updateHolding(h.id, { value: Math.max(0, n) })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Yield (%/yr)</Label>
+                <NumInput
+                  value={Math.round(h.yield * 1000) / 10}
+                  onCommit={(n) => updateHolding(h.id, { yield: Math.max(0, n) / 100 })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Held in</Label>
+                <Select
+                  value={h.account}
+                  onValueChange={(v) => updateHolding(h.id, { account: v as LocAccount })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(ACCOUNT_LABELS) as LocAccount[]).map((a) => (
+                      <SelectItem key={a} value={a}>
+                        {ACCOUNT_LABELS[a]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        ))}
+        <Button size="sm" variant="outline" onClick={() => setHoldings([...holdings, newHolding()])}>
+          Add holding
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Marginal tax rate (%)</Label>
+          <NumInput
+            value={ratePct ?? Math.round(defaultRate * 10) / 10}
+            onCommit={(n) => setRatePct(Math.max(0, Math.min(100, n)))}
+          />
+          <p className="text-[11px] text-muted-foreground">Estimated {defaultRate.toFixed(1)}% from your income</p>
+        </div>
+        <Button size="sm" onClick={analyze} disabled={holdings.length === 0}>
+          Analyze location
+        </Button>
+      </div>
+
+      {result ? (
+        <div className="space-y-3">
+          <div className="rounded-lg border bg-emerald-50 p-4">
+            <div className="text-xs text-muted-foreground">Estimated tax saved per year if all moves are followed</div>
+            <div className="text-2xl font-bold text-emerald-800">
+              {formatCad(result.totalAnnualSavings)}/yr
+            </div>
+            {result.moves.length === 0 ? (
+              <p className="text-xs text-muted-foreground mt-1">
+                Every holding is already in its best account — nothing to move.
+              </p>
+            ) : null}
+          </div>
+
+          {result.moves.length > 0 ? (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Suggested moves (biggest savings first)</h4>
+              <ul className="space-y-1">
+                {result.moves.map((m) => (
+                  <li key={m.holdingId} className="flex items-center justify-between gap-2 text-sm rounded-lg border p-2">
+                    <span>
+                      {m.name}: {ACCOUNT_LABELS[m.from]} → {ACCOUNT_LABELS[m.to]}
+                    </span>
+                    <span className="font-medium text-emerald-700">+{formatCad(m.annualSavings)}/yr</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Per-holding detail</h4>
+            {result.scores.map((s) => (
+              <div key={s.holdingId} className="rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{s.name}</span>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline"
+                    onClick={() => setShowExplainer(showExplainer === s.holdingId ? null : s.holdingId)}
+                  >
+                    {showExplainer === s.holdingId ? "Hide why" : "Why this account?"}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Now: {ACCOUNT_LABELS[s.currentAccount]} · Best: {ACCOUNT_LABELS[s.bestAccount]}
+                  {s.annualSavingsIfMoved > 1 ? ` · Save ${formatCad(s.annualSavingsIfMoved)}/yr by moving` : " · Already optimal"}
+                </p>
+                {showExplainer === s.holdingId ? (
+                  <p className="text-xs text-muted-foreground mt-2 rounded bg-muted/50 p-2">{s.explainer}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          {result.warnings.length > 0 ? (
+            <ul className="space-y-1 text-xs text-amber-800">
+              {result.warnings.map((w, i) => (
+                <li key={i}>⚠ {w}</li>
+              ))}
+            </ul>
+          ) : null}
+
+          <p className="text-xs text-muted-foreground">{result.disclaimer || LOCATION_DISCLAIMER}</p>
+        </div>
+      ) : null}
     </div>
   );
 }
