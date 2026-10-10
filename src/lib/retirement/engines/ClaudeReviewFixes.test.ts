@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runRetirementSimulation } from "./SimulationCoordinator";
 import { oasAt, plannerInputsToScenario } from "../adapter/oldApiAdapter";
-import { computePositions } from "@/lib/finance";
+import { computePositions } from "../../finance";
 import type { RetirementScenario } from "../domain/types";
 import type { PlannerInputs } from "../adapter/oldApiAdapter";
 

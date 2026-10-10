@@ -1,5 +1,52 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { HoldingTaxType, LocAccount } from "@/lib/retirement/optimization/AssetLocation";
+
+/** User-entered DB pension inputs (today's dollars). Mirrors the DbPension domain type. */
+export type DbPensionInput = {
+  enabled: boolean;
+  name?: string;
+  /** Monthly pension at the normal retirement age, today's $/mo. */
+  monthlyAmountAtNRA: number;
+  normalRetirementAge: number;
+  /** Chosen commencement age. */
+  startAge: number;
+  /** Reduction per year commenced before NRA, as a decimal (e.g. 0.03). */
+  earlyReductionPerYear: number;
+  /** Increase per year commenced after NRA, as a decimal. */
+  lateIncreasePerYear: number;
+  indexing: "none" | "full" | "partial";
+  /** For "partial": fraction of CPI applied (0-1). */
+  indexingFraction: number;
+  /** Bridge benefit monthly amount, today's $/mo (0 = none). */
+  bridgeMonthly: number;
+  /** Bridge paid while age < bridgeEndAge (typically 65). Null = no bridge. */
+  bridgeEndAge: number | null;
+  /** Survivor benefit as % of member's pension (0-100). */
+  survivorPercent: number;
+};
+
+/** A holding classified for the asset-location optimizer. */
+export type AssetHoldingInput = {
+  id: string;
+  name: string;
+  taxType: HoldingTaxType;
+  /** Current market value ($). */
+  value: number;
+  /** Annual distribution yield as a decimal (e.g. 0.035), gross of withholding. */
+  yield: number;
+  /** Where it sits today. */
+  account: LocAccount;
+};
+
+/** Employer RRSP/pension match details for the savings allocator. */
+export type EmployerMatchInput = {
+  offered: boolean;
+  /** Employer match rate as % (e.g. 50 = 50 cents per dollar). */
+  matchRatePct: number;
+  /** Max employee contribution matched, as % of salary. */
+  maxPctOfSalary: number;
+};
 
 export type Profile = {
   id: string;
@@ -55,10 +102,16 @@ export type Profile = {
   spouse_oas_start_age: number;
   spouse_lira: number;
   spouse_nonreg: number;
+  /** DB pension inputs (JSONB, null = none entered). */
+  db_pension: DbPensionInput | null;
+  /** Holdings classified for asset location (JSONB, null = none entered). */
+  asset_holdings: AssetHoldingInput[] | null;
+  /** Employer match details (JSONB, null = none entered). */
+  employer_match: EmployerMatchInput | null;
 };
 
 const COLUMNS =
-  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg";
+  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg, db_pension, asset_holdings, employer_match";
 
 function toNumbers(row: Record<string, unknown>): Profile {
   const num = (v: unknown, fallback = 0) => (v == null ? fallback : Number(v));
@@ -96,6 +149,9 @@ function toNumbers(row: Record<string, unknown>): Profile {
     spouse_oas_start_age: num(row["spouse_oas_start_age"], 65),
     spouse_lira: num(row["spouse_lira"]),
     spouse_nonreg: num(row["spouse_nonreg"]),
+    db_pension: (row["db_pension"] as DbPensionInput | null) ?? null,
+    asset_holdings: (row["asset_holdings"] as AssetHoldingInput[] | null) ?? null,
+    employer_match: (row["employer_match"] as EmployerMatchInput | null) ?? null,
   };
 }
 
