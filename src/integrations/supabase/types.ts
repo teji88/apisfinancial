@@ -336,6 +336,7 @@ export type Database = {
           display_name: string | null
           growth_rate: number
           id: string
+          income: number
           inflation_rate: number
           life_expectancy: number
           manual_override: boolean
@@ -386,6 +387,7 @@ export type Database = {
           display_name?: string | null
           growth_rate?: number
           id: string
+          income?: number
           inflation_rate?: number
           life_expectancy?: number
           manual_override?: boolean
@@ -436,6 +438,7 @@ export type Database = {
           display_name?: string | null
           growth_rate?: number
           id?: string
+          income?: number
           inflation_rate?: number
           life_expectancy?: number
           manual_override?: boolean

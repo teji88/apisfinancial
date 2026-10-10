@@ -18,6 +18,8 @@ export type Profile = {
   spouse_rrsp: number;
   spouse_tfsa: number;
   spouse_income: number;
+  /** Main user's other pension income in retirement (today's $/yr). */
+  income: number;
   desired_income: number;
   cpp_start_age: number;
   cpp_pct: number;
@@ -56,7 +58,7 @@ export type Profile = {
 };
 
 const COLUMNS =
-  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg";
+  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg";
 
 function toNumbers(row: Record<string, unknown>): Profile {
   const num = (v: unknown, fallback = 0) => (v == null ? fallback : Number(v));
@@ -70,6 +72,7 @@ function toNumbers(row: Record<string, unknown>): Profile {
     spouse_rrsp: num(row["spouse_rrsp"]),
     spouse_tfsa: num(row["spouse_tfsa"]),
     spouse_income: num(row["spouse_income"]),
+    income: num(row["income"]),
     desired_income: num(row["desired_income"], 70000),
     cpp_pct: num(row["cpp_pct"], 75),
     override_tfsa: num(row["override_tfsa"]),

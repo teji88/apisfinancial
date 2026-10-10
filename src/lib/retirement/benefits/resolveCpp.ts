@@ -1,13 +1,14 @@
 /**
- * Resolve the effective CPP-at-65 value for a person.
- * If earnings history is provided, calculates CPP from the history.
- * Otherwise falls back to the manual cppAt65 estimate.
+ * Resolve the pre-age-adjustment CPP base for a person (in start-year
+ * dollars per s.51(1)). If earnings history is provided, calculates CPP
+ * from the history. Otherwise falls back to the manual cppAt65 estimate.
+ * The caller applies the s.46(3.1) early/late age factor.
  */
 
 import type { PersonScenario } from "../domain/types";
 import { calculateCppBenefit } from "./CppCalculator";
 
-export function resolveCppAt65(person: PersonScenario): number {
+export function resolveCppBase(person: PersonScenario): number {
   // If earnings history is provided, calculate from history
   if (person.cppEarningsHistory && person.cppEarningsHistory.length > 0) {
     const result = calculateCppBenefit({
@@ -19,7 +20,7 @@ export function resolveCppAt65(person: PersonScenario): number {
       childRearingYears: person.cppChildRearingYears ?? [],
       cppStartAge: typeof person.cppStartAge === "number" ? person.cppStartAge : 65,
     });
-    return result.cppAt65Monthly;
+    return result.cppBaseMonthly;
   }
 
   // Fall back to manual estimate

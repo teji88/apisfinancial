@@ -1,11 +1,13 @@
 import type {
   OptimizationCandidate,
   OptimizationResult,
+  PersonScenario,
   RetirementScenario,
   SimulationMetrics,
   StrategyPreferences,
 } from "../domain/types";
 import { runRetirementSimulation } from "../engines/SimulationCoordinator";
+import { estimateGovernmentBenefits } from "../engines/BenefitEngine";
 
 export interface OptimizationConstraints {
   minimumEstate?: number;
@@ -328,16 +330,68 @@ function evaluateCandidate(
     problem.portfolioByType,
   );
 
+  const gisViolations = scenario.household.people.flatMap((person) => {
+    const v = oasDeferralForfeitsGis(person, scenario.household.people.length);
+    return v === null ? [] : [v];
+  });
+
   return {
     scenario,
     metrics: simulation.metrics,
     objectiveValue: objectiveValue(simulation.metrics, objective, scenario),
-    violations: constraintViolations(
-      scenario,
-      simulation.metrics,
-      problem.constraints ?? {},
-    ),
+    violations: [
+      ...constraintViolations(
+        scenario,
+        simulation.metrics,
+        problem.constraints ?? {},
+      ),
+      ...gisViolations,
+    ],
   };
+}
+
+/**
+ * Blocking guardrail: OAS Act ss.11(1), 11(7)(b) — GIS is only paid "to a
+ * pensioner", so deferring OAS forfeits GIS for every deferred month (up to 5
+ * years, often $1,000+/mo non-taxable) in exchange for a 36% boost on the OAS
+ * portion only. Someone who would qualify for any GIS at 65 is therefore
+ * almost certainly wrong to defer. The simulation already prices the
+ * forfeiture; this violation additionally blocks the optimizer from ever
+ * selecting a deferring candidate for such a person.
+ *
+ * The probe estimates GIS at 65 with OAS at 65 on declared other income +
+ * CPP at 65 + employment income if still working (all count for GIS; OAS
+ * itself is excluded by the engine). Limitations: RRIF/RRSP withdrawal
+ * income is not in the probe (may overstate GIS for high-withdrawal
+ * scenarios) and partner income is not modelled (single/couple threshold
+ * only). Both are documented; the candidate list remains inspectable.
+ */
+export function oasDeferralForfeitsGis(person: PersonScenario, householdSize: number): string | null {
+  const startAge = person.oasStartAge;
+  if (typeof startAge !== "number" || startAge <= 65) return null;
+
+  // Probe: would this person receive GIS at 65 with OAS at 65?
+  // CPP is probed at 65 (not the combo's delayed start) so the test detects
+  // the person's fundamental retirement-income regime, not a transient
+  // zero-income year caused by delaying CPP itself.
+  const probePerson = { ...person, cppStartAge: 65, oasStartAge: 65 };
+  const at65 = estimateGovernmentBenefits(probePerson, 65, 0, {
+    calendarYear: 2026,
+    inflationRate: 0,
+    householdSize,
+  });
+  const employedAt65 = (person.retirementAge ?? 65) > 65;
+  const employmentIncome = employedAt65
+    ? (person.employmentIncome ?? 0) + (person.selfEmploymentIncome ?? 0)
+    : 0;
+  const probeIncome = (person.otherIncome ?? 0) + at65.cpp + employmentIncome;
+  const gisProbe = estimateGovernmentBenefits(probePerson, 65, probeIncome, {
+    calendarYear: 2026,
+    inflationRate: 0,
+    householdSize,
+    previousYearEmploymentIncome: employmentIncome,
+  });
+  return gisProbe.gis > 0 ? "oasDeferralForfeitsGis" : null;
 }
 
 /**

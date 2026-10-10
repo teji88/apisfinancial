@@ -11,7 +11,7 @@ export const CANADA_2026_RULES: RuleVersion[] = [
 
 export const CANADA_2026_PARAMETERS = {
   cpp: { startMinAge: 60, startMaxAge: 70, before65MonthlyAdjustment: -0.006, after65MonthlyAdjustment: 0.007, maxAt65Monthly: 1507.65 },
-  oas: { startMinAge: 65, startMaxAge: 70, deferralMonthlyAdjustment: 0.006, maxDeferralAdjustment: 0.36, age75Increase: 0.10, maxMonthly65To74: 751.97, maxMonthly75Plus: 827.17 },
+  oas: { startMinAge: 65, startMaxAge: 70, deferralMonthlyAdjustment: 0.006, maxDeferralAdjustment: 0.36, age75Increase: 0.10, maxMonthly65To74: 762.50, maxMonthly75Plus: 838.75 }, // Oct-Dec 2026 Service Canada maximums; refresh quarterly
   gis: {
     singleMaxMonthly: 1123.17,
     singleIncomeCutoff: 22800,
@@ -39,5 +39,5 @@ export const CANADA_2026_PARAMETERS = {
     federalPensionIncomeCreditRate: 0.14,
     provincialPensionIncomeAmount: { AB: 1753, BC: 1000, MB: 1000, NB: 1000, NL: 1000, NT: 1000, NS: 1173, NU: 2000, ON: 1796, PE: 1000, SK: 1000, YT: 2000 },
   },
-  oasRecovery: { startIncome: 95323, upperIncomeUnder75: 155109, upperIncome75Plus: 161088 },
+  oasRecovery: { startIncome: 95323 }, // 2026 recovery threshold (ITA s.180.2); indexed annually
 } as const;

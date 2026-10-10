@@ -103,7 +103,7 @@ export function CppHistoryEditor({ member, onChange }: CppHistoryEditorProps) {
           type="button"
           onClick={() => {
             setShowHistory(false);
-            // Empty array = fall back to manual estimate (see resolveCppAt65)
+            // Empty array = fall back to manual estimate (see resolveCppBase)
             onChange({ cppEarningsHistory: [] });
           }}
           className="text-xs text-muted-foreground hover:underline"
@@ -114,7 +114,7 @@ export function CppHistoryEditor({ member, onChange }: CppHistoryEditorProps) {
 
       {calculation && (
         <div className="rounded bg-muted p-2 text-sm">
-          <span className="font-medium">Calculated CPP at 65: {formatCad(calculation.cppAt65Monthly)}/mo</span>
+          <span className="font-medium">Calculated CPP base: {formatCad(calculation.cppBaseMonthly)}/mo</span>
           <span className="ml-2 text-xs text-muted-foreground">
             ({calculation.contributoryYears} contributory years, {calculation.dropoutYears} dropped)
           </span>

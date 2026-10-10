@@ -257,16 +257,16 @@ describe("retirement financial invariants", () => {
     const partial = estimateGovernmentBenefits({ ...person, oasStartAge: 65, oasResidenceYears: 20 }, 65).oas;
     const deferred = estimateGovernmentBenefits({ ...person, oasStartAge: 70, oasResidenceYears: 40 }, 70).oas;
     expect(before).toBe(0);
-    expect(partial).toBeCloseTo(751.97 * 12 * 0.5, 8);
-    expect(deferred).toBeCloseTo(751.97 * 12 * 1.36, 8);
+    expect(partial).toBeCloseTo(762.50 * 12 * 0.5, 8);
+    expect(deferred).toBeCloseTo(762.50 * 12 * 1.36, 8);
   });
 
   it("applies the age-75 OAS increase without double-counting residence", () => {
     const person = makeScenario().household.people[0]!;
     const full = estimateGovernmentBenefits({ ...person, oasStartAge: 65, oasResidenceYears: 40 }, 75).oas;
     const partial = estimateGovernmentBenefits({ ...person, oasStartAge: 65, oasResidenceYears: 20 }, 75).oas;
-    expect(full).toBeCloseTo(827.17 * 12, 8);
-    expect(partial).toBeCloseTo(827.17 * 12 * 0.5, 8);
+    expect(full).toBeCloseTo(838.75 * 12, 8);
+    expect(partial).toBeCloseTo(838.75 * 12 * 0.5, 8);
   });
 
   it("uses prior-year income for GIS and removes GIS as income reaches the published cutoff", () => {

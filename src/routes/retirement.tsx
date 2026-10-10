@@ -72,6 +72,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  optimizeCppOasTiming,
+  type TimingOptimizationResult,
+} from "@/lib/retirement/optimization/CppOasTiming";
+import type { PersonScenario } from "@/lib/retirement/domain/types";
 
 export const Route = createFileRoute("/retirement")({
   staticData: { sitemap: true },
@@ -201,6 +206,7 @@ const GUEST_PROFILE: Profile = {
   spouse_rrsp: 0,
   spouse_tfsa: 0,
   spouse_income: 0,
+  income: 0,
   desired_income: 60000,
   cpp_start_age: 65,
   cpp_pct: 75,
@@ -503,7 +509,7 @@ function RetirementPage() {
       cppAt65: derived.selfCpp65,
       oasStartAge: p.oas_start_age ?? 65,
       oasFraction: derived.selfOasFraction,
-      otherIncome: 0,
+      otherIncome: p.income ?? 0,
       balances: { ...balances },
       // Use portfolio ACB if available, else user override, else 0.4 estimate.
       nonregGainRatio: gainRatioOverride ?? byType.nonregGainRatio ?? 0.4,
@@ -1033,6 +1039,14 @@ function RetirementPage() {
             </div>
           ) : null}
 
+          <TimingOptimizerCard
+            profile={p}
+            currentAge={p.current_age ?? 40}
+            retireAge={p.target_retirement_age ?? 65}
+            selfCpp65={derived.selfCpp65}
+            onApply={(cppAge, oasAge) => set({ cpp_start_age: cppAge, oas_start_age: oasAge })}
+          />
+
           <div className="grid gap-4 lg:grid-cols-3">
             <BenefitCard
               title="Your government benefits"
@@ -1351,6 +1365,9 @@ function RetirementPage() {
                 options={OAS_AGE_OPTIONS}
                 onChange={(age) => set({ oas_start_age: age })}
               />
+            </Field>
+            <Field label="Your other pension income in retirement (today's $/yr)">
+              <NumInput value={p.income ?? 0} onCommit={(n) => set({ income: n })} />
             </Field>
             <div className="sm:col-span-2">
               {(p.cpp_detailed_history?.length ?? 0) > 0 && (
@@ -1808,6 +1825,188 @@ function Field({
       ) : (
         children
       )}
+    </div>
+  );
+}
+
+function TimingOptimizerCard({
+  profile,
+  currentAge,
+  retireAge,
+  selfCpp65,
+  onApply,
+}: {
+  profile: Profile;
+  currentAge: number;
+  retireAge: number;
+  /** Annual CPP at 65 (converted to monthly for the engine). */
+  selfCpp65: number;
+  onApply: (cppAge: number, oasAge: number) => void;
+}) {
+  const [sex, setSex] = useState<"M" | "F">("M");
+  const [result, setResult] = useState<TimingOptimizationResult | null>(null);
+  const [running, setRunning] = useState(false);
+  const [showMethod, setShowMethod] = useState(false);
+
+  const currentCpp = profile.cpp_start_age ?? 65;
+  const currentOas = profile.oas_start_age ?? 65;
+
+  // Clear stale results when the inputs behind them change.
+  const inputsKey = JSON.stringify([
+    currentCpp,
+    currentOas,
+    profile.income ?? 0,
+    profile.cpp_future_income ?? 0,
+    profile.oas_years_in_canada ?? 40,
+    sex,
+    currentAge,
+    retireAge,
+    selfCpp65,
+    profile.province,
+  ]);
+  useEffect(() => {
+    setResult(null);
+  }, [inputsKey]);
+
+  const run = () => {
+    setRunning(true);
+    // Let the button paint before the synchronous compute.
+    setTimeout(() => {
+      try {
+        const person: PersonScenario = {
+          role: "MAIN_USER",
+          birthYear: new Date().getFullYear() - currentAge,
+          birthMonth: 1,
+          retirementAge: retireAge,
+          cppAt65: selfCpp65 / 12, // engine takes monthly
+          employmentIncome: profile.cpp_future_income ?? 0,
+          cppStartAge: currentCpp,
+          oasStartAge: currentOas,
+          oasResidenceYears: profile.oas_years_in_canada ?? 40,
+          otherIncome: profile.income ?? 0,
+        };
+        const r = optimizeCppOasTiming({
+          person,
+          currentAge,
+          sex,
+          province: (profile.province as ProvinceCode) ?? "AB",
+          otherIncomeAnnual: profile.income ?? 0,
+        });
+        setResult(r);
+      } finally {
+        setRunning(false);
+      }
+    }, 30);
+  };
+
+  const rec = result?.recommended ?? null;
+  const currentCombo =
+    result?.combos.find((c) => c.cppStartAge === currentCpp && c.oasStartAge === currentOas) ??
+    null;
+  const gainVsCurrent =
+    rec && currentCombo ? rec.expectedPV - currentCombo.expectedPV : null;
+  const alreadyOptimal =
+    rec != null && rec.cppStartAge === currentCpp && rec.oasStartAge === currentOas;
+
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold">CPP/OAS timing</h3>
+          <p className="text-sm text-muted-foreground">
+            Compares all 66 CPP (60–70) × OAS (65–70) claiming combinations by expected
+            present value of after-tax lifetime benefits.
+          </p>
+        </div>
+        <div className="flex items-end gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Sex (for longevity estimate)</Label>
+            <Select value={sex} onValueChange={(v) => setSex(v as "M" | "F")}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="M">Male</SelectItem>
+                <SelectItem value="F">Female</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button size="sm" onClick={run} disabled={running}>
+            {running ? "Calculating…" : result ? "Recalculate" : "Find best claiming ages"}
+          </Button>
+        </div>
+      </div>
+
+      {rec ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-lg font-semibold">
+              CPP at {rec.cppStartAge} · OAS at {rec.oasStartAge}
+            </div>
+            {alreadyOptimal ? (
+              <Badge variant="secondary">Matches your current ages</Badge>
+            ) : (
+              <Button size="sm" onClick={() => onApply(rec.cppStartAge, rec.oasStartAge)}>
+                Apply these ages
+              </Button>
+            )}
+          </div>
+
+          <dl className="grid gap-2 sm:grid-cols-3 text-sm">
+            <div className="rounded-lg border p-3">
+              <dt className="text-xs text-muted-foreground">Expected lifetime value</dt>
+              <dd className="font-medium">{formatCad(rec.expectedPV)}</dd>
+              {gainVsCurrent != null && gainVsCurrent > 1 ? (
+                <dd className="text-xs text-emerald-700">
+                  +{formatCad(gainVsCurrent)} vs your current ages
+                </dd>
+              ) : null}
+            </div>
+            <div className="rounded-lg border p-3">
+              <dt className="text-xs text-muted-foreground">Break-even vs 65/65</dt>
+              <dd className="font-medium">
+                {rec.breakEvenVs65 != null ? `Age ${rec.breakEvenVs65}` : "—"}
+              </dd>
+              <dd className="text-xs text-muted-foreground">For context only</dd>
+            </div>
+            <div className="rounded-lg border p-3">
+              <dt className="text-xs text-muted-foreground">Bridge funds needed</dt>
+              <dd className="font-medium">{formatCad(rec.requiredBridgeFunds)}</dd>
+              <dd className="text-xs text-muted-foreground">To fund the wait</dd>
+            </div>
+          </dl>
+
+          {result!.warnings.length > 0 ? (
+            <ul className="space-y-1 text-xs text-amber-800">
+              {result!.warnings.map((w, i) => (
+                <li key={i}>⚠ {w}</li>
+              ))}
+            </ul>
+          ) : null}
+
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline"
+            onClick={() => setShowMethod((s) => !s)}
+          >
+            {showMethod ? "Hide" : "How this is calculated"}
+          </button>
+          {showMethod ? (
+            <p className="text-xs text-muted-foreground">
+              Each combination's CPP, OAS, GIS, OAS recovery tax and income tax is
+              projected year by year in today's dollars, weighted by survival
+              probability and discounted at {(result!.realDiscountRate * 100).toFixed(1)}%
+              real. The highest expected present value wins. Break-even ages are shown
+              for context only — they don't drive the recommendation.
+            </p>
+          ) : null}
+
+          <p className="text-xs text-muted-foreground">
+            Informational only — not financial advice. Assumes average longevity for
+            the selected sex; your health and family history matter more than any table.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
