@@ -34,6 +34,8 @@ export interface PropertyInputs {
   expenses: PropertyExpenses;
   /** Cash invested: down payment + closing costs ($). */
   cashInvested: number;
+  /** Big-ticket reserve: roof, furnace, appliances ($/yr, default 0). */
+  capexReserveAnnual?: number;
 }
 
 export interface PropertyResult {
@@ -41,8 +43,11 @@ export interface PropertyResult {
   annualRent: number;
   effectiveIncome: number;
   operatingExpenses: number;
+  /** Operating expenses as % of effective income. */
+  expenseRatioPct: number;
   noi: number;
   annualMortgage: number;
+  capexReserveAnnual: number;
   cashFlowAnnual: number;
   cashFlowMonthly: number;
   capRatePct: number;
@@ -78,9 +83,11 @@ export function analyzeProperty(p: PropertyInputs): PropertyResult {
     { label: "Other", annual: clamp(e.other) },
   ];
   const operatingExpenses = expenseBreakdown.reduce((s, x) => s + x.annual, 0);
+  const expenseRatioPct = effectiveIncome > 0 ? (operatingExpenses / effectiveIncome) * 100 : 0;
   const noi = effectiveIncome - operatingExpenses;
   const annualMortgage = clamp(p.mortgagePayment) * 12;
-  const cashFlowAnnual = noi - annualMortgage;
+  const capexReserveAnnual = clamp(p.capexReserveAnnual ?? 0);
+  const cashFlowAnnual = noi - annualMortgage - capexReserveAnnual;
 
   const value = clamp(p.currentValue);
   return {
@@ -88,8 +95,10 @@ export function analyzeProperty(p: PropertyInputs): PropertyResult {
     annualRent,
     effectiveIncome,
     operatingExpenses,
+    expenseRatioPct,
     noi,
     annualMortgage,
+    capexReserveAnnual,
     cashFlowAnnual,
     cashFlowMonthly: cashFlowAnnual / 12,
     capRatePct: value > 0 ? (noi / value) * 100 : 0,
@@ -97,6 +106,21 @@ export function analyzeProperty(p: PropertyInputs): PropertyResult {
     equity: value - clamp(p.mortgageBalance),
     expenseBreakdown,
   };
+}
+
+/** Whole months since a YYYY-MM-DD date; null when the date is missing/invalid. */
+export function monthsSince(dateStr: string | null, todayStr: string): number | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + "T00:00:00");
+  const t = new Date(todayStr + "T00:00:00");
+  if (isNaN(d.getTime()) || isNaN(t.getTime()) || d > t) return null;
+  return (t.getFullYear() - d.getFullYear()) * 12 + (t.getMonth() - d.getMonth());
+}
+
+/** True when a property value estimate is older than 6 months (or never stamped). */
+export function isValueStale(valueUpdated: string | null, todayStr: string): boolean {
+  const m = monthsSince(valueUpdated, todayStr);
+  return m === null || m > 6;
 }
 
 export function rollupProperties(inputs: PropertyInputs[]): PortfolioRollup {

@@ -25,6 +25,7 @@ import {
 } from "@/lib/retirement/optimization/DebtComparator";
 import {
   assessSmithLedger,
+  CRA_FILING_DISCLAIMER,
   type SmithLedgerResult,
 } from "@/lib/retirement/optimization/SmithTracker";
 import { NumInput } from "@/routes/retirement";
@@ -353,8 +354,85 @@ function newSmithTranche(): SmithTranche {
     commingled: false,
     disposition: null,
     s201Deemed: 0,
+    holdingId: null,
+    distributions: [],
     documents: "",
   };
+}
+
+type Distribution = { date: string; amount: number; destination: "mortgage" | "reinvested" | "personal" };
+
+function DistributionEditor({
+  distributions,
+  onChange,
+}: {
+  distributions: Distribution[];
+  onChange: (d: Distribution[]) => void;
+}) {
+  const [amount, setAmount] = useState(0);
+  const [dest, setDest] = useState<Distribution["destination"]>("mortgage");
+  const total = distributions.reduce((s, d) => s + Math.max(0, d.amount), 0);
+  return (
+    <div className="space-y-2 rounded-lg border p-2">
+      {distributions.length > 0 ? (
+        <ul className="space-y-1 text-xs">
+          {distributions.map((d, i) => (
+            <li key={i} className="flex items-center justify-between gap-2">
+              <span>
+                {d.date} — {formatCad(d.amount)}{" "}
+                <span className="text-muted-foreground">
+                  ({d.destination === "mortgage" ? "to mortgage" : d.destination})
+                </span>
+              </span>
+              <button
+                type="button"
+                className="underline text-muted-foreground"
+                onClick={() => onChange(distributions.filter((_, j) => j !== i))}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">None recorded yet.</p>
+      )}
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label className="text-[11px]">Amount ($)</Label>
+          <NumInput value={amount} onCommit={(n) => setAmount(Math.max(0, n))} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px]">Went to</Label>
+          <Select value={dest} onValueChange={(v) => setDest(v as Distribution["destination"])}>
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="mortgage">Mortgage paydown</SelectItem>
+              <SelectItem value="reinvested">Reinvested</SelectItem>
+              <SelectItem value="personal">Spent personally</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            if (amount <= 0) return;
+            onChange([
+              ...distributions,
+              { date: new Date().toISOString().slice(0, 10), amount, destination: dest },
+            ]);
+            setAmount(0);
+          }}
+        >
+          Add
+        </Button>
+      </div>
+      {total > 0 ? (
+        <p className="text-xs text-muted-foreground">Total: {formatCad(total)}</p>
+      ) : null}
+    </div>
+  );
 }
 
 export function SmithTrackerCard({
@@ -402,6 +480,24 @@ export function SmithTrackerCard({
             <div key={t.id} className="rounded-lg border p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-medium">
+                  {a ? (
+                    <span
+                      className={`mr-2 inline-block h-2.5 w-2.5 rounded-full align-middle ${
+                        a.health === "good"
+                          ? "bg-emerald-600"
+                          : a.health === "warning"
+                            ? "bg-amber-500"
+                            : "bg-red-600"
+                      }`}
+                      title={
+                        a.health === "good"
+                          ? "Clean — interest deductible, no tracing issues"
+                          : a.health === "warning"
+                            ? "Deductible but has tracing risks — review warnings"
+                            : "Not deductible — interest cannot be claimed"
+                      }
+                    />
+                  ) : null}
                   {t.facility || "Tranche"} — {formatCad(t.principal)}
                   {a ? (
                     <span className={`ml-2 text-xs font-normal ${a.deductible ? "text-emerald-700" : "text-red-700"}`}>
@@ -447,6 +543,26 @@ export function SmithTrackerCard({
                     <Label className="text-[11px]">Where the money went</Label>
                     <Input value={t.useOfFunds} onChange={(e) => update(t.id, { useOfFunds: e.target.value })} placeholder="e.g. Non-registered brokerage — XIU" />
                   </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-[11px]">Linked investment holding</Label>
+                    <Select
+                      value={t.holdingId || "none"}
+                      onValueChange={(v) => update(t.id, { holdingId: v === "none" ? null : v })}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Not linked" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Not linked</SelectItem>
+                        {(profile.asset_holdings ?? []).map((h) => (
+                          <SelectItem key={h.id} value={h.id}>
+                            {h.name || "Holding"} — {formatCad(h.value)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Link the holding this draw bought to track how the borrowed money is doing.
+                    </p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Switch checked={t.eligible} onCheckedChange={(v) => update(t.id, { eligible: v })} />
                     <Label className="text-[11px]">Income-earning use (eligible)</Label>
@@ -481,6 +597,13 @@ export function SmithTrackerCard({
                   <div className="space-y-1">
                     <Label className="text-[11px]">Source documents</Label>
                     <Input value={t.documents} onChange={(e) => update(t.id, { documents: e.target.value })} placeholder="e.g. HELOC stmt; trade confirm" />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-[11px]">Distributions received</Label>
+                    <DistributionEditor
+                      distributions={t.distributions ?? []}
+                      onChange={(dists) => update(t.id, { distributions: dists })}
+                    />
                   </div>
                 </div>
               ) : null}
@@ -519,6 +642,9 @@ export function SmithTrackerCard({
             </ul>
           ) : null}
           <p className="text-xs text-muted-foreground">{result.disclaimer}</p>
+          <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs font-medium text-amber-900">
+            {CRA_FILING_DISCLAIMER}
+          </p>
         </div>
       ) : null}
     </div>

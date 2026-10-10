@@ -31,6 +31,14 @@ export interface SmithTrancheInput {
   } | null;
   s201Deemed: number;
   documents: string;
+  /** AssetHoldingInput id this tranche's money bought (null = not linked). */
+  holdingId?: string | null;
+  /** Distributions the investments paid out (amount/date/destination). */
+  distributions?: Array<{
+    date: string;
+    amount: number;
+    destination: "mortgage" | "reinvested" | "personal";
+  }>;
 }
 
 export interface TrancheAssessment {
@@ -42,13 +50,24 @@ export interface TrancheAssessment {
   deductible: boolean;
   /** Deductible interest YTD for T1 line 22100. */
   deductibleInterestYtd: number;
+  /** Tracing health: good (clean), warning (risks flagged), bad (not deductible). */
+  health: "good" | "warning" | "bad";
   /** Tracing-risk warnings for this tranche. */
   warnings: string[];
+}
+
+export interface DistributionBreakdown {
+  mortgage: number;
+  reinvested: number;
+  personal: number;
+  total: number;
 }
 
 export interface SmithLedgerResult {
   tranches: TrancheAssessment[];
   totalDeductibleInterestYtd: number;
+  /** Distributions received YTD across all tranches, by destination. */
+  distributions: DistributionBreakdown;
   warnings: string[];
   disclaimer: string;
 }
@@ -58,6 +77,12 @@ export const SMITH_DISCLAIMER =
   "2026-10-09. For information and record-keeping only — not tax advice. " +
   "The onus to trace borrowed funds is on the taxpayer; keep source documents " +
   "and consider consulting a qualified tax professional.";
+
+export const CRA_FILING_DISCLAIMER =
+  "Apis Financial is an information and record-keeping tool only. We are not " +
+  "liable for any errors, omissions, interest, or penalties arising from your " +
+  "CRA filings. Verify every figure against your own records and consider " +
+  "consulting a qualified tax professional before filing.";
 
 const REGISTERED_RE = /\b(tfsa|rrsp|resp|rdsp|fhsa|dpsp)\b/i;
 const NO_DIVIDEND_RE = /no\s*dividend|will not pay|does not pay/i;
@@ -142,21 +167,32 @@ export function assessSmithLedger(tranches: SmithTrancheInput[]): SmithLedgerRes
       );
     }
 
+    const isDeductible = deductible && outstanding > 0;
     assessments.push({
       trancheId: t.id,
       facility: t.facility,
       outstanding,
-      deductible: deductible && outstanding > 0,
+      deductible: isDeductible,
       deductibleInterestYtd: deductible ? Math.max(0, t.interestPaidYtd) : 0,
+      health: !isDeductible ? "bad" : warnings.length > 0 ? "warning" : "good",
       warnings,
     });
   }
 
   const totalDeductibleInterestYtd = assessments.reduce((s, a) => s + a.deductibleInterestYtd, 0);
 
+  const distributions: DistributionBreakdown = { mortgage: 0, reinvested: 0, personal: 0, total: 0 };
+  for (const t of tranches) {
+    for (const d of t.distributions ?? []) {
+      const amt = Math.max(0, d.amount);
+      distributions[d.destination] += amt;
+      distributions.total += amt;
+    }
+  }
+
   if (tranches.length === 0) {
     ledgerWarnings.push("No tranches recorded yet.");
   }
 
-  return { tranches: assessments, totalDeductibleInterestYtd, warnings: ledgerWarnings, disclaimer: SMITH_DISCLAIMER };
+  return { tranches: assessments, totalDeductibleInterestYtd, distributions, warnings: ledgerWarnings, disclaimer: SMITH_DISCLAIMER };
 }

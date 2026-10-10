@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeProperty, rollupProperties, type PropertyInputs } from "./RealEstate";
+import { analyzeProperty, monthsSince, isValueStale, rollupProperties, type PropertyInputs } from "./RealEstate";
 
 const base: PropertyInputs = {
   name: "Test condo",
@@ -70,5 +70,37 @@ describe("rollupProperties", () => {
     const roll = rollupProperties([]);
     expect(roll.totalEquity).toBe(0);
     expect(roll.properties.length).toBe(0);
+  });
+});
+
+describe("expense ratio and capex reserve", () => {
+  it("reports operating expenses as a % of effective income", () => {
+    const r = analyzeProperty({ ...base, monthlyRent: 2000, vacancyPct: 5 });
+    const expected = (r.operatingExpenses / r.effectiveIncome) * 100;
+    expect(r.expenseRatioPct).toBeCloseTo(expected, 6);
+    expect(r.expenseRatioPct).toBeGreaterThan(0);
+  });
+  it("guards the expense ratio when income is zero", () => {
+    const r = analyzeProperty({ ...base, monthlyRent: 0, otherIncome: 0 });
+    expect(r.expenseRatioPct).toBe(0);
+  });
+  it("subtracts the capex reserve from cash flow", () => {
+    const r = analyzeProperty({ ...base, capexReserveAnnual: 3600 });
+    expect(r.capexReserveAnnual).toBe(3600);
+    const plain = analyzeProperty({ ...base });
+    expect(r.cashFlowAnnual).toBe(plain.cashFlowAnnual - 3600);
+  });
+});
+
+describe("monthsSince / isValueStale", () => {
+  it("counts whole months between dates", () => {
+    expect(monthsSince("2026-01-15", "2026-10-10")).toBe(9);
+    expect(monthsSince("2026-10-01", "2026-10-10")).toBe(0);
+    expect(monthsSince(null, "2026-10-10")).toBe(null);
+  });
+  it("flags values older than 6 months or never stamped", () => {
+    expect(isValueStale("2026-01-01", "2026-10-10")).toBe(true);
+    expect(isValueStale(null, "2026-10-10")).toBe(true);
+    expect(isValueStale("2026-08-01", "2026-10-10")).toBe(false);
   });
 });

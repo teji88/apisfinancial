@@ -62,6 +62,8 @@ export type DebtInput = {
   payment: number;
   /** Whether interest is tax-deductible (e.g. investment loan). */
   deductible: boolean;
+  /** Date-stamped rate changes (for variable-rate facilities like HELOCs). */
+  rateHistory?: Array<{ date: string; rate: number }>;
 };
 
 /** Illiquid property values for net worth; liquid assets come from balances. */
@@ -110,6 +112,14 @@ export type SmithTranche = {
   } | null;
   /** s.20.1 deemed eligible balance after a loss disposition. */
   s201Deemed: number;
+  /** AssetHoldingInput id this tranche's money bought (null = not linked). */
+  holdingId: string | null;
+  /** Distributions the investments paid out: amount, date, and where it went. */
+  distributions: Array<{
+    date: string;
+    amount: number;
+    destination: "mortgage" | "reinvested" | "personal";
+  }>;
   /** Source-document pointers (free text). */
   documents: string;
 };
@@ -120,6 +130,10 @@ export type PropertyInput = {
   name: string;
   /** Current estimated value ($). */
   currentValue: number;
+  /** Date the value estimate was last updated (YYYY-MM-DD, null = never). */
+  valueUpdated: string | null;
+  /** Big-ticket reserve: roof, furnace, appliances ($/yr). */
+  capexReserveAnnual: number;
   /** DebtInput id of the mortgage, or "" if free-and-clear / manual. */
   mortgageId: string;
   /** Manual mortgage balance ($) when not linked. */
@@ -142,6 +156,14 @@ export type PropertyInput = {
     utilities: number; // $/yr landlord-paid
     other: number; // $/yr
   };
+};
+
+/** Smith tab settings. */
+export type SmithSettingsInput = {
+  /** Deductible interest claimed in prior years ($). */
+  priorInterestClaimed: number;
+  /** DebtInput id of the HELOC used for draws. */
+  helocDebtId: string;
 };
 
 export type Profile = {
@@ -212,10 +234,12 @@ export type Profile = {
   smith_tranches: SmithTranche[] | null;
   /** Investment properties (JSONB, null = none entered). */
   properties: PropertyInput[] | null;
+  /** Smith tab settings (JSONB, null = defaults). */
+  smith_settings: SmithSettingsInput | null;
 };
 
 const COLUMNS =
-  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg, db_pension, asset_holdings, employer_match, debts, net_worth, smith_tranches, properties";
+  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg, db_pension, asset_holdings, employer_match, debts, net_worth, smith_tranches, properties, smith_settings";
 
 function toNumbers(row: Record<string, unknown>): Profile {
   const num = (v: unknown, fallback = 0) => (v == null ? fallback : Number(v));
@@ -260,6 +284,7 @@ function toNumbers(row: Record<string, unknown>): Profile {
     net_worth: (row["net_worth"] as NetWorthInput | null) ?? null,
     smith_tranches: (row["smith_tranches"] as SmithTranche[] | null) ?? null,
     properties: (row["properties"] as PropertyInput[] | null) ?? null,
+    smith_settings: (row["smith_settings"] as SmithSettingsInput | null) ?? null,
   };
 }
 

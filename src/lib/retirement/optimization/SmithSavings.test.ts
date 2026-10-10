@@ -71,3 +71,28 @@ describe("computeSmithSavings", () => {
     expect(r.disclaimer.toLowerCase()).toContain("not tax advice");
   });
 });
+
+describe("what-if scenarios", () => {
+  const baseInputs = {
+    mortgageBalance: 300_000,
+    mortgageRate: 0.05,
+    mortgagePayment: 1800,
+    helocRate: 0.07,
+    marginalRate: 0.4,
+    interestPaidYtd: 1000,
+    interestClaimedPrior: 0,
+    deductibleOutstanding: 50_000,
+  };
+  it("stop-redrawing projects flat deductible balance", () => {
+    const stop = computeSmithSavings({ ...baseInputs, redraw: false });
+    const keep = computeSmithSavings({ ...baseInputs, redraw: true });
+    expect(stop.totalProjected).toBeLessThan(keep.totalProjected);
+    // flat: ~50k * 7% * 40% per year
+    expect(stop.yearlyProjection[0].taxSaved).toBeCloseTo(50_000 * 0.07 * 0.4, 0);
+  });
+  it("rate bump increases projected tax saved", () => {
+    const bumped = computeSmithSavings({ ...baseInputs, rateBump: 0.02 });
+    const plain = computeSmithSavings(baseInputs);
+    expect(bumped.totalProjected).toBeGreaterThan(plain.totalProjected);
+  });
+});
