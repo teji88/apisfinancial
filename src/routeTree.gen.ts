@@ -23,6 +23,8 @@ import { Route as AuthenticatedInvitesRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated/ledger'
 import { Route as AuthenticatedPerformanceRouteImport } from './routes/_authenticated/performance'
 import { Route as AuthenticatedPlanRouteImport } from './routes/_authenticated/plan'
+import { Route as AuthenticatedPropertiesRouteImport } from './routes/_authenticated/properties'
+import { Route as AuthenticatedSmithRouteImport } from './routes/_authenticated/smith'
 import { Route as ApiPublicRefreshPricesRouteImport } from './routes/api/public/refresh-prices'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 import { Route as LovableEmailAuthPreviewRouteImport } from './routes/lovable/email/auth/preview'
@@ -99,6 +101,16 @@ const AuthenticatedPlanRoute = AuthenticatedPlanRouteImport.update({
   path: '/plan',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPropertiesRoute = AuthenticatedPropertiesRouteImport.update({
+  id: '/properties',
+  path: '/properties',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSmithRoute = AuthenticatedSmithRouteImport.update({
+  id: '/smith',
+  path: '/smith',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const ApiPublicRefreshPricesRoute = ApiPublicRefreshPricesRouteImport.update({
   id: '/api/public/refresh-prices',
   path: '/api/public/refresh-prices',
@@ -141,6 +153,8 @@ export interface FileRoutesByFullPath {
   '/ledger': typeof AuthenticatedLedgerRoute
   '/performance': typeof AuthenticatedPerformanceRoute
   '/plan': typeof AuthenticatedPlanRoute
+  '/properties': typeof AuthenticatedPropertiesRoute
+  '/smith': typeof AuthenticatedSmithRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
@@ -161,6 +175,8 @@ export interface FileRoutesByTo {
   '/ledger': typeof AuthenticatedLedgerRoute
   '/performance': typeof AuthenticatedPerformanceRoute
   '/plan': typeof AuthenticatedPlanRoute
+  '/properties': typeof AuthenticatedPropertiesRoute
+  '/smith': typeof AuthenticatedSmithRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
@@ -183,6 +199,8 @@ export interface FileRoutesById {
   '/_authenticated/ledger': typeof AuthenticatedLedgerRoute
   '/_authenticated/performance': typeof AuthenticatedPerformanceRoute
   '/_authenticated/plan': typeof AuthenticatedPlanRoute
+  '/_authenticated/properties': typeof AuthenticatedPropertiesRoute
+  '/_authenticated/smith': typeof AuthenticatedSmithRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
@@ -205,6 +223,8 @@ export interface FileRouteTypes {
     | '/ledger'
     | '/performance'
     | '/plan'
+    | '/properties'
+    | '/smith'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
     | '/lovable/email/auth/preview'
@@ -225,6 +245,8 @@ export interface FileRouteTypes {
     | '/ledger'
     | '/performance'
     | '/plan'
+    | '/properties'
+    | '/smith'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
     | '/lovable/email/auth/preview'
@@ -246,6 +268,8 @@ export interface FileRouteTypes {
     | '/_authenticated/ledger'
     | '/_authenticated/performance'
     | '/_authenticated/plan'
+    | '/_authenticated/properties'
+    | '/_authenticated/smith'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
     | '/lovable/email/auth/preview'
@@ -367,6 +391,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPlanRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/properties': {
+      id: '/_authenticated/properties'
+      path: '/properties'
+      fullPath: '/properties'
+      preLoaderRoute: typeof AuthenticatedPropertiesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/smith': {
+      id: '/_authenticated/smith'
+      path: '/smith'
+      fullPath: '/smith'
+      preLoaderRoute: typeof AuthenticatedSmithRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/refresh-prices': {
       id: '/api/public/refresh-prices'
       path: '/api/public/refresh-prices'
@@ -414,6 +452,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedLedgerRoute: typeof AuthenticatedLedgerRoute
   AuthenticatedPerformanceRoute: typeof AuthenticatedPerformanceRoute
   AuthenticatedPlanRoute: typeof AuthenticatedPlanRoute
+  AuthenticatedPropertiesRoute: typeof AuthenticatedPropertiesRoute
+  AuthenticatedSmithRoute: typeof AuthenticatedSmithRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -425,6 +465,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedLedgerRoute: AuthenticatedLedgerRoute,
   AuthenticatedPerformanceRoute: AuthenticatedPerformanceRoute,
   AuthenticatedPlanRoute: AuthenticatedPlanRoute,
+  AuthenticatedPropertiesRoute: AuthenticatedPropertiesRoute,
+  AuthenticatedSmithRoute: AuthenticatedSmithRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
