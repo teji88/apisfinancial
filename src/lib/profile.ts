@@ -64,6 +64,18 @@ export type DebtInput = {
   deductible: boolean;
   /** Date-stamped rate changes (for variable-rate facilities like HELOCs). */
   rateHistory?: Array<{ date: string; rate: number }>;
+  /** Payment frequency for amortizing debts (mortgages). */
+  paymentFrequency?: "weekly" | "biweekly" | "monthly";
+  /** DebtInput id of the paired facility (HELOC <-> readvanceable mortgage). */
+  linkedDebtId?: string;
+  /** Snapshots of prior terms when refinanced (date, balance, rate, payment, property value). */
+  termHistory?: Array<{
+    date: string;
+    balance: number;
+    rate: number;
+    payment: number;
+    propertyValue: number;
+  }>;
 };
 
 /** Illiquid property values for net worth; liquid assets come from balances. */
@@ -164,6 +176,16 @@ export type SmithSettingsInput = {
   priorInterestClaimed: number;
   /** DebtInput id of the HELOC used for draws. */
   helocDebtId: string;
+  /** DebtInput id of the readvanceable mortgage paired with the HELOC. */
+  mortgageDebtId: string;
+  /** Date the Smith Manoeuvre started (YYYY-MM-DD) — room accrues from here. */
+  startDate: string | null;
+  /** Mortgage balance on the start date ($) — baseline for room calculation. */
+  startMortgageBalance: number;
+  /** BoC policy rate last seen (decimal), for change nudges. */
+  bocRateLastSeen: number | null;
+  /** Date the BoC rate was last checked (YYYY-MM-DD). */
+  bocCheckedDate: string | null;
 };
 
 export type Profile = {
