@@ -21,6 +21,7 @@ import { calculateCppBenefit } from "../benefits/CppCalculator";
 import { createDefaultRetirementScenario } from "../scenario/defaults";
 import type {
   AccountScenario,
+  DbPension,
   PersonRole,
   RetirementScenario,
   SimulationResult,
@@ -95,6 +96,8 @@ export type PlannerInputs = {
   /** Percent of eligible pension income to split with spouse (0-50). */
   pensionSplitPercent?: number;
   withdrawalPolicy?: WithdrawalPolicy;
+  /** Defined-benefit pensions (flows into SimulationCoordinator). */
+  dbPensions?: DbPension[];
   self: PersonSpec;
   spouse: PersonSpec | null;
 };
@@ -209,6 +212,11 @@ export function plannerInputsToScenario(
   }
   if (input.quick) {
     scenario.quick = true;
+  }
+
+  // Defined-benefit pensions flow straight into the simulation.
+  if (input.dbPensions && input.dbPensions.length > 0) {
+    scenario.dbPensions = input.dbPensions;
   }
 
   // Province
