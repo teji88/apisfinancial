@@ -21,6 +21,7 @@ import {
 import {
   analyzeProperty,
   rollupProperties,
+  isValueStale,
 } from "@/lib/retirement/optimization/RealEstate";
 
 export const Route = createFileRoute("/_authenticated/properties")({
@@ -43,6 +44,8 @@ function newProperty(): PropertyInput {
     id: `p-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
     name: "",
     currentValue: 0,
+    valueUpdated: null,
+    capexReserveAnnual: 0,
     mortgageId: "",
     mortgageBalance: 0,
     mortgagePayment: 0,
@@ -96,6 +99,7 @@ function PropertiesPage() {
             vacancyPct: x.vacancyPct,
             expenses: x.expenses,
             cashInvested: x.cashInvested,
+            capexReserveAnnual: x.capexReserveAnnual ?? 0,
           };
         }),
       ),
@@ -121,6 +125,25 @@ function PropertiesPage() {
       </div>
 
       {/* Portfolio rollup */}
+      {properties.length === 0 ? (
+        <div className="rounded-xl border p-6 space-y-4">
+          <h2 className="text-lg font-semibold">How the properties tracker works</h2>
+          <ol className="space-y-3 text-sm">
+            <li className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-800">1</span>
+              <span><strong>Add your first property</strong> below — name, value, rent.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-800">2</span>
+              <span><strong>Fill in expenses and mortgage</strong> — link the mortgage to your debts list or enter it manually, and set a big-ticket reserve.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-800">3</span>
+              <span><strong>Read the numbers</strong> — monthly cash flow, cap rate, cash-on-cash, expense ratio, and equity feeding your net worth.</span>
+            </li>
+          </ol>
+        </div>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border p-4">
           <div className="text-xs text-muted-foreground">Cash flow / month</div>
@@ -156,6 +179,7 @@ function PropertiesPage() {
             vacancyPct: prop.vacancyPct,
             expenses: prop.expenses,
             cashInvested: prop.cashInvested,
+            capexReserveAnnual: prop.capexReserveAnnual ?? 0,
           });
           const isOpen = expanded === prop.id;
           return (
@@ -199,10 +223,19 @@ function PropertiesPage() {
                   <dd className="font-medium">{formatCad(r.equity)}</dd>
                 </div>
                 <div className="rounded-lg border p-2">
+                  <dt className="text-[11px] text-muted-foreground">Expense ratio</dt>
+                  <dd className="font-medium">{r.expenseRatioPct.toFixed(1)}%</dd>
+                </div>
+                <div className="rounded-lg border p-2">
                   <dt className="text-[11px] text-muted-foreground">NOI / yr</dt>
                   <dd className="font-medium">{formatCad(r.noi)}</dd>
                 </div>
               </dl>
+              {isValueStale(prop.valueUpdated ?? null, new Date().toISOString().slice(0, 10)) ? (
+                <p className="text-xs text-amber-800">
+                  ⚠ Value estimate {prop.valueUpdated ? `from ${prop.valueUpdated}` : "never recorded"} — cap rate and equity are only as good as this number. Update it when you review the property.
+                </p>
+              ) : null}
 
               {isOpen ? (
                 <PropertyEditor
@@ -260,7 +293,18 @@ function PropertyEditor({
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Current value ($)</Label>
-          <NumInput value={prop.currentValue} onCommit={(n) => onChange({ currentValue: Math.max(0, n) })} />
+          <NumInput
+            value={prop.currentValue}
+            onCommit={(n) =>
+              onChange({
+                currentValue: Math.max(0, n),
+                valueUpdated: new Date().toISOString().slice(0, 10),
+              })
+            }
+          />
+          {prop.valueUpdated ? (
+            <p className="text-[11px] text-muted-foreground">Updated {prop.valueUpdated}</p>
+          ) : null}
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Monthly rent ($)</Label>
@@ -344,6 +388,14 @@ function PropertyEditor({
             <Label className="text-xs">Other ($/yr)</Label>
             <NumInput value={prop.expenses.other} onCommit={(n) => setExp("other", n)} />
           </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Big-ticket reserve ($/yr)</Label>
+            <NumInput
+              value={prop.capexReserveAnnual ?? 0}
+              onCommit={(n) => onChange({ capexReserveAnnual: Math.max(0, n) })}
+            />
+            <p className="text-[11px] text-muted-foreground">Roof, furnace, appliances — amortized</p>
+          </div>
         </div>
       </div>
 
@@ -368,12 +420,77 @@ function PropertyEditor({
             <dt className="text-muted-foreground">− Mortgage</dt>
             <dd>({formatCad(result.annualMortgage)})</dd>
           </div>
+          {result.capexReserveAnnual > 0 ? (
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">− Big-ticket reserve</dt>
+              <dd>({formatCad(result.capexReserveAnnual)})</dd>
+            </div>
+          ) : null}
           <div className={`flex justify-between border-t pt-1 font-bold ${result.cashFlowAnnual >= 0 ? "text-emerald-700" : "text-red-700"}`}>
             <dt>Cash flow / yr</dt>
             <dd>{formatCad(result.cashFlowAnnual)}</dd>
           </div>
         </dl>
       </div>
+      <KeepOrSellLens prop={prop} result={result} />
+    </div>
+  );
+}
+
+function KeepOrSellLens({
+  prop,
+  result,
+}: {
+  prop: PropertyInput;
+  result: ReturnType<typeof analyzeProperty>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [assumedPct, setAssumedPct] = useState(6);
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="text-xs underline text-muted-foreground"
+        onClick={() => setOpen(true)}
+      >
+        Should I keep it?
+      </button>
+    );
+  }
+  const assumed = Math.max(0, assumedPct) / 100;
+  const altAnnual = result.equity * assumed;
+  const diff = result.cashFlowAnnual - altAnnual;
+  return (
+    <div className="rounded-lg border p-3 space-y-2 text-sm">
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium">Should I keep it? <span className="font-normal text-muted-foreground">(informational only)</span></h4>
+        <button type="button" className="text-xs underline text-muted-foreground" onClick={() => setOpen(false)}>
+          Hide
+        </button>
+      </div>
+      <div className="flex items-center gap-2">
+        <Label className="text-xs">If sold and invested at (%)</Label>
+        <NumInput value={assumedPct} onCommit={(n) => setAssumedPct(Math.max(0, n))} />
+      </div>
+      <dl className="space-y-1">
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">Equity as cash flow / yr</dt>
+          <dd>{formatCad(result.cashFlowAnnual)}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-muted-foreground">Equity invested at {assumedPct}% / yr</dt>
+          <dd>{formatCad(altAnnual)}</dd>
+        </div>
+        <div className={`flex justify-between border-t pt-1 font-medium ${diff >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+          <dt>Difference</dt>
+          <dd>{diff >= 0 ? "+" : ""}{formatCad(diff)}</dd>
+        </div>
+      </dl>
+      <p className="text-[11px] text-muted-foreground">
+        Compares this year's cash flow against what {formatCad(result.equity)} of equity could earn
+        invested at {assumedPct}%. Ignores taxes, selling costs, appreciation, and effort — not advice,
+        just a lens.
+      </p>
     </div>
   );
 }
