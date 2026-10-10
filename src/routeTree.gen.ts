@@ -17,6 +17,7 @@ import { Route as RetirementRouteImport } from './routes/retirement'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedDebtsRouteImport } from './routes/_authenticated/debts'
 import { Route as AuthenticatedDividendsRouteImport } from './routes/_authenticated/dividends'
 import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
 import { Route as AuthenticatedInvitesRouteImport } from './routes/_authenticated/invites'
@@ -68,6 +69,11 @@ const AuthenticatedAccountsRoute = AuthenticatedAccountsRouteImport.update({
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDebtsRoute = AuthenticatedDebtsRouteImport.update({
+  id: '/debts',
+  path: '/debts',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDividendsRoute = AuthenticatedDividendsRouteImport.update({
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/debts': typeof AuthenticatedDebtsRoute
   '/dividends': typeof AuthenticatedDividendsRoute
   '/import': typeof AuthenticatedImportRoute
   '/invites': typeof AuthenticatedInvitesRoute
@@ -169,6 +176,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/debts': typeof AuthenticatedDebtsRoute
   '/dividends': typeof AuthenticatedDividendsRoute
   '/import': typeof AuthenticatedImportRoute
   '/invites': typeof AuthenticatedInvitesRoute
@@ -193,6 +201,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/accounts': typeof AuthenticatedAccountsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/debts': typeof AuthenticatedDebtsRoute
   '/_authenticated/dividends': typeof AuthenticatedDividendsRoute
   '/_authenticated/import': typeof AuthenticatedImportRoute
   '/_authenticated/invites': typeof AuthenticatedInvitesRoute
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/accounts'
     | '/dashboard'
+    | '/debts'
     | '/dividends'
     | '/import'
     | '/invites'
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/accounts'
     | '/dashboard'
+    | '/debts'
     | '/dividends'
     | '/import'
     | '/invites'
@@ -262,6 +273,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/_authenticated/accounts'
     | '/_authenticated/dashboard'
+    | '/_authenticated/debts'
     | '/_authenticated/dividends'
     | '/_authenticated/import'
     | '/_authenticated/invites'
@@ -347,6 +359,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/debts': {
+      id: '/_authenticated/debts'
+      path: '/debts'
+      fullPath: '/debts'
+      preLoaderRoute: typeof AuthenticatedDebtsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dividends': {
@@ -446,6 +465,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDebtsRoute: typeof AuthenticatedDebtsRoute
   AuthenticatedDividendsRoute: typeof AuthenticatedDividendsRoute
   AuthenticatedImportRoute: typeof AuthenticatedImportRoute
   AuthenticatedInvitesRoute: typeof AuthenticatedInvitesRoute
@@ -459,6 +479,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccountsRoute: AuthenticatedAccountsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDebtsRoute: AuthenticatedDebtsRoute,
   AuthenticatedDividendsRoute: AuthenticatedDividendsRoute,
   AuthenticatedImportRoute: AuthenticatedImportRoute,
   AuthenticatedInvitesRoute: AuthenticatedInvitesRoute,
