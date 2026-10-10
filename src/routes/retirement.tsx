@@ -97,7 +97,6 @@ import {
   type SmithLedgerResult,
 } from "@/lib/retirement/optimization/SmithTracker";
 import {
-  DebtsForm,
   NetWorthCard,
   DebtComparatorCard,
   SmithSummaryCard,
@@ -1449,7 +1448,14 @@ function RetirementPage() {
               <NumInput value={p.income ?? 0} onCommit={(n) => set({ income: n })} />
             </Field>
             <DbPensionForm value={p.db_pension ?? null} onChange={(v) => set({ db_pension: v })} />
-            <DebtsForm value={p.debts ?? null} onChange={(v) => set({ debts: v })} />
+            <div className="sm:col-span-2 rounded-xl border p-4">
+              <p className="text-sm">
+                Manage debts on the <Link to="/debts" className="underline font-medium">Debts tab</Link>
+                {p.debts && p.debts.length > 0 ? (
+                  <span className="text-muted-foreground"> — {p.debts.length} debt{p.debts.length === 1 ? "" : "s"} tracked</span>
+                ) : null}.
+              </p>
+            </div>
             <div className="sm:col-span-2">
               {(p.cpp_detailed_history?.length ?? 0) > 0 && (
                 <p className="text-xs text-emerald-700 mb-2">
