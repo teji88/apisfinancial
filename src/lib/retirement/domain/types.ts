@@ -26,6 +26,47 @@ export interface DebtScenario {
   deductibleInterestPercent?: number;
 }
 
+/**
+ * Defined-benefit pension. Modeled as a first-class income stream (not flat
+ * "other income"): start-age adjustments, post-commencement indexation,
+ * bridge benefit, and survivor continuation.
+ *
+ * Monetary amounts are in today's dollars; the engine converts to nominal.
+ */
+export interface DbPension {
+  id: string;
+  owner: PersonRole;
+  name?: string;
+  /** Monthly pension at the normal retirement age, today's dollars. */
+  monthlyAmountAtNRA: Money;
+  normalRetirementAge: number;
+  /** Chosen commencement age. */
+  startAge: number;
+  /** Reduction per year commenced before NRA (e.g. 0.03). Default 0. */
+  earlyReductionPerYear?: number;
+  /** Increase per year commenced after NRA. Default 0. */
+  lateIncreasePerYear?: number;
+  /**
+   * Explicit start-age table (monthly amounts, today's dollars), keyed by
+   * commencement age. Overrides the early/late formula when provided.
+   */
+  startAgeTable?: Record<number, Money>;
+  /** Indexation applied after commencement. */
+  indexing: "none" | "full" | "partial";
+  /** For "partial": fraction of CPI applied (0-1). */
+  indexingFraction?: number;
+  /** Bridge benefit: monthly amount (today's dollars), not indexed. */
+  bridgeMonthly?: Money;
+  /** Bridge paid while age < bridgeEndAge (typically 65). */
+  bridgeEndAge?: number;
+  /**
+   * Survivor benefit as % of the member's pension at death (0-100).
+   * Bridge is excluded; indexation continues per the plan rule.
+   * Pre-commencement death is not modeled (returns 0).
+   */
+  survivorPercent?: number;
+}
+
 export interface PersonScenario {
   role: PersonRole;
   birthYear: number;
@@ -111,6 +152,7 @@ export interface RetirementScenario {
   goals: RetirementGoals;
   accounts: AccountScenario[];
   debts?: DebtScenario[];
+  dbPensions?: DbPension[];
   assumptions: ScenarioAssumptions;
   strategy: StrategyPreferences;
   /** Quick mode: simplified withdrawal (no tax optimization), for fast estimates. */

@@ -26,8 +26,38 @@ describe("BenefitEngine", () => {
   it("applies OAS residence and deferral factors", () => {
     const full65 = estimateGovernmentBenefits(person, 65, 0, { inflationRate: 0, calendarYear: 2026 }).oas;
     const partial70 = estimateGovernmentBenefits({ ...person, oasStartAge: 70, oasResidenceYears: 20 }, 70, 0, { inflationRate: 0, calendarYear: 2026 }).oas;
-    expect(full65).toBeCloseTo(751.97 * 12, 6);
-    expect(partial70).toBeCloseTo(751.97 * 12 * 0.5 * 1.36, 6);
+    expect(full65).toBeCloseTo(762.50 * 12, 6);
+    expect(partial70).toBeCloseTo(762.50 * 12 * 0.5 * 1.36, 6);
+  });
+
+  it("s.7.1(3): recalculated fraction beats frozen-plus-boost for low fractions", () => {
+    // 10/40 deferring one year: (b) frozen-plus-boost = 0.25 × 1.072 = 0.268
+    // vs (c) fresh fraction = 11/40 = 0.275 — (c) wins.
+    const oas = estimateGovernmentBenefits(
+      { ...person, oasResidenceYears: 10, oasStartAge: 66 }, 66, 0,
+      { inflationRate: 0, calendarYear: 2026 },
+    ).oas;
+    expect(oas).toBeCloseTo(762.50 * 12 * 0.275, 6);
+  });
+
+  it("s.7.1(3): frozen-plus-boost wins for high fractions and is not capped at the full pension", () => {
+    // 30/40 deferring to 70: (b) = 0.75 × 1.36 = 1.02 vs (c) = 35/40 = 0.875.
+    // (b) wins and legally exceeds 100% of the base full pension.
+    const oas = estimateGovernmentBenefits(
+      { ...person, oasResidenceYears: 30, oasStartAge: 70 }, 70, 0,
+      { inflationRate: 0, calendarYear: 2026 },
+    ).oas;
+    expect(oas).toBeCloseTo(762.50 * 12 * 1.02, 6);
+    expect(oas).toBeGreaterThan(762.50 * 12);
+  });
+
+  it("floors partial OAS residence to whole years (OAS Act s.3(4))", () => {
+    // 20.9 years → only 20 completed years count; 9.9 years → 9, below the
+    // 10-year minimum, so no OAS at all.
+    const partial = estimateGovernmentBenefits({ ...person, oasResidenceYears: 20.9 }, 65, 0, { inflationRate: 0, calendarYear: 2026 }).oas;
+    expect(partial).toBeCloseTo(762.50 * 12 * 0.5, 6);
+    const ineligible = estimateGovernmentBenefits({ ...person, oasResidenceYears: 9.9 }, 65, 0, { inflationRate: 0, calendarYear: 2026 }).oas;
+    expect(ineligible).toBe(0);
   });
 
   it("excludes OAS and applies the GIS employment earnings exemption", () => {

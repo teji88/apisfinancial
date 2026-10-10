@@ -216,8 +216,11 @@ export function plannerInputsToScenario(
 
   // People - convert old PersonSpec to new format
   const toPerson = (spec: PersonSpec, role: "MAIN_USER" | "PARTNER") => {
-    // Birth year from age
-    const birthYear = currentYear - spec.age;
+    // Prefer an explicit birth year when the caller knows it; otherwise estimate
+    // from the integer age with a mid-year convention (birthMonth 6). With only
+    // an integer age the true birthdate is uncertain by up to a year either way;
+    // mid-year minimizes the average error. (UI still collects age only.)
+    const birthYear = spec.birthYear ?? currentYear - spec.age;
     // Monthly CPP at 65 from annual
     const cppMonthly = spec.cppAt65 / 12;
     const person: RetirementScenario["household"]["people"][number] = {
@@ -620,7 +623,7 @@ export function cppFromDetailedHistory(
     childRearingYears,
     cppStartAge: 65,
   });
-  return result.cppAt65Monthly;
+  return result.cppBaseMonthly;
 }
 
 /**
@@ -652,27 +655,35 @@ export function cppPrbInfo(
 
 /**
  * OAS fraction based on years of Canadian residence (40 years = full).
+ * OAS Act s.3(4): only completed whole years count — a fraction is nothing.
  */
 export function oasFractionFromResidence(years: number): number {
-  return Math.min(1, Math.max(0, years / 40));
+  return Math.min(1, Math.max(0, Math.floor(Math.max(0, years)) / 40));
 }
 
 /**
- * Calculate OAS annual amount.
+ * Calculate OAS annual amount at the chosen start age.
+ * Deferral bonus mirrors BenefitEngine: 0.6% per month after 65, capped at +36% (age 70).
+ * Applies OAS Act s.7.1(3)'s "greatest of": frozen fraction × deferral boost
+ * vs. fresh fraction at approval (residence earned while deferring counts,
+ * without the boost). Needs 10 completed years at approval (s.3).
  */
 export function oasAt(
-  age: number,
+  startAge: number,
   residenceYears: number,
-  deferTo70: boolean = false,
 ): number {
-  // 2026 OAS max: $751.97/mo ($9,023.64/yr) for 65-74
-  const baseAnnual = 751.97 * 12;
-  const fraction = oasFractionFromResidence(residenceYears);
-  let amount = baseAnnual * fraction;
-  if (deferTo70 && age >= 70) {
-    amount *= 1.36; // 0.6% per month for 60 months
-  }
-  return amount;
+  // Oct-Dec 2026 OAS max: $762.50/mo ($9,150/yr) for 65-74
+  const baseAnnual = 762.50 * 12;
+  const frozenFraction = oasFractionFromResidence(residenceYears);
+  const deferralYears = Math.max(0, startAge - 65);
+  const deferralMonths = Math.min(60, Math.floor(deferralYears * 12));
+  const deferralFactor = 1 + deferralMonths * 0.006;
+  const freshYears = Math.min(
+    40,
+    Math.floor(Math.max(0, residenceYears)) + Math.floor(deferralYears),
+  );
+  if (freshYears < 10) return 0;
+  return baseAnnual * Math.max(frozenFraction * deferralFactor, freshYears / 40);
 }
 
 /**

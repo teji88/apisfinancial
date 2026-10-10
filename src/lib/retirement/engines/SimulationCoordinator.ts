@@ -1,6 +1,7 @@
 import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole, PersonScenario } from "../domain/types";
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
+import { dbPensionMonthlyAt, dbSurvivorMonthlyAt } from "./DbPensionEngine";
 import { calculateBasicTax, calculateHouseholdTax, type TaxIncomeComponents } from "./TaxEngine";
 import { planWithdrawalSequence } from "./WithdrawalEngine";
 import { CANADA_2026_PARAMETERS } from "../rules/canada2026";
@@ -168,7 +169,9 @@ export function runRetirementSimulation(
   }
   const start = new Date(Date.UTC(startYear, 0, 1));
   const people = scenario.household.people;
-  const planningEndYear = Math.min(...people.map((p) => p.birthYear + scenario.goals.planningAge));
+  // Household horizon: run until the LAST person reaches their planning age so the
+  // longer-lived spouse's years are never truncated (Math.max, not Math.min).
+  const planningEndYear = Math.max(...people.map((p) => p.birthYear + scenario.goals.planningAge));
   const months = Math.max(1, 12 * Math.max(1, planningEndYear - startYear + 1));
   const debtStates: Array<{ state: DebtState; startDate?: string; endDate?: string }> = (scenario.debts ?? []).map((debt) => ({ state: createDebtState(debt), startDate: debt.startDate, endDate: debt.endDate }));
   const accounts = scenario.accounts.length
@@ -407,6 +410,25 @@ export function runRetirementSimulation(
       const monthlyOtherIncome = (person.otherIncome ?? 0) / 12;
       otherIncome += monthlyOtherIncome;
       monthlyTaxInputs[person.role].pension = (monthlyTaxInputs[person.role].pension ?? 0) + monthlyOtherIncome;
+      // Defined-benefit pensions: first-class income stream, taxed as pension
+      // income and eligible for pension splitting (the TaxEngine gates the
+      // split itself; pre-65 DB splitting is a known gap).
+      for (const db of scenario.dbPensions ?? []) {
+        if (db.owner !== person.role) continue;
+        const monthlyDb = dbPensionMonthlyAt(
+          db,
+          ages[person.role] ?? 0,
+          date.getUTCFullYear(),
+          scenario.assumptions.inflationRate,
+          person.birthYear,
+        );
+        if (monthlyDb <= 0) continue;
+        otherIncome += monthlyDb;
+        monthlyTaxInputs[person.role].pension =
+          (monthlyTaxInputs[person.role].pension ?? 0) + monthlyDb;
+        monthlyTaxInputs[person.role].eligiblePensionIncome =
+          (monthlyTaxInputs[person.role].eligiblePensionIncome ?? 0) + monthlyDb;
+      }
     }
 
     if (stage === "SURVIVOR") {
@@ -422,6 +444,26 @@ export function runRetirementSimulation(
         benefits += survivorBenefits;
         benefitSources.cpp += survivorBenefits;
         taxableBenefits += survivorBenefits;
+        // DB pension survivor benefits: % of the member's indexed pension at
+        // death (bridge excluded). Taxed as pension income to the survivor.
+        for (const db of scenario.dbPensions ?? []) {
+          if (db.owner !== deceased.role) continue;
+          const monthlyDbSurvivor = dbSurvivorMonthlyAt(
+            db,
+            date.getUTCFullYear(),
+            scenario.assumptions.inflationRate,
+            deceased.birthYear,
+            deceasedP.deathAge ?? 0,
+            deceased.birthYear + Math.floor(deceasedP.deathAge ?? 0),
+          );
+          if (monthlyDbSurvivor <= 0) continue;
+          otherIncome += monthlyDbSurvivor;
+          taxableBenefits += monthlyDbSurvivor;
+          monthlyTaxInputs[survivor.role].pension =
+            (monthlyTaxInputs[survivor.role].pension ?? 0) + monthlyDbSurvivor;
+          monthlyTaxInputs[survivor.role].eligiblePensionIncome =
+            (monthlyTaxInputs[survivor.role].eligiblePensionIncome ?? 0) + monthlyDbSurvivor;
+        }
       }
     }
 
@@ -440,7 +482,9 @@ export function runRetirementSimulation(
       mandatoryByOwner[account.owner] += taken;
     }
     const taxableMandatory = mandatoryTaken;
-    let targetSpending = retired ? spending : 0;
+    // Retirement spending starts once EVERYONE is retired. While one spouse still
+    // works, the household is still in its working years (allRetired, not retired).
+    let targetSpending = allRetired ? spending : 0;
     if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));
     if (stage === "ESTATE") targetSpending = 0;
 
@@ -886,6 +930,7 @@ export function runRetirementSimulation(
     "Death ages now transition the household through BOTH_ALIVE → SURVIVOR → ESTATE; CPP survivor and account death treatment are modelled at a planning level, while final-return tax, beneficiary paperwork, ACB and detailed provincial estate rules remain simplified.",
     "GIS and Allowance use the official July-September 2026 income-band schedules with prior-year income and the earnings exemption; quarterly updates and current-year income reassessments are not modeled.",
     "OAS recovery is modelled as an income-based estimate and is not yet tied to the actual OAS amount paid in each recovery period.",
+    "OAS recovery timing: in reality the tax is computed on the prior calendar year's income and withheld monthly over the July–June recovery period (trued up at filing), a ~1-year cash-flow lag. This model attributes the recovery to the income year as a documented simplification.",
   ];
 
   return {

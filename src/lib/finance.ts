@@ -219,7 +219,11 @@ export function computePositions(
       } else if (type === "DIVIDEND") {
         dividends += grossCad(t);
       } else if (type === "FEE") {
-        acb += feeCad(t) + grossCad(t);
+        // Standalone fees (account fees, etc.) are NOT part of any holding's cost
+        // base — adding them here would understate gains. Trade commissions are
+        // already captured via the BUY (added to ACB) and SELL (reduced proceeds)
+        // branches. The fee's economic effect shows up as a cash reduction and a
+        // performance drag in the valuation series.
       }
     }
 

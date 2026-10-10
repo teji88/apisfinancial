@@ -176,21 +176,15 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
   };
 }
 
-function oasRecoveryForIncome(income: number, age: number, oasReceived = 0, indexFactor = 1): number {
+export function oasRecoveryForIncome(income: number, oasReceived = 0, indexFactor = 1): number {
   const threshold = CANADA_2026_PARAMETERS.oasRecovery.startIncome * indexFactor;
-  const upper = age >= 75
-    ? CANADA_2026_PARAMETERS.oasRecovery.upperIncome75Plus * indexFactor
-    : CANADA_2026_PARAMETERS.oasRecovery.upperIncomeUnder75 * indexFactor;
-  const incomeBasedRecovery = Math.max(
-    0,
-    Math.min(
-      Math.max(0, income - threshold) * 0.15,
-      Math.max(0, upper - threshold) * 0.15,
-    ),
-  );
-
-  // OAS recovery cannot exceed the OAS pension actually received for the year.
-  return Math.min(incomeBasedRecovery, Math.max(0, oasReceived));
+  // ITA s.180.2: the recovery tax is the LESSER of (a) the OAS benefits
+  // included in income for the year and (b) 15% of income above the threshold.
+  // There is no intermediate "upper income" cap in the statute — the published
+  // upper thresholds are just the income where (b) catches up to a FULL pension.
+  // Capping at 15% × (upper − threshold) would understate recovery for
+  // deferred (boosted) pensions, whose received amount exceeds that cap.
+  return Math.min(Math.max(0, oasReceived), Math.max(0, income - threshold) * 0.15);
 }
 
 export function calculateTaxFromIncome(
@@ -242,7 +236,7 @@ export function calculateTaxFromIncome(
   const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province, indexFactor) - provincialPensionIncomeCredit);
   // OAS is included in net income for the recovery tax calculation.
   const oasRecoveryIncome = ledgers.netIncome;
-  const oasRecovery = oasRecoveryForIncome(oasRecoveryIncome, age, ledgers.oas, indexFactor);
+  const oasRecovery = oasRecoveryForIncome(oasRecoveryIncome, ledgers.oas, indexFactor);
   const foreignIncome = Math.max(0, ledgers.foreignIncome);
   // V1 FTC model: the federal and provincial credits are each limited by
   // the Canadian tax otherwise attributable to the foreign income. CRA's
