@@ -100,7 +100,7 @@ import {
   DebtsForm,
   NetWorthCard,
   DebtComparatorCard,
-  SmithTrackerCard,
+  SmithSummaryCard,
 } from "@/components/retirement/DebtNetWorth";
 import { computeTax } from "@/lib/tax";
 import { CANADA_2026_PARAMETERS } from "@/lib/retirement/rules/canada2026";
@@ -276,6 +276,8 @@ const GUEST_PROFILE: Profile = {
   debts: null,
   net_worth: null,
   smith_tranches: null,
+  properties: null,
+  smith_settings: null,
 };
 
 function RetirementPage() {
@@ -1122,7 +1124,7 @@ function RetirementPage() {
 
           <DebtComparatorCard profile={p} />
 
-          <SmithTrackerCard profile={p} onSave={(t) => set({ smith_tranches: t })} />
+          <SmithSummaryCard profile={p} />
 
           <div className="grid gap-4 lg:grid-cols-3">
             <BenefitCard
@@ -2041,13 +2043,8 @@ function DbPensionForm({
 }
 
 /** Numerical marginal rate via the combined federal+provincial tax engine. */
-export function marginalRateAt(income: number, province: ProvinceCode, age: number): number {
-  const d = 1000;
-  const base = Math.max(0, income);
-  const t1 = computeTax({ ordinary: base, province, age }).total;
-  const t2 = computeTax({ ordinary: base + d, province, age }).total;
-  return (t2 - t1) / d;
-}
+import { marginalRateAt } from "@/lib/retirement/marginalRate";
+export { marginalRateAt };
 
 function SavingsAllocatorCard({
   profile,
