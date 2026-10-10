@@ -27,7 +27,8 @@ import {
   assessSmithLedger,
   type SmithLedgerResult,
 } from "@/lib/retirement/optimization/SmithTracker";
-import { NumInput, marginalRateAt } from "@/routes/retirement";
+import { NumInput } from "@/routes/retirement";
+import { marginalRateAt } from "@/lib/retirement/marginalRate";
 
 const DEBT_KIND_LABELS: Record<DebtInput["kind"], string> = {
   mortgage: "Mortgage",
@@ -138,12 +139,26 @@ export function NetWorthCard({
   const [otherProperty, setOtherProperty] = useState(profile.net_worth?.otherPropertyValue ?? 0);
   const [cash, setCash] = useState(profile.net_worth?.cash ?? 0);
 
+  // Investment properties: values join illiquid assets. Linked mortgages are already
+  // in the debts list; manual (unlinked) mortgages are added to liabilities here.
+  const linkedIds = new Set((profile.debts ?? []).map((d) => d.id));
+  const propertyValue = (profile.properties ?? []).reduce(
+    (s, prop) => s + Math.max(0, prop.currentValue),
+    0,
+  );
+  const manualMortgages = (profile.properties ?? [])
+    .filter((prop) => !prop.mortgageId || !linkedIds.has(prop.mortgageId))
+    .map((prop) => ({ balance: prop.mortgageBalance }));
+
   const result = computeNetWorth({
     homeValue,
-    otherPropertyValue: otherProperty,
+    otherPropertyValue: otherProperty + propertyValue,
     cash,
     investments,
-    debts: (profile.debts ?? []).map((d) => ({ balance: d.balance })),
+    debts: [
+      ...(profile.debts ?? []).map((d) => ({ balance: d.balance })),
+      ...manualMortgages,
+    ],
   });
 
   const save = () => onSave({ homeValue, otherPropertyValue: otherProperty, cash });
@@ -506,6 +521,38 @@ export function SmithTrackerCard({
           <p className="text-xs text-muted-foreground">{result.disclaimer}</p>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Compact Smith Manoeuvre summary for the retirement planner; full tracking lives on the Smith tab. */
+export function SmithSummaryCard({ profile }: { profile: Profile }) {
+  const tranches = profile.smith_tranches ?? [];
+  if (tranches.length === 0) return null;
+  const result = assessSmithLedger(tranches);
+  const outstanding = result.tranches.reduce((s, t) => s + t.outstanding, 0);
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-base font-semibold">Smith Manoeuvre</h3>
+        <a href="/smith" className="text-xs underline text-muted-foreground">
+          Open tracker →
+        </a>
+      </div>
+      <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
+        <div>
+          <dt className="text-[11px] text-muted-foreground">Invested</dt>
+          <dd className="font-medium">{formatCad(outstanding)}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] text-muted-foreground">Deductible interest YTD</dt>
+          <dd className="font-medium">{formatCad(result.totalDeductibleInterestYtd)}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] text-muted-foreground">Tranches</dt>
+          <dd className="font-medium">{result.tranches.length}</dd>
+        </div>
+      </dl>
     </div>
   );
 }
