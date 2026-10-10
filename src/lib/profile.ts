@@ -114,6 +114,36 @@ export type SmithTranche = {
   documents: string;
 };
 
+/** One investment property (real estate tab). Mortgage links to a DebtInput by id. */
+export type PropertyInput = {
+  id: string;
+  name: string;
+  /** Current estimated value ($). */
+  currentValue: number;
+  /** DebtInput id of the mortgage, or "" if free-and-clear / manual. */
+  mortgageId: string;
+  /** Manual mortgage balance ($) when not linked. */
+  mortgageBalance: number;
+  /** Manual mortgage payment ($/mo) when not linked. */
+  mortgagePayment: number;
+  monthlyRent: number;
+  /** Parking, laundry, etc. ($/mo). */
+  otherIncome: number;
+  /** Vacancy allowance (% of gross). */
+  vacancyPct: number;
+  /** Cash invested: down payment + closing ($). */
+  cashInvested: number;
+  expenses: {
+    propertyTax: number; // $/yr
+    insurance: number; // $/yr
+    maintenance: number; // $/yr
+    managementPct: number; // % of effective income
+    condoFees: number; // $/yr
+    utilities: number; // $/yr landlord-paid
+    other: number; // $/yr
+  };
+};
+
 export type Profile = {
   id: string;
   display_name: string | null;
@@ -180,10 +210,12 @@ export type Profile = {
   net_worth: NetWorthInput | null;
   /** Smith Manoeuvre tranche ledger (JSONB, null = none entered). */
   smith_tranches: SmithTranche[] | null;
+  /** Investment properties (JSONB, null = none entered). */
+  properties: PropertyInput[] | null;
 };
 
 const COLUMNS =
-  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg, db_pension, asset_holdings, employer_match, debts, net_worth, smith_tranches";
+  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg, db_pension, asset_holdings, employer_match, debts, net_worth, smith_tranches, properties";
 
 function toNumbers(row: Record<string, unknown>): Profile {
   const num = (v: unknown, fallback = 0) => (v == null ? fallback : Number(v));
@@ -227,6 +259,7 @@ function toNumbers(row: Record<string, unknown>): Profile {
     debts: (row["debts"] as DebtInput[] | null) ?? null,
     net_worth: (row["net_worth"] as NetWorthInput | null) ?? null,
     smith_tranches: (row["smith_tranches"] as SmithTranche[] | null) ?? null,
+    properties: (row["properties"] as PropertyInput[] | null) ?? null,
   };
 }
 
