@@ -332,11 +332,13 @@ export type Database = {
           cpp_start_age: number
           cpp_years_worked: number
           db_pension: Json | null
+          debts: Json | null
           created_at: string
           current_age: number | null
           desired_income: number
           display_name: string | null
           employer_match: Json | null
+          net_worth: Json | null
           growth_rate: number
           id: string
           income: number
@@ -371,6 +373,7 @@ export type Database = {
           spouse_retirement_age: number | null
           spouse_rrsp: number
           spouse_tfsa: number
+          smith_tranches: Json | null
           target_retirement_age: number | null
           trial_ends_at: string | null
           updated_at: string
@@ -386,11 +389,13 @@ export type Database = {
           cpp_start_age?: number
           cpp_years_worked?: number
           db_pension?: Json | null
+          debts?: Json | null
           created_at?: string
           current_age?: number | null
           desired_income?: number
           display_name?: string | null
           employer_match?: Json | null
+          net_worth?: Json | null
           growth_rate?: number
           id: string
           income?: number
@@ -425,6 +430,7 @@ export type Database = {
           spouse_retirement_age?: number | null
           spouse_rrsp?: number
           spouse_tfsa?: number
+          smith_tranches?: Json | null
           target_retirement_age?: number | null
           trial_ends_at?: string | null
           updated_at?: string
@@ -440,11 +446,13 @@ export type Database = {
           cpp_start_age?: number
           cpp_years_worked?: number
           db_pension?: Json | null
+          debts?: Json | null
           created_at?: string
           current_age?: number | null
           desired_income?: number
           display_name?: string | null
           employer_match?: Json | null
+          net_worth?: Json | null
           growth_rate?: number
           id?: string
           income?: number
@@ -479,6 +487,7 @@ export type Database = {
           spouse_retirement_age?: number | null
           spouse_rrsp?: number
           spouse_tfsa?: number
+          smith_tranches?: Json | null
           target_retirement_age?: number | null
           trial_ends_at?: string | null
           updated_at?: string
