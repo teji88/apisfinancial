@@ -70,6 +70,8 @@ export type NetWorthInput = {
   homeValue: number;
   /** Other property / cottage value ($). */
   otherPropertyValue: number;
+  /** Cash / savings accounts ($) — liquid. */
+  cash: number;
 };
 
 /**
