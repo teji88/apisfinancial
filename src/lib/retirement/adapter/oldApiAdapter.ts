@@ -216,8 +216,11 @@ export function plannerInputsToScenario(
 
   // People - convert old PersonSpec to new format
   const toPerson = (spec: PersonSpec, role: "MAIN_USER" | "PARTNER") => {
-    // Birth year from age
-    const birthYear = currentYear - spec.age;
+    // Prefer an explicit birth year when the caller knows it; otherwise estimate
+    // from the integer age with a mid-year convention (birthMonth 6). With only
+    // an integer age the true birthdate is uncertain by up to a year either way;
+    // mid-year minimizes the average error. (UI still collects age only.)
+    const birthYear = spec.birthYear ?? currentYear - spec.age;
     // Monthly CPP at 65 from annual
     const cppMonthly = spec.cppAt65 / 12;
     const person: RetirementScenario["household"]["people"][number] = {
@@ -658,21 +661,18 @@ export function oasFractionFromResidence(years: number): number {
 }
 
 /**
- * Calculate OAS annual amount.
+ * Calculate OAS annual amount at the chosen start age.
+ * Deferral bonus mirrors BenefitEngine: 0.6% per month after 65, capped at +36% (age 70).
  */
 export function oasAt(
-  age: number,
+  startAge: number,
   residenceYears: number,
-  deferTo70: boolean = false,
 ): number {
   // 2026 OAS max: $751.97/mo ($9,023.64/yr) for 65-74
   const baseAnnual = 751.97 * 12;
   const fraction = oasFractionFromResidence(residenceYears);
-  let amount = baseAnnual * fraction;
-  if (deferTo70 && age >= 70) {
-    amount *= 1.36; // 0.6% per month for 60 months
-  }
-  return amount;
+  const deferralMonths = Math.min(60, Math.max(0, (startAge - 65) * 12));
+  return baseAnnual * fraction * (1 + 0.006 * deferralMonths);
 }
 
 /**

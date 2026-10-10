@@ -168,7 +168,9 @@ export function runRetirementSimulation(
   }
   const start = new Date(Date.UTC(startYear, 0, 1));
   const people = scenario.household.people;
-  const planningEndYear = Math.min(...people.map((p) => p.birthYear + scenario.goals.planningAge));
+  // Household horizon: run until the LAST person reaches their planning age so the
+  // longer-lived spouse's years are never truncated (Math.max, not Math.min).
+  const planningEndYear = Math.max(...people.map((p) => p.birthYear + scenario.goals.planningAge));
   const months = Math.max(1, 12 * Math.max(1, planningEndYear - startYear + 1));
   const debtStates: Array<{ state: DebtState; startDate?: string; endDate?: string }> = (scenario.debts ?? []).map((debt) => ({ state: createDebtState(debt), startDate: debt.startDate, endDate: debt.endDate }));
   const accounts = scenario.accounts.length
@@ -440,7 +442,9 @@ export function runRetirementSimulation(
       mandatoryByOwner[account.owner] += taken;
     }
     const taxableMandatory = mandatoryTaken;
-    let targetSpending = retired ? spending : 0;
+    // Retirement spending starts once EVERYONE is retired. While one spouse still
+    // works, the household is still in its working years (allRetired, not retired).
+    let targetSpending = allRetired ? spending : 0;
     if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));
     if (stage === "ESTATE") targetSpending = 0;
 
