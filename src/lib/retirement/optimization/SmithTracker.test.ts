@@ -27,6 +27,7 @@ describe("assessSmithLedger", () => {
     expect(t.deductible).toBe(true);
     expect(t.deductibleInterestYtd).toBe(2_000);
     expect(t.outstanding).toBe(50_000);
+    expect(t.health).toBe("good");
     expect(r.totalDeductibleInterestYtd).toBe(2_000);
   });
 
@@ -45,6 +46,7 @@ describe("assessSmithLedger", () => {
     const t = r.tranches[0];
     expect(t.deductible).toBe(false);
     expect(t.deductibleInterestYtd).toBe(0);
+    expect(t.health).toBe("bad");
     expect(t.warnings.some((w) => w.includes("Line 22100"))).toBe(true);
   });
 
@@ -74,6 +76,7 @@ describe("assessSmithLedger", () => {
     const r = assessSmithLedger([{ ...baseTranche, commingled: true }]);
     const t = r.tranches[0];
     expect(t.deductible).toBe(true);
+    expect(t.health).toBe("warning");
     expect(t.warnings.some((w) => w.includes("1.43"))).toBe(true);
   });
 
@@ -97,5 +100,29 @@ describe("assessSmithLedger", () => {
     const r = assessSmithLedger([baseTranche]);
     expect(r.disclaimer).toBe(SMITH_DISCLAIMER);
     expect(r.disclaimer.toLowerCase()).toContain("not tax advice");
+  });
+});
+
+describe("distributions", () => {
+  it("aggregates distributions by destination", () => {
+    const result = assessSmithLedger([
+      {
+        ...baseTranche,
+        distributions: [
+          { date: "2026-03-01", amount: 500, destination: "mortgage" },
+          { date: "2026-06-01", amount: 300, destination: "reinvested" },
+          { date: "2026-09-01", amount: 200, destination: "personal" },
+        ],
+      },
+      { ...baseTranche, id: "s-2", distributions: [{ date: "2026-04-01", amount: 100, destination: "mortgage" }] },
+    ]);
+    expect(result.distributions.mortgage).toBe(600);
+    expect(result.distributions.reinvested).toBe(300);
+    expect(result.distributions.personal).toBe(200);
+    expect(result.distributions.total).toBe(1100);
+  });
+  it("defaults to zero distributions", () => {
+    const result = assessSmithLedger([baseTranche]);
+    expect(result.distributions.total).toBe(0);
   });
 });
