@@ -25,6 +25,10 @@ export interface SmithSavingsInputs {
   interestClaimedPrior: number;
   /** Current deductible outstanding across tranches ($). */
   deductibleOutstanding: number;
+  /** When false, the projection assumes no new redraws: deductible balance stays flat. */
+  redraw?: boolean;
+  /** Extra rate (decimal) added to the HELOC rate in the projection, e.g. 0.02. */
+  rateBump?: number;
 }
 
 export interface SmithYearProjection {
@@ -68,13 +72,14 @@ export function computeSmithSavings(inputs: SmithSavingsInputs): SmithSavingsRes
   const effectiveRate = m(inputs.helocRate) * (1 - marginal);
   const rateEdge = m(inputs.helocRate) - effectiveRate;
 
-  // Project: amortize the mortgage; each principal dollar becomes deductible.
+  // Project: amortize the mortgage; each principal dollar becomes deductible (redraw).
   const yearlyProjection: SmithYearProjection[] = [];
   let mort = m(inputs.mortgageBalance);
   let ded = m(inputs.deductibleOutstanding);
   const mr = m(inputs.mortgageRate) / 12;
-  const hr = m(inputs.helocRate) / 12;
+  const hr = (m(inputs.helocRate) + m(inputs.rateBump ?? 0)) / 12;
   const pmt = m(inputs.mortgagePayment);
+  const redraw = inputs.redraw ?? true;
   let year = 1;
   let yearInterest = 0;
 
@@ -84,7 +89,7 @@ export function computeSmithSavings(inputs: SmithSavingsInputs): SmithSavingsRes
       const interest = mort * mr;
       const principal = Math.min(mort, pmt - interest);
       mort -= principal;
-      ded += principal; // redrawn and invested
+      if (redraw) ded += principal; // redrawn and invested
       yearInterest += ded * hr;
       month++;
       if (month % 12 === 0 || mort <= 0) {
