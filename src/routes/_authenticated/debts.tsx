@@ -17,6 +17,7 @@ export const Route = createFileRoute("/_authenticated/debts")({
   component: DebtsPage,
 });
 
+// Debts hub: mortgages, HELOCs, loans — linked from Smith and Properties tabs.
 function DebtsPage() {
   const { data: profile, isLoading } = useProfile();
   const updateProfile = useUpdateProfile();
