@@ -48,6 +48,72 @@ export type EmployerMatchInput = {
   maxPctOfSalary: number;
 };
 
+/** One debt in the shared inventory (net worth, comparator, Smith facilities). */
+export type DebtInput = {
+  id: string;
+  name: string;
+  /** mortgage | heloc | loan | credit_card | other */
+  kind: "mortgage" | "heloc" | "loan" | "credit_card" | "other";
+  /** Outstanding balance ($). */
+  balance: number;
+  /** Annual interest rate as a decimal (e.g. 0.055). */
+  rate: number;
+  /** Regular payment ($/mo). */
+  payment: number;
+  /** Whether interest is tax-deductible (e.g. investment loan). */
+  deductible: boolean;
+};
+
+/** Illiquid property values for net worth; liquid assets come from balances. */
+export type NetWorthInput = {
+  /** Principal residence value ($). */
+  homeValue: number;
+  /** Other property / cottage value ($). */
+  otherPropertyValue: number;
+  /** Cash / savings accounts ($) — liquid. */
+  cash: number;
+};
+
+/**
+ * One Smith Manoeuvre tranche — each re-borrow draw is a separate tranche
+ * (Singleton principle). Fields follow the verified CRA tracing rules:
+ * ITA s.20(1)(c), Folio S3-F6-C1.
+ */
+export type SmithTranche = {
+  id: string;
+  /** HELOC/facility this was drawn from (links to a DebtInput). */
+  facility: string;
+  /** Draw date (YYYY-MM-DD). */
+  drawDate: string;
+  /** Principal advanced ($). */
+  principal: number;
+  /** Annual interest rate as a decimal. */
+  rate: number;
+  /** Where the money went (destination account/security). */
+  useOfFunds: string;
+  /** Destination classification: income-earning (eligible) or not. */
+  eligible: boolean;
+  /** Why the purpose test is met at acquisition (e.g. dividend policy). */
+  purposeEvidence: string;
+  /** Interest paid year-to-date ($). */
+  interestPaidYtd: number;
+  repayments: Array<{ date: string; amount: number }>;
+  /** Current use turned personal — kills deductibility from this date. */
+  personalUse: boolean;
+  personalUseDate: string | null;
+  /** Funds passed through an account with other cash (para 1.42 regime). */
+  commingled: boolean;
+  disposition: {
+    date: string;
+    proceeds: number;
+    destination: "reinvested" | "personal" | "loan_repayment";
+  } | null;
+  /** s.20.1 deemed eligible balance after a loss disposition. */
+  s201Deemed: number;
+  /** Source-document pointers (free text). */
+  documents: string;
+};
+
 export type Profile = {
   id: string;
   display_name: string | null;
@@ -108,10 +174,16 @@ export type Profile = {
   asset_holdings: AssetHoldingInput[] | null;
   /** Employer match details (JSONB, null = none entered). */
   employer_match: EmployerMatchInput | null;
+  /** Shared debt inventory (JSONB, null = none entered). */
+  debts: DebtInput[] | null;
+  /** Illiquid property values for net worth (JSONB, null = none entered). */
+  net_worth: NetWorthInput | null;
+  /** Smith Manoeuvre tranche ledger (JSONB, null = none entered). */
+  smith_tranches: SmithTranche[] | null;
 };
 
 const COLUMNS =
-  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg, db_pension, asset_holdings, employer_match";
+  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg, db_pension, asset_holdings, employer_match, debts, net_worth, smith_tranches";
 
 function toNumbers(row: Record<string, unknown>): Profile {
   const num = (v: unknown, fallback = 0) => (v == null ? fallback : Number(v));
@@ -152,6 +224,9 @@ function toNumbers(row: Record<string, unknown>): Profile {
     db_pension: (row["db_pension"] as DbPensionInput | null) ?? null,
     asset_holdings: (row["asset_holdings"] as AssetHoldingInput[] | null) ?? null,
     employer_match: (row["employer_match"] as EmployerMatchInput | null) ?? null,
+    debts: (row["debts"] as DebtInput[] | null) ?? null,
+    net_worth: (row["net_worth"] as NetWorthInput | null) ?? null,
+    smith_tranches: (row["smith_tranches"] as SmithTranche[] | null) ?? null,
   };
 }
 

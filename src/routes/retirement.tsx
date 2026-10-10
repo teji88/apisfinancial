@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePortfolio } from "@/lib/portfolio";
-import { useProfile, useUpdateProfile, type Profile, type DbPensionInput, type AssetHoldingInput } from "@/lib/profile";
+import { useProfile, useUpdateProfile, type Profile, type DbPensionInput, type AssetHoldingInput, type DebtInput, type NetWorthInput, type SmithTranche } from "@/lib/profile";
 import { formatCad, summariseAccount } from "@/lib/finance";
 import {
   cppPercentFromEarnings,
@@ -87,6 +87,21 @@ import {
   type LocAccount,
   type LocationResult,
 } from "@/lib/retirement/optimization/AssetLocation";
+import { computeNetWorth } from "@/lib/retirement/optimization/NetWorth";
+import {
+  comparePayoffVsInvest,
+  type PayoffVsInvestResult,
+} from "@/lib/retirement/optimization/DebtComparator";
+import {
+  assessSmithLedger,
+  type SmithLedgerResult,
+} from "@/lib/retirement/optimization/SmithTracker";
+import {
+  DebtsForm,
+  NetWorthCard,
+  DebtComparatorCard,
+  SmithTrackerCard,
+} from "@/components/retirement/DebtNetWorth";
 import { computeTax } from "@/lib/tax";
 import { CANADA_2026_PARAMETERS } from "@/lib/retirement/rules/canada2026";
 import type { PersonScenario, DbPension } from "@/lib/retirement/domain/types";
@@ -258,6 +273,9 @@ const GUEST_PROFILE: Profile = {
   db_pension: null,
   asset_holdings: null,
   employer_match: null,
+  debts: null,
+  net_worth: null,
+  smith_tranches: null,
 };
 
 function RetirementPage() {
@@ -282,7 +300,6 @@ function RetirementPage() {
   void entitlement;
   void PLUS_REASON;
   void openPrompt;
-
 
 
   const [form, setForm] = useState<Profile | null>(null);
@@ -1097,6 +1114,16 @@ function RetirementPage() {
 
           <AssetLocationCard profile={p} onSave={(holdings) => set({ asset_holdings: holdings })} />
 
+          <NetWorthCard
+            profile={p}
+            investments={(balances.tfsa ?? 0) + (balances.rrsp ?? 0) + (balances.lira ?? 0) + (balances.nonreg ?? 0)}
+            onSave={(v) => set({ net_worth: v })}
+          />
+
+          <DebtComparatorCard profile={p} />
+
+          <SmithTrackerCard profile={p} onSave={(t) => set({ smith_tranches: t })} />
+
           <div className="grid gap-4 lg:grid-cols-3">
             <BenefitCard
               title="Your government benefits"
@@ -1420,6 +1447,7 @@ function RetirementPage() {
               <NumInput value={p.income ?? 0} onCommit={(n) => set({ income: n })} />
             </Field>
             <DbPensionForm value={p.db_pension ?? null} onChange={(v) => set({ db_pension: v })} />
+            <DebtsForm value={p.debts ?? null} onChange={(v) => set({ debts: v })} />
             <div className="sm:col-span-2">
               {(p.cpp_detailed_history?.length ?? 0) > 0 && (
                 <p className="text-xs text-emerald-700 mb-2">
@@ -1803,7 +1831,7 @@ function Section({
  * invalid field doesn't commit — and on blur the display reverts to the last
  * committed value instead of getting stuck on "".
  */
-function NumInput({
+export function NumInput({
   value,
   onCommit,
   step,
@@ -2013,7 +2041,7 @@ function DbPensionForm({
 }
 
 /** Numerical marginal rate via the combined federal+provincial tax engine. */
-function marginalRateAt(income: number, province: ProvinceCode, age: number): number {
+export function marginalRateAt(income: number, province: ProvinceCode, age: number): number {
   const d = 1000;
   const base = Math.max(0, income);
   const t1 = computeTax({ ordinary: base, province, age }).total;
