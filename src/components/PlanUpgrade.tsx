@@ -27,6 +27,7 @@ const FREE_POINTS = [
 
 const PAID_POINTS = [
   "Everything in the free plan",
+  "HELOC investing tracker — set up draws, keep per-tranche tax records",
   "Upload a PDF statement and have it read for you",
   "Upload a screenshot or photo of a statement",
   "Rows are drafted for you to check before saving",
@@ -91,7 +92,7 @@ export function PlanUpgrade({ onDone }: { onDone?: () => void }) {
 
         <div className="rounded-lg border-2 border-primary p-4">
           <p className="flex items-center gap-1.5 text-sm font-medium text-primary">
-            <Sparkle className="h-4 w-4" /> Statement reading
+            <Sparkle className="h-4 w-4" /> Pro
           </p>
           <div className="mt-1 flex items-baseline gap-2">
             <p className="text-2xl font-semibold">{SUBSCRIPTION_PRICE.amount}</p>
@@ -158,7 +159,7 @@ export function UpgradeDialog({
           <DialogTitle>Apis Financial plans</DialogTitle>
           <DialogDescription>
             {reason ??
-              "Everything is free. The only paid extra is having PDFs and photos read for you."}
+              "Most of Apis Financial is free. Pro adds the HELOC investing tracker plus AI reading of PDFs and photos."}
           </DialogDescription>
         </DialogHeader>
         <PlanUpgrade onDone={() => onOpenChange(false)} />

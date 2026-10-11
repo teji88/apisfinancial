@@ -29,9 +29,9 @@ export function useEntitlement() {
   const entitlement = query.data ?? FREE_FALLBACK;
   return {
     entitlement,
-    /** The only paid feature: AI reading of PDFs and screenshots ($10/yr). */
+    /** Paid features ($10/yr Pro): AI reading of PDFs and screenshots, plus the HELOC investing tracker. */
     hasStatementAi: entitlement.tier !== "free",
-    /** Everything else in Apis Financial is free for everyone. */
+    /** Legacy helper: most of the app is free for everyone; the HELOC tracker and statement AI are tier-gated. */
     hasPro: true,
     hasProPlus: true,
     loading: query.isLoading,

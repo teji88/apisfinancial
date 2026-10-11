@@ -28,12 +28,12 @@ export const Route = createFileRoute("/_authenticated/plan")({
       {
         name: "description",
         content:
-          "Everything in Apis Financial is free. Add AI reading of PDF statements and screenshots for $10 a year.",
+          "Most of Apis Financial is free. Pro ($10 a year) adds the HELOC investing tracker plus AI reading of PDF statements and screenshots.",
       },
       { property: "og:title", content: "Your plan — Apis Financial" },
       {
         property: "og:description",
-        content: "Everything is free. AI statement reading is $10 a year.",
+        content: "Most of Apis Financial is free. Pro ($10 a year) adds the HELOC investing tracker plus AI statement reading.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -134,8 +134,8 @@ function PlanPage() {
       <div>
         <h1 className="text-2xl font-semibold">Your plan</h1>
         <p className="text-sm text-muted-foreground">
-          Everything in Apis Financial is free. The only paid extra is having PDF statements and
-          screenshots read for you — $10 a year.
+          Most of Apis Financial is free. Pro adds the HELOC investing tracker plus having PDF
+          statements and screenshots read for you — $10 a year.
         </p>
       </div>
 
@@ -152,7 +152,7 @@ function PlanPage() {
             {isOwner
               ? "Owner — full access"
               : isPaid
-                ? "Statement reading — $10 a year"
+                ? "Pro — $10 a year"
                 : isInvite
                   ? "Invite code — everything unlocked"
                   : isTrial
@@ -178,7 +178,7 @@ function PlanPage() {
         {entitlement.readOnly ? (
           <p className="mt-3 text-sm text-muted-foreground">
             {entitlement.readOnlyReason === "overlimit"
-              ? "Everything is free now, so there is nothing to unlock."
+              ? "Your data stays safe — nothing is deleted. Pro unlocks the HELOC investing tracker and AI statement reading."
               : `Your access ended on ${formatDate(entitlement.accessEndsAt)}. Your data stays safe — nothing is deleted.`}
           </p>
         ) : entitlement.accessEndsAt ? (
@@ -186,11 +186,11 @@ function PlanPage() {
             {isInvite
               ? `Free access runs until ${formatDate(entitlement.accessEndsAt)}.`
               : isTrial
-                ? `Statement reading is included until ${formatDate(entitlement.accessEndsAt)}.`
+                ? `Pro is included until ${formatDate(entitlement.accessEndsAt)}.`
                 : isReferral
                   ? `Your referral reward keeps everything unlocked until ${formatDate(entitlement.accessEndsAt)}.`
                   : entitlement.cancelAtPeriodEnd
-                    ? `Statement reading stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
+                    ? `Pro stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
                     : `Renews on ${formatDate(entitlement.accessEndsAt)}.`}
           </p>
         ) : isInvite ? (
@@ -201,7 +201,8 @@ function PlanPage() {
           </p>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">
-            You are on the free plan — every feature except AI statement reading is included.
+            You are on the free plan — every feature except the Pro ones (HELOC investing tracker
+            and AI statement reading) is included.
           </p>
         )}
 

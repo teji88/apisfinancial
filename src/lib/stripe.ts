@@ -26,7 +26,7 @@ export function getStripeEnvironment(): StripeEnv {
   return paymentsEnvironment();
 }
 
-/** The one and only paid plan: $10 a year, for AI statement reading. */
+/** The one and only paid plan: $10 a year (Pro) — AI statement reading plus the HELOC investing tracker. */
 export const SUBSCRIPTION_PRICE = {
   id: "pro_yearly",
   label: "$10 / year",
