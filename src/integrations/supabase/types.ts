@@ -375,6 +375,7 @@ export type Database = {
           spouse_tfsa: number
           smith_tranches: Json | null
           properties: Json | null
+          smith_settings: Json | null
           target_retirement_age: number | null
           trial_ends_at: string | null
           updated_at: string
@@ -433,6 +434,7 @@ export type Database = {
           spouse_tfsa?: number
           smith_tranches?: Json | null
           properties?: Json | null
+          smith_settings?: Json | null
           target_retirement_age?: number | null
           trial_ends_at?: string | null
           updated_at?: string
@@ -491,6 +493,7 @@ export type Database = {
           spouse_tfsa?: number
           smith_tranches?: Json | null
           properties?: Json | null
+          smith_settings?: Json | null
           target_retirement_age?: number | null
           trial_ends_at?: string | null
           updated_at?: string

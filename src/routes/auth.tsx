@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { ApisLogo } from "@/components/brand/ApisLogo";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,15 +94,15 @@ function AuthPage() {
   }
 
   async function handleOAuth(provider: "google") {
-    const result = await lovable.auth.signInWithOAuth(provider, {
-      redirect_uri: window.location.origin,
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/auth` },
     });
-    if (result.error) {
+    if (error) {
       toast.error("Google sign-in failed. Try email instead.");
-      return;
     }
-    if (result.redirected) return;
-    void navigate({ to: postLoginPath() });
+    // On success the browser redirects to Google; Supabase returns to /auth
+    // and the session is picked up automatically.
   }
 
   return (

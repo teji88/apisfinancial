@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as BeatXeqtRouteImport } from './routes/beat-xeqt'
 import { Route as RetirementRouteImport } from './routes/retirement'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as SmithManoeuvreGuideRouteImport } from './routes/smith-manoeuvre-guide'
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDebtsRouteImport } from './routes/_authenticated/debts'
@@ -59,6 +60,11 @@ const RetirementRoute = RetirementRouteImport.update({
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SmithManoeuvreGuideRoute = SmithManoeuvreGuideRouteImport.update({
+  id: '/smith-manoeuvre-guide',
+  path: '/smith-manoeuvre-guide',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAccountsRoute = AuthenticatedAccountsRouteImport.update({
@@ -151,6 +157,7 @@ export interface FileRoutesByFullPath {
   '/beat-xeqt': typeof BeatXeqtRoute
   '/retirement': typeof RetirementRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/smith-manoeuvre-guide': typeof SmithManoeuvreGuideRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/debts': typeof AuthenticatedDebtsRoute
@@ -174,6 +181,7 @@ export interface FileRoutesByTo {
   '/beat-xeqt': typeof BeatXeqtRoute
   '/retirement': typeof RetirementRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/smith-manoeuvre-guide': typeof SmithManoeuvreGuideRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/debts': typeof AuthenticatedDebtsRoute
@@ -199,6 +207,7 @@ export interface FileRoutesById {
   '/beat-xeqt': typeof BeatXeqtRoute
   '/retirement': typeof RetirementRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/smith-manoeuvre-guide': typeof SmithManoeuvreGuideRoute
   '/_authenticated/accounts': typeof AuthenticatedAccountsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/debts': typeof AuthenticatedDebtsRoute
@@ -224,6 +233,7 @@ export interface FileRouteTypes {
     | '/beat-xeqt'
     | '/retirement'
     | '/sitemap.xml'
+    | '/smith-manoeuvre-guide'
     | '/accounts'
     | '/dashboard'
     | '/debts'
@@ -247,6 +257,7 @@ export interface FileRouteTypes {
     | '/beat-xeqt'
     | '/retirement'
     | '/sitemap.xml'
+    | '/smith-manoeuvre-guide'
     | '/accounts'
     | '/dashboard'
     | '/debts'
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | '/beat-xeqt'
     | '/retirement'
     | '/sitemap.xml'
+    | '/smith-manoeuvre-guide'
     | '/_authenticated/accounts'
     | '/_authenticated/dashboard'
     | '/_authenticated/debts'
@@ -296,6 +308,7 @@ export interface RootRouteChildren {
   BeatXeqtRoute: typeof BeatXeqtRoute
   RetirementRoute: typeof RetirementRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  SmithManoeuvreGuideRoute: typeof SmithManoeuvreGuideRoute
   ApiPublicRefreshPricesRoute: typeof ApiPublicRefreshPricesRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
   LovableEmailAuthPreviewRoute: typeof LovableEmailAuthPreviewRoute
@@ -345,6 +358,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/smith-manoeuvre-guide': {
+      id: '/smith-manoeuvre-guide'
+      path: '/smith-manoeuvre-guide'
+      fullPath: '/smith-manoeuvre-guide'
+      preLoaderRoute: typeof SmithManoeuvreGuideRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/accounts': {
@@ -500,6 +520,7 @@ const rootRouteChildren: RootRouteChildren = {
   BeatXeqtRoute: BeatXeqtRoute,
   RetirementRoute: RetirementRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  SmithManoeuvreGuideRoute: SmithManoeuvreGuideRoute,
   ApiPublicRefreshPricesRoute: ApiPublicRefreshPricesRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
   LovableEmailAuthPreviewRoute: LovableEmailAuthPreviewRoute,

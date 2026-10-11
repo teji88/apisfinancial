@@ -100,12 +100,15 @@ export function DebtsForm({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px]">Balance ($)</Label>
+                  <Label className="text-[11px]">Balance owed ($)</Label>
                   <NumInput value={d.balance} onCommit={(n) => update(d.id, { balance: Math.max(0, n) })} />
+                  {d.kind === "heloc" ? (
+                    <p className="text-[10px] text-muted-foreground">Amount drawn — not the available credit.</p>
+                  ) : null}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[11px]">Rate (%/yr)</Label>
-                  <NumInput value={Math.round(d.rate * 1000) / 10} onCommit={(n) => update(d.id, { rate: Math.max(0, n) / 100 })} />
+                  <NumInput value={Math.round(d.rate * 10000) / 100} onCommit={(n) => update(d.id, { rate: Math.max(0, n) / 100 })} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[11px]">Payment ($/mo)</Label>
@@ -438,9 +441,14 @@ function DistributionEditor({
 export function SmithTrackerCard({
   profile,
   onSave,
+  locked = false,
+  onLocked,
 }: {
   profile: Profile;
   onSave: (t: SmithTranche[]) => void;
+  /** When true, tranche data renders read-only; edit actions open the upgrade prompt. */
+  locked?: boolean;
+  onLocked?: () => void;
 }) {
   const [tranches, setTranches] = useState<SmithTranche[]>(profile.smith_tranches ?? []);
   const [result, setResult] = useState<SmithLedgerResult | null>(null);
@@ -465,7 +473,7 @@ export function SmithTrackerCard({
   return (
     <div className="rounded-xl border bg-card p-4 space-y-4">
       <div>
-        <h3 className="text-base font-semibold">Smith Manoeuvre tracker</h3>
+        <h3 className="text-base font-semibold">HELOC Investing tracker</h3>
         <p className="text-sm text-muted-foreground">
           Each re-borrow draw is a separate tranche. Deductibility turns on the current use of
           the money — track every tranche so the interest stays defensible.
@@ -506,19 +514,32 @@ export function SmithTrackerCard({
                   ) : null}
                 </span>
                 <div className="flex gap-1">
-                  <button type="button" className="text-xs underline text-muted-foreground" onClick={() => setExpanded(isOpen ? null : t.id)}>
-                    {isOpen ? "Collapse" : "Edit"}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs underline text-muted-foreground"
-                    onClick={() => {
-                      setTranches(tranches.filter((x) => x.id !== t.id));
-                      setResult(null);
-                    }}
-                  >
-                    Remove
-                  </button>
+                  {locked ? (
+                    <button
+                      type="button"
+                      className="text-xs underline text-muted-foreground"
+                      onClick={onLocked}
+                      title="Pro feature — click to upgrade"
+                    >
+                      🔒 Edit
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button" className="text-xs underline text-muted-foreground" onClick={() => setExpanded(isOpen ? null : t.id)}>
+                        {isOpen ? "Collapse" : "Edit"}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs underline text-muted-foreground"
+                        onClick={() => {
+                          setTranches(tranches.filter((x) => x.id !== t.id));
+                          setResult(null);
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               {isOpen ? (
@@ -537,7 +558,7 @@ export function SmithTrackerCard({
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[11px]">Rate (%/yr)</Label>
-                    <NumInput value={Math.round(t.rate * 1000) / 10} onCommit={(n) => update(t.id, { rate: Math.max(0, n) / 100 })} />
+                    <NumInput value={Math.round(t.rate * 10000) / 100} onCommit={(n) => update(t.id, { rate: Math.max(0, n) / 100 })} />
                   </div>
                   <div className="space-y-1 sm:col-span-2">
                     <Label className="text-[11px]">Where the money went</Label>
@@ -617,9 +638,15 @@ export function SmithTrackerCard({
             </div>
           );
         })}
-        <Button size="sm" variant="outline" onClick={() => setTranches([...tranches, newSmithTranche()])}>
-          Add tranche
-        </Button>
+        {locked ? (
+          <Button size="sm" variant="outline" onClick={onLocked} title="Pro feature — click to upgrade">
+            🔒 Add tranche
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => setTranches([...tranches, newSmithTranche()])}>
+            Add tranche
+          </Button>
+        )}
       </div>
 
       <div>
@@ -651,7 +678,7 @@ export function SmithTrackerCard({
   );
 }
 
-/** Compact Smith Manoeuvre summary for the retirement planner; full tracking lives on the Smith tab. */
+/** Compact HELOC investing summary for the retirement planner; full tracking lives on the HELOC Investing tab. */
 export function SmithSummaryCard({ profile }: { profile: Profile }) {
   const tranches = profile.smith_tranches ?? [];
   if (tranches.length === 0) return null;
@@ -660,7 +687,7 @@ export function SmithSummaryCard({ profile }: { profile: Profile }) {
   return (
     <div className="rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">Smith Manoeuvre</h3>
+        <h3 className="text-base font-semibold">HELOC Investing</h3>
         <a href="/smith" className="text-xs underline text-muted-foreground">
           Open tracker →
         </a>

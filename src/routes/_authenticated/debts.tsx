@@ -10,13 +10,14 @@ export const Route = createFileRoute("/_authenticated/debts")({
       {
         name: "description",
         content:
-          "Manage your debts in one place: mortgages, HELOCs, and loans. The Smith Manoeuvre and Properties tabs link to these balances.",
+          "Manage your debts in one place: mortgages, HELOCs, and loans. The HELOC Investing and Properties tabs link to these balances.",
       },
     ],
   }),
   component: DebtsPage,
 });
 
+// Debts hub: mortgages, HELOCs, loans — linked from Smith and Properties tabs.
 function DebtsPage() {
   const { data: profile, isLoading } = useProfile();
   const updateProfile = useUpdateProfile();
@@ -37,7 +38,7 @@ function DebtsPage() {
         <h1 className="text-2xl font-bold">Debts</h1>
         <p className="text-sm text-muted-foreground">
           One list for every debt. Your{" "}
-          <Link to="/smith" className="underline">Smith Manoeuvre</Link> draws update
+          <Link to="/smith" className="underline">HELOC Investing</Link> draws update
           your HELOC here, and{" "}
           <Link to="/properties" className="underline">Properties</Link> can link
           their mortgages to these balances.
