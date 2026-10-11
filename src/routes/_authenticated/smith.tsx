@@ -23,8 +23,10 @@ import {
 import { marginalRateAt } from "@/lib/retirement/marginalRate";
 import { computeSmithSavings } from "@/lib/retirement/optimization/SmithSavings";
 import { assessSmithLedger, CRA_FILING_DISCLAIMER } from "@/lib/retirement/optimization/SmithTracker";
-import { computeRoom } from "@/lib/retirement/optimization/SmithRoom";
+import { computeRoomSegmented, type TermSegment } from "@/lib/retirement/optimization/SmithRoom";
 import { SmithTrackerCard } from "@/components/retirement/DebtNetWorth";
+import { useEntitlement } from "@/lib/entitlement";
+import { UpgradeDialog } from "@/components/PlanUpgrade";
 
 export const Route = createFileRoute("/_authenticated/smith")({
   staticData: { sitemap: false },
@@ -41,9 +43,44 @@ export const Route = createFileRoute("/_authenticated/smith")({
   component: SmithPage,
 });
 
+function LockedSection({
+  locked,
+  onUnlock,
+  children,
+  label,
+}: {
+  locked: boolean;
+  onUnlock: () => void;
+  children: React.ReactNode;
+  label: string;
+}) {
+  if (!locked) return <>{children}</>;
+  return (
+    <div className="relative">
+      <div className="pointer-events-none select-none opacity-60" aria-hidden>
+        {children}
+      </div>
+      <button
+        type="button"
+        onClick={onUnlock}
+        className="absolute inset-0 flex items-center justify-center rounded-xl bg-background/40 backdrop-blur-[1px]"
+        aria-label={`${label} — Pro feature, click to upgrade`}
+      >
+        <span className="rounded-full border bg-card px-4 py-2 text-sm font-medium shadow-sm">
+          🔒 {label} — Pro feature
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function SmithPage() {
   const { data: profile, isLoading } = useProfile();
   const updateProfile = useUpdateProfile();
+  const { entitlement } = useEntitlement();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  // HELOC investing tracker is a Pro feature; free users see data read-only.
+  const hasTrackerPro = entitlement.tier !== "free";
 
   const p = profile ?? null;
   const tranches = p?.smith_tranches ?? [];
@@ -56,6 +93,11 @@ function SmithPage() {
     startMortgageBalance: 0,
     bocRateLastSeen: null,
     bocCheckedDate: null,
+    openingDrawn: 0,
+    openingDate: null,
+    investmentAccountId: null,
+    investmentHoldingIds: [],
+    homeValue: null,
   };
 
   const save = (patch: Parameters<typeof updateProfile.mutate>[0]) =>
@@ -77,21 +119,41 @@ function SmithPage() {
   const pairReady = !!(pairMortgage && pairHeloc && settings.startDate);
 
   const totalDrawn = tranches.reduce((s, t) => s + Math.max(0, t.principal), 0);
-  const room = useMemo(
-    () =>
-      pairReady && pairMortgage && settings.startDate
-        ? computeRoom({
-            startBalance: settings.startMortgageBalance,
-            rate: pairMortgage.rate,
-            payment: pairMortgage.payment,
-            frequency: pairMortgage.paymentFrequency ?? "monthly",
-            startDate: settings.startDate,
-            totalDrawn,
-            today: new Date().toISOString().slice(0, 10),
-          })
-        : null,
-    [pairReady, pairMortgage, settings.startDate, settings.startMortgageBalance, totalDrawn],
-  );
+  // Opening position counts as drawn for room purposes.
+  const totalDrawnWithOpening = totalDrawn + Math.max(0, settings.openingDrawn ?? 0);
+  const room = useMemo(() => {
+    if (!pairReady || !pairMortgage || !settings.startDate) return null;
+    const today = new Date().toISOString().slice(0, 10);
+    // Build term segments: prior terms from history, then current terms to today.
+    // Old terms keep their own rate/payment so refinancing never rewrites history.
+    const segments: TermSegment[] = [];
+    const history = (pairMortgage.termHistory ?? [])
+      .filter((t) => t.date && t.date >= settings.startDate!)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    let segStart = settings.startDate;
+    let segBalance = settings.startMortgageBalance;
+    for (const t of history) {
+      segments.push({
+        startDate: segStart,
+        endDate: t.date,
+        startBalance: segBalance,
+        rate: t.rate,
+        payment: t.payment,
+        frequency: t.paymentFrequency ?? pairMortgage.paymentFrequency ?? "monthly",
+      });
+      segStart = t.date;
+      segBalance = t.balance;
+    }
+    segments.push({
+      startDate: segStart,
+      endDate: null,
+      startBalance: segBalance,
+      rate: pairMortgage.rate,
+      payment: pairMortgage.payment,
+      frequency: pairMortgage.paymentFrequency ?? "monthly",
+    });
+    return computeRoomSegmented(segments, totalDrawnWithOpening, today);
+  }, [pairReady, pairMortgage, settings.startDate, settings.startMortgageBalance, settings.openingDrawn, totalDrawnWithOpening]);
 
   const interestPaidYtd = tranches.reduce((s, t) => s + Math.max(0, t.interestPaidYtd), 0);
   const deductibleOutstanding = tranches.reduce(
@@ -143,6 +205,11 @@ function SmithPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        reason="The HELOC investing tracker is a Pro feature. Upgrade to set up your readvanceable mortgage pair, record draws, and keep per-tranche tax records."
+      />
       <div>
         <h1 className="text-2xl font-bold">Home Equity Investing Tracker</h1>
         <p className="text-sm text-muted-foreground">
@@ -234,6 +301,36 @@ function SmithPage() {
           holdings={p?.asset_holdings ?? []}
           drawn={deductibleOutstanding}
           distributionsYtd={ledger.distributions.total}
+          investmentHoldingIds={settings.investmentHoldingIds ?? []}
+          onLinkHolding={(id) =>
+            save({
+              smith_settings: {
+                ...settings,
+                investmentHoldingIds: [...(settings.investmentHoldingIds ?? []), id],
+              },
+            })
+          }
+          onUnlinkHolding={(id) =>
+            save({
+              smith_settings: {
+                ...settings,
+                investmentHoldingIds: (settings.investmentHoldingIds ?? []).filter((x) => x !== id),
+              },
+            })
+          }
+          onCreateHolding={(name, value) => {
+            const id = `h-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            save({
+              asset_holdings: [
+                ...(p?.asset_holdings ?? []),
+                { id, name, taxType: "growthEquity", value, yield: 0, account: "NON_REGISTERED" },
+              ],
+              smith_settings: {
+                ...settings,
+                investmentHoldingIds: [...(settings.investmentHoldingIds ?? []), id],
+              },
+            });
+          }}
         />
       </div>
 
@@ -273,6 +370,9 @@ function SmithPage() {
           heloc={pairHeloc}
           room={room}
           tranches={tranches}
+          openingDrawn={settings.openingDrawn ?? 0}
+          locked={!hasTrackerPro}
+          onUnlock={() => setUpgradeOpen(true)}
           lastTranche={tranches.length > 0 ? tranches[tranches.length - 1] : null}
           onDraw={(tranche, drawnAmount) => {
             const next = [...tranches, tranche];
@@ -303,28 +403,33 @@ function SmithPage() {
           }
         />
       ) : (
-        <PairSetupCard
-          debts={debts}
-          onSetup={(mortgageId, helocId, startDate, startBalance) =>
-            save({
-              smith_settings: {
-                ...settings,
-                mortgageDebtId: mortgageId,
-                helocDebtId: helocId,
-                startDate,
-                startMortgageBalance: startBalance,
-              },
-              debts: debts.map((d) =>
-                d.id === mortgageId
-                  ? { ...d, linkedDebtId: helocId }
-                  : d.id === helocId
-                    ? { ...d, linkedDebtId: mortgageId }
-                    : d,
-              ),
-            })
-          }
-          onCreateDebt={(debt) => save({ debts: [...debts, debt] })}
-        />
+        <LockedSection locked={!hasTrackerPro} onUnlock={() => setUpgradeOpen(true)} label="Setup">
+          <PairSetupCard
+            debts={debts}
+            onSetup={(args) =>
+              save({
+                smith_settings: {
+                  ...settings,
+                  mortgageDebtId: args.mortgageId,
+                  helocDebtId: args.helocId,
+                  startDate: args.startDate,
+                  startMortgageBalance: args.startBalance,
+                  openingDrawn: args.openingDrawn,
+                  openingDate: args.openingDate,
+                  homeValue: args.homeValue,
+                },
+                debts: debts.map((d) =>
+                  d.id === args.mortgageId
+                    ? { ...d, linkedDebtId: args.helocId }
+                    : d.id === args.helocId
+                      ? { ...d, linkedDebtId: args.mortgageId }
+                      : d,
+                ),
+              })
+            }
+            onCreateDebt={(debt) => save({ debts: [...debts, debt] })}
+          />
+        </LockedSection>
       )}
 
       {/* Prior interest */}
@@ -418,46 +523,117 @@ function SmithPerformanceCard({
   holdings,
   drawn,
   distributionsYtd,
+  investmentHoldingIds,
+  onLinkHolding,
+  onUnlinkHolding,
+  onCreateHolding,
 }: {
   tranches: SmithTranche[];
   holdings: Array<{ id: string; name: string; value: number }>;
   drawn: number;
   distributionsYtd: number;
+  investmentHoldingIds: string[];
+  onLinkHolding: (id: string) => void;
+  onUnlinkHolding: (id: string) => void;
+  onCreateHolding: (name: string, value: number) => void;
 }) {
-  const linkedIds = new Set(
+  const [linkId, setLinkId] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [showNew, setShowNew] = useState(false);
+
+  const trancheLinkedIds = new Set(
     tranches.map((t) => t.holdingId).filter((id): id is string => !!id),
   );
-  const linkedHoldings = holdings.filter((h) => linkedIds.has(h.id));
+  const allLinkedIds = new Set([...trancheLinkedIds, ...investmentHoldingIds]);
+  const linkedHoldings = holdings.filter((h) => allLinkedIds.has(h.id));
+  const unlinkedHoldings = holdings.filter((h) => !allLinkedIds.has(h.id));
   const linkedValue = linkedHoldings.reduce((s, h) => s + Math.max(0, h.value), 0);
   const gain = linkedValue - drawn;
   const gainPct = drawn > 0 ? (gain / drawn) * 100 : 0;
   const yieldPct = linkedValue > 0 ? (distributionsYtd / linkedValue) * 100 : 0;
-  if (linkedIds.size === 0) {
-    return (
-      <div className="rounded-xl border p-4">
-        <div className="text-xs text-muted-foreground">Investment account</div>
-        <div className="text-sm text-muted-foreground mt-1">
-          Link tranches to investment holdings (in the tracker below) to see how the
-          borrowed money is doing.
-        </div>
-      </div>
-    );
-  }
+
   return (
-    <div className="rounded-xl border p-4 space-y-1">
+    <div className="rounded-xl border p-4 space-y-2">
       <div className="text-xs text-muted-foreground">Investment account</div>
-      <div className="text-2xl font-bold">{formatCad(linkedValue)}</div>
-      <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-        {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn
+      {linkedHoldings.length > 0 ? (
+        <>
+          <div className="text-2xl font-bold">{formatCad(linkedValue)}</div>
+          <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+            {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            {formatCad(distributionsYtd)} distributions YTD
+            {yieldPct > 0 ? ` · ${yieldPct.toFixed(1)}% yield` : ""}
+          </div>
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {linkedHoldings.map((h) => (
+              <span key={h.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
+                {h.name || "Holding"} — {formatCad(h.value)}
+                {investmentHoldingIds.includes(h.id) ? (
+                  <button
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => onUnlinkHolding(h.id)}
+                    aria-label={`Unlink ${h.name}`}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="text-sm text-muted-foreground">
+          Link the investments bought with the borrowed money — or add them here.
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        {unlinkedHoldings.length > 0 ? (
+          <>
+            <Select value={linkId} onValueChange={setLinkId}>
+              <SelectTrigger className="w-44"><SelectValue placeholder="Link existing holding" /></SelectTrigger>
+              <SelectContent>
+                {unlinkedHoldings.map((h) => (
+                  <SelectItem key={h.id} value={h.id}>{h.name || "Holding"}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" disabled={!linkId} onClick={() => { onLinkHolding(linkId); setLinkId(""); }}>
+              Link
+            </Button>
+          </>
+        ) : null}
+        <Button size="sm" variant="outline" onClick={() => setShowNew(!showNew)}>
+          {showNew ? "Cancel" : "Add new investment"}
+        </Button>
       </div>
-      <div className="text-[11px] text-muted-foreground">
-        {formatCad(distributionsYtd)} distributions YTD
-        {yieldPct > 0 ? ` · ${yieldPct.toFixed(1)}% yield` : ""}
-      </div>
-      <div className="text-[11px] text-muted-foreground">
-        {linkedHoldings.length} holding{linkedIds.size === 1 ? "" : "s"} linked
-        {linkedHoldings.length > 0 ? `: ${linkedHoldings.map((h) => h.name || "Holding").join(", ")}` : ""}
-      </div>
+      {showNew ? (
+        <div className="grid gap-2 sm:grid-cols-3 pt-1">
+          <div className="space-y-1">
+            <Label className="text-xs">Name</Label>
+            <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. XEQT" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Current value ($)</Label>
+            <NumInput value={newValue === "" ? null : Number(newValue)} onCommit={(n) => setNewValue(String(Math.max(0, n)))} />
+          </div>
+          <div className="flex items-end">
+            <Button
+              size="sm"
+              disabled={!newName.trim()}
+              onClick={() => {
+                onCreateHolding(newName.trim(), Number(newValue) || 0);
+                setNewName("");
+                setNewValue("");
+                setShowNew(false);
+              }}
+            >
+              Add & link
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -468,7 +644,15 @@ function PairSetupCard({
   onCreateDebt,
 }: {
   debts: DebtInput[];
-  onSetup: (mortgageId: string, helocId: string, startDate: string, startBalance: number) => void;
+  onSetup: (args: {
+    mortgageId: string;
+    helocId: string;
+    startDate: string;
+    startBalance: number;
+    openingDrawn: number;
+    openingDate: string | null;
+    homeValue: number | null;
+  }) => void;
   onCreateDebt: (debt: DebtInput) => void;
 }) {
   const mortgages = debts.filter((d) => d.kind === "mortgage");
@@ -478,6 +662,9 @@ function PairSetupCard({
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [showNewMortgage, setShowNewMortgage] = useState(false);
   const [showNewHeloc, setShowNewHeloc] = useState(false);
+  const [alreadyStarted, setAlreadyStarted] = useState(false);
+  const [openingDrawn, setOpeningDrawn] = useState("");
+  const [homeValue, setHomeValue] = useState("");
 
   const mortgage = debts.find((d) => d.id === mortgageId) ?? null;
 
@@ -559,12 +746,41 @@ function PairSetupCard({
         <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         <p className="text-[11px] text-muted-foreground">Room accrues from this date.</p>
       </div>
+      <div className="space-y-1 max-w-xs">
+        <Label className="text-xs">Current home value ($)</Label>
+        <NumInput value={homeValue === "" ? null : Number(homeValue)} onCommit={(n) => setHomeValue(String(Math.max(0, n)))} />
+        <p className="text-[11px] text-muted-foreground">What is your home worth right now? Used for readvanceable-limit context.</p>
+      </div>
+      <div className="rounded-lg border p-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <Switch checked={alreadyStarted} onCheckedChange={setAlreadyStarted} />
+          <Label className="text-xs">Already doing this — I have draws from before</Label>
+        </div>
+        {alreadyStarted ? (
+          <div className="space-y-1 max-w-xs">
+            <Label className="text-xs">Already drawn for investing ($)</Label>
+            <NumInput value={openingDrawn === "" ? null : Number(openingDrawn)} onCommit={(n) => setOpeningDrawn(String(Math.max(0, n)))} />
+            <p className="text-[11px] text-muted-foreground">
+              How much have you already drawn on this HELOC for investing? This becomes your
+              opening position — new draws are tracked on top, not re-entered.
+            </p>
+          </div>
+        ) : null}
+      </div>
       <Button
         size="sm"
         disabled={!canStart}
         onClick={() =>
           canStart &&
-          onSetup(mortgageId, helocId, startDate, mortgage ? mortgage.balance : 0)
+          onSetup({
+            mortgageId,
+            helocId,
+            startDate,
+            startBalance: mortgage ? mortgage.balance : 0,
+            openingDrawn: alreadyStarted ? Number(openingDrawn) || 0 : 0,
+            openingDate: alreadyStarted ? startDate : null,
+            homeValue: homeValue === "" ? null : Number(homeValue) || null,
+          })
         }
       >
         Start tracking
@@ -660,11 +876,52 @@ function NewDebtForm({
   );
 }
 
+function ReconciliationLine({
+  helocBalance,
+  openingDrawn,
+  tranches,
+}: {
+  helocBalance: number;
+  openingDrawn: number;
+  tranches: SmithTranche[];
+}) {
+  const trancheTotal = tranches.reduce((s, t) => s + Math.max(0, t.principal), 0);
+  const repayments = tranches.reduce(
+    (s, t) => s + t.repayments.reduce((r, x) => r + Math.max(0, x.amount), 0),
+    0,
+  );
+  const expected = Math.max(0, openingDrawn) + trancheTotal - repayments;
+  const diff = helocBalance - expected;
+  const matches = Math.abs(diff) < 0.01;
+
+  return (
+    <div className="rounded-lg border bg-muted/40 p-3 text-xs">
+      <span className="font-medium">HELOC check:</span>{" "}
+      {formatCad(helocBalance)} balance
+      {matches ? (
+        <span className="text-emerald-700">
+          {" "}= {formatCad(Math.max(0, openingDrawn))} opening + {formatCad(trancheTotal)} draws
+          {repayments > 0 ? ` − ${formatCad(repayments)} repaid` : ""} ✓
+        </span>
+      ) : (
+        <span className="text-amber-700">
+          {" "}doesn&apos;t match the ledger ({formatCad(Math.max(0, openingDrawn))} opening +{" "}
+          {formatCad(trancheTotal)} draws{repayments > 0 ? ` − ${formatCad(repayments)} repaid` : ""}{" "}
+          = {formatCad(expected)}). Check the balance on the Debts tab.
+        </span>
+      )}
+    </div>
+  );
+}
+
 function RoomDrawCard({
   mortgage,
   heloc,
   room,
   tranches,
+  openingDrawn,
+  locked,
+  onUnlock,
   lastTranche,
   onDraw,
   onRefinance,
@@ -674,10 +931,13 @@ function RoomDrawCard({
   heloc: DebtInput;
   room: { roomCreated: number; roomAvailable: number; paymentsCounted: number };
   tranches: SmithTranche[];
+  openingDrawn: number;
+  locked: boolean;
+  onUnlock: () => void;
   lastTranche: SmithTranche | null;
   onDraw: (tranche: SmithTranche, drawnAmount: number) => void;
   onRefinance: (
-    snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number },
+    snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number; paymentFrequency?: "weekly" | "biweekly" | "monthly" },
     newTerms: { balance: number; rate: number; payment: number; paymentFrequency: "weekly" | "biweekly" | "monthly" },
   ) => void;
   onUnlink: () => void;
@@ -741,13 +1001,15 @@ function RoomDrawCard({
       </div>
 
       {showRefinance ? (
-        <RefinanceForm
-          mortgage={mortgage}
-          onRefinance={(snapshot, newTerms) => {
-            onRefinance(snapshot, newTerms);
-            setShowRefinance(false);
-          }}
-        />
+        <LockedSection locked={locked} onUnlock={onUnlock} label="Refinance">
+          <RefinanceForm
+            mortgage={mortgage}
+            onRefinance={(snapshot, newTerms) => {
+              onRefinance(snapshot, newTerms);
+              setShowRefinance(false);
+            }}
+          />
+        </LockedSection>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -773,10 +1035,17 @@ function RoomDrawCard({
         </div>
       </div>
 
-      <div className="space-y-3 rounded-lg border p-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium">Record a draw</h4>
-          {lastTranche ? (
+      <ReconciliationLine
+        helocBalance={heloc.balance}
+        openingDrawn={openingDrawn}
+        tranches={tranches}
+      />
+
+      <LockedSection locked={locked} onUnlock={onUnlock} label="Record a draw">
+        <div className="space-y-3 rounded-lg border p-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium">Record a draw</h4>
+            {lastTranche ? (
             <Button size="sm" variant="outline" onClick={repeatLast}>
               Repeat last purchase
             </Button>
@@ -815,7 +1084,8 @@ function RoomDrawCard({
         <p className="text-[11px] text-muted-foreground">
           The HELOC balance on your Debts tab updates automatically.
         </p>
-      </div>
+        </div>
+      </LockedSection>
     </div>
   );
 }
@@ -826,7 +1096,7 @@ function RefinanceForm({
 }: {
   mortgage: DebtInput;
   onRefinance: (
-    snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number },
+    snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number; paymentFrequency?: "weekly" | "biweekly" | "monthly" },
     newTerms: { balance: number; rate: number; payment: number; paymentFrequency: "weekly" | "biweekly" | "monthly" },
   ) => void;
 }) {
@@ -883,6 +1153,7 @@ function RefinanceForm({
               rate: mortgage.rate,
               payment: mortgage.payment,
               propertyValue,
+              paymentFrequency: mortgage.paymentFrequency ?? "monthly",
             },
             {
               balance: Math.max(0, balance),
