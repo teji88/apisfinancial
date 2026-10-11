@@ -100,8 +100,11 @@ export function DebtsForm({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px]">Balance ($)</Label>
+                  <Label className="text-[11px]">Balance owed ($)</Label>
                   <NumInput value={d.balance} onCommit={(n) => update(d.id, { balance: Math.max(0, n) })} />
+                  {d.kind === "heloc" ? (
+                    <p className="text-[10px] text-muted-foreground">Amount drawn — not the available credit.</p>
+                  ) : null}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[11px]">Rate (%/yr)</Label>
