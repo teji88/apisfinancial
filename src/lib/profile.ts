@@ -75,6 +75,7 @@ export type DebtInput = {
     rate: number;
     payment: number;
     propertyValue: number;
+    paymentFrequency?: "weekly" | "biweekly" | "monthly";
   }>;
 };
 
@@ -186,6 +187,16 @@ export type SmithSettingsInput = {
   bocRateLastSeen: number | null;
   /** Date the BoC rate was last checked (YYYY-MM-DD). */
   bocCheckedDate: string | null;
+  /** Already drawn for investing before tracking started ($) — opening position. */
+  openingDrawn: number;
+  /** Date the opening position was measured (YYYY-MM-DD). */
+  openingDate: string | null;
+  /** Portfolio account id holding the invested funds (null = not linked). */
+  investmentAccountId: string | null;
+  /** AssetHolding ids designated as the Smith investment account. */
+  investmentHoldingIds: string[];
+  /** Current home/property value ($) — used for readvanceable limit context. */
+  homeValue: number | null;
 };
 
 export type Profile = {
