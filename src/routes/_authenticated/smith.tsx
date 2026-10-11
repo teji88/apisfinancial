@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/select";
 import { NumInput } from "@/components/ui/num-input";
 import { Switch } from "@/components/ui/switch";
-import { formatCad } from "@/lib/finance";
+import { formatCad, summariseAccount, type Account } from "@/lib/finance";
+import { usePortfolio } from "@/lib/portfolio";
 import type { ProvinceCode } from "@/lib/tax";
 import {
   useProfile,
@@ -82,6 +83,15 @@ function SmithPage() {
   // HELOC investing tracker is a Pro feature; free users see data read-only.
   const hasTrackerPro = entitlement.tier !== "free";
 
+  // Real portfolio accounts (Accounts tab) — the primary source for linked investments.
+  const {
+    accounts: portfolioAccounts,
+    holdings: portfolioHoldings,
+    transactions: portfolioTransactions,
+    quotes,
+    fxUsdCad,
+  } = usePortfolio();
+
   const p = profile ?? null;
   const tranches = p?.smith_tranches ?? [];
   const debts = p?.debts ?? [];
@@ -102,6 +112,26 @@ function SmithPage() {
 
   const save = (patch: Parameters<typeof updateProfile.mutate>[0]) =>
     updateProfile.mutate(patch);
+
+  // Linked portfolio account (Accounts tab) — computed live from the real ledger.
+  const linkedAccount = useMemo(
+    () =>
+      settings.investmentAccountId
+        ? (portfolioAccounts.find((a) => a.id === settings.investmentAccountId) ?? null)
+        : null,
+    [portfolioAccounts, settings.investmentAccountId],
+  );
+  const linkedAccountValue = useMemo(() => {
+    if (!linkedAccount) return null;
+    const s = summariseAccount(
+      linkedAccount,
+      portfolioTransactions.filter((t) => t.account_id === linkedAccount.id),
+      portfolioHoldings.filter((h) => h.account_id === linkedAccount.id),
+      quotes,
+      fxUsdCad,
+    );
+    return s.totalValue;
+  }, [linkedAccount, portfolioTransactions, portfolioHoldings, quotes, fxUsdCad]);
 
   const province = (p?.province as ProvinceCode) ?? "AB";
   const salary = p?.cpp_future_income ?? 0;
@@ -318,19 +348,13 @@ function SmithPage() {
               },
             })
           }
-          onCreateHolding={(name, value) => {
-            const id = `h-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            save({
-              asset_holdings: [
-                ...(p?.asset_holdings ?? []),
-                { id, name, taxType: "growthEquity", value, yield: 0, account: "NON_REGISTERED" },
-              ],
-              smith_settings: {
-                ...settings,
-                investmentHoldingIds: [...(settings.investmentHoldingIds ?? []), id],
-              },
-            });
-          }}
+          accounts={portfolioAccounts}
+          investmentAccountId={settings.investmentAccountId ?? null}
+          onSelectAccount={(id) =>
+            save({ smith_settings: { ...settings, investmentAccountId: id } })
+          }
+          linkedAccountName={linkedAccount?.account_name ?? null}
+          linkedAccountValue={linkedAccountValue}
           locked={!hasTrackerPro}
           onUnlock={() => setUpgradeOpen(true)}
         />
@@ -540,7 +564,11 @@ function SmithPerformanceCard({
   investmentHoldingIds,
   onLinkHolding,
   onUnlinkHolding,
-  onCreateHolding,
+  accounts,
+  investmentAccountId,
+  onSelectAccount,
+  linkedAccountName,
+  linkedAccountValue,
   locked,
   onUnlock,
 }: {
@@ -551,14 +579,15 @@ function SmithPerformanceCard({
   investmentHoldingIds: string[];
   onLinkHolding: (id: string) => void;
   onUnlinkHolding: (id: string) => void;
-  onCreateHolding: (name: string, value: number) => void;
+  accounts: Account[];
+  investmentAccountId: string | null;
+  onSelectAccount: (id: string | null) => void;
+  linkedAccountName: string | null;
+  linkedAccountValue: number | null;
   locked: boolean;
   onUnlock: () => void;
 }) {
   const [linkId, setLinkId] = useState("");
-  const [newName, setNewName] = useState("");
-  const [newValue, setNewValue] = useState("");
-  const [showNew, setShowNew] = useState(false);
 
   const trancheLinkedIds = new Set(
     tranches.map((t) => t.holdingId).filter((id): id is string => !!id),
@@ -566,17 +595,61 @@ function SmithPerformanceCard({
   const allLinkedIds = new Set([...trancheLinkedIds, ...investmentHoldingIds]);
   const linkedHoldings = holdings.filter((h) => allLinkedIds.has(h.id));
   const unlinkedHoldings = holdings.filter((h) => !allLinkedIds.has(h.id));
-  const linkedValue = linkedHoldings.reduce((s, h) => s + Math.max(0, h.value), 0);
-  const gain = linkedValue - drawn;
+  const linkedHoldingsValue = linkedHoldings.reduce((s, h) => s + Math.max(0, h.value), 0);
+  // Account link is primary; per-holding links are optional detail as a fallback.
+  const investmentValue = linkedAccountValue ?? linkedHoldingsValue;
+  const gain = investmentValue - drawn;
   const gainPct = drawn > 0 ? (gain / drawn) * 100 : 0;
-  const yieldPct = linkedValue > 0 ? (distributionsYtd / linkedValue) * 100 : 0;
+  const yieldPct = investmentValue > 0 ? (distributionsYtd / investmentValue) * 100 : 0;
 
   return (
     <div className="rounded-xl border p-4 space-y-2">
       <div className="text-xs text-muted-foreground">Investment account</div>
-      {linkedHoldings.length > 0 ? (
+      {/* Portfolio account linking is an entry action — Pro only. Linked data stays visible read-only. */}
+      <LockedSection locked={locked} onUnlock={onUnlock} label="Investment account">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={investmentAccountId ?? ""}
+            onValueChange={(v) => onSelectAccount(v === "" ? null : v)}
+          >
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Link an account from the Accounts tab" />
+            </SelectTrigger>
+            <SelectContent>
+              {accounts.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.account_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {investmentAccountId ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onSelectAccount(null)}
+              title={locked ? "Pro feature — click to upgrade" : undefined}
+            >
+              Unlink
+            </Button>
+          ) : null}
+        </div>
+      </LockedSection>
+      {linkedAccountValue != null ? (
         <>
-          <div className="text-2xl font-bold">{formatCad(linkedValue)}</div>
+          <div className="text-2xl font-bold">{formatCad(linkedAccountValue)}</div>
+          <div className="text-[11px] text-muted-foreground">{linkedAccountName}</div>
+          <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+            {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            {formatCad(distributionsYtd)} distributions YTD
+            {yieldPct > 0 ? ` · ${yieldPct.toFixed(1)}% yield` : ""}
+          </div>
+        </>
+      ) : linkedHoldings.length > 0 ? (
+        <>
+          <div className="text-2xl font-bold">{formatCad(linkedHoldingsValue)}</div>
           <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700" : "text-red-700"}`}>
             {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn
           </div>
@@ -587,11 +660,18 @@ function SmithPerformanceCard({
         </>
       ) : (
         <div className="text-sm text-muted-foreground">
-          Link the investments bought with the borrowed money — or add them here.
+          Link the account holding the investments bought with the borrowed money.
         </div>
       )}
-      {/* Link / unlink / create are entry actions — Pro only. Linked data stays visible read-only. */}
-      <LockedSection locked={locked} onUnlock={onUnlock} label="Investment account">
+      <p className="text-[11px] text-muted-foreground">
+        Add investments normally in the{" "}
+        <Link to="/accounts" className="text-primary underline">
+          Accounts tab
+        </Link>{" "}
+        — they appear here once this account is linked.
+      </p>
+      {/* Link / unlink are entry actions — Pro only. Linked data stays visible read-only. */}
+      <LockedSection locked={locked} onUnlock={onUnlock} label="Investment holdings">
       <div className="flex flex-wrap gap-1.5 pt-1">
         {linkedHoldings.map((h) => (
           <span key={h.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
@@ -608,50 +688,19 @@ function SmithPerformanceCard({
           </span>
         ))}
       </div>
-      <div className="flex flex-wrap items-center gap-2 pt-1">
-        {unlinkedHoldings.length > 0 ? (
-          <>
-            <Select value={linkId} onValueChange={setLinkId}>
-              <SelectTrigger className="w-44"><SelectValue placeholder="Link existing holding" /></SelectTrigger>
-              <SelectContent>
-                {unlinkedHoldings.map((h) => (
-                  <SelectItem key={h.id} value={h.id}>{h.name || "Holding"}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button size="sm" variant="outline" disabled={!linkId} onClick={() => { onLinkHolding(linkId); setLinkId(""); }}>
-              Link
-            </Button>
-          </>
-        ) : null}
-        <Button size="sm" variant="outline" onClick={() => setShowNew(!showNew)}>
-          {showNew ? "Cancel" : "Add new investment"}
-        </Button>
-      </div>
-      {showNew ? (
-        <div className="grid gap-2 sm:grid-cols-3 pt-1">
-          <div className="space-y-1">
-            <Label className="text-xs">Name</Label>
-            <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. XEQT" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Current value ($)</Label>
-            <NumInput value={newValue === "" ? null : Number(newValue)} onCommit={(n) => setNewValue(String(Math.max(0, n)))} />
-          </div>
-          <div className="flex items-end">
-            <Button
-              size="sm"
-              disabled={!newName.trim()}
-              onClick={() => {
-                onCreateHolding(newName.trim(), Number(newValue) || 0);
-                setNewName("");
-                setNewValue("");
-                setShowNew(false);
-              }}
-            >
-              Add & link
-            </Button>
-          </div>
+      {unlinkedHoldings.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <Select value={linkId} onValueChange={setLinkId}>
+            <SelectTrigger className="w-44"><SelectValue placeholder="Link existing holding" /></SelectTrigger>
+            <SelectContent>
+              {unlinkedHoldings.map((h) => (
+                <SelectItem key={h.id} value={h.id}>{h.name || "Holding"}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" disabled={!linkId} onClick={() => { onLinkHolding(linkId); setLinkId(""); }}>
+            Link
+          </Button>
         </div>
       ) : null}
       </LockedSection>
