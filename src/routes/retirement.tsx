@@ -29,7 +29,15 @@ import {
 import { toast } from "sonner";
 import { usePortfolio } from "@/lib/portfolio";
 import { useProfile, useUpdateProfile, type Profile, type DbPensionInput, type AssetHoldingInput, type DebtInput, type NetWorthInput, type SmithTranche } from "@/lib/profile";
-import { formatCad, summariseAccount } from "@/lib/finance";
+import {
+  computePositions,
+  formatCad,
+  summariseAccount,
+  type Account,
+  type Holding,
+  type Quote,
+  type Transaction,
+} from "@/lib/finance";
 import {
   cppPercentFromEarnings,
   cppFromDetailedHistory,
@@ -83,8 +91,10 @@ import {
 import {
   scoreAssetLocation,
   LOCATION_DISCLAIMER,
+  importHoldingsFromAccounts,
   type HoldingTaxType,
   type LocAccount,
+  type LocatedHolding,
   type LocationResult,
 } from "@/lib/retirement/optimization/AssetLocation";
 import { computeNetWorth } from "@/lib/retirement/optimization/NetWorth";
@@ -1113,6 +1123,11 @@ function RetirementPage() {
             onSaveMatch={(m) => set({ employer_match: m })}
           />
 
+          <ImportHoldingsButton
+            portfolio={{ accounts, holdings, transactions, quotes, fxUsdCad }}
+            existing={p.asset_holdings ?? []}
+            onImport={(merged) => set({ asset_holdings: merged })}
+          />
           <AssetLocationCard profile={p} onSave={(holdings) => set({ asset_holdings: holdings })} />
 
           <NetWorthCard
@@ -2267,6 +2282,75 @@ function newHolding(): AssetHoldingInput {
     yield: 0.02,
     account: "NON_REGISTERED",
   };
+}
+
+/**
+ * One-time snapshot import of live portfolio positions into the planner's
+ * manual holdings list. Free for everyone — the planner is not Pro-gated.
+ */
+function ImportHoldingsButton({
+  portfolio,
+  existing,
+  onImport,
+}: {
+  portfolio: {
+    accounts: Account[];
+    holdings: Holding[];
+    transactions: Transaction[];
+    quotes: Record<string, Quote>;
+    fxUsdCad: number;
+  };
+  existing: AssetHoldingInput[];
+  onImport: (merged: AssetHoldingInput[], imported: number, skipped: number) => void;
+}) {
+  const [message, setMessage] = useState<string | null>(null);
+
+  if (portfolio.accounts.length === 0) return null;
+
+  const handleImport = () => {
+    const positions = computePositions(
+      portfolio.holdings,
+      portfolio.transactions,
+      portfolio.quotes,
+      portfolio.fxUsdCad,
+    );
+    const accountById = new Map(portfolio.accounts.map((a) => [a.id, a]));
+    const snapshots = positions
+      .filter((pos) => pos.units > 0 && pos.marketValue > 0)
+      .map((pos) => {
+        const acct = accountById.get(pos.accountId);
+        const quote = portfolio.quotes[pos.symbol];
+        return {
+          symbol: pos.symbol,
+          name: pos.name,
+          accountType: acct?.account_type ?? "",
+          marketValueCad: pos.marketValue,
+          // Quotes store dividend yield as a percent (e.g. 3.5); the planner
+          // stores yield as a decimal (e.g. 0.035).
+          yieldDecimal: (quote?.dividendYield ?? 0) / 100,
+        };
+      });
+    const { imported, skippedDuplicates } = importHoldingsFromAccounts(snapshots, existing);
+    onImport([...existing, ...imported], imported.length, skippedDuplicates);
+    setMessage(
+      imported.length === 0 && skippedDuplicates === 0
+        ? "No open positions found in your accounts."
+        : `Imported ${imported.length} holding${imported.length === 1 ? "" : "s"}, skipped ${skippedDuplicates} duplicate${skippedDuplicates === 1 ? "" : "s"}.`,
+    );
+  };
+
+  return (
+    <div className="space-y-1 rounded-lg border border-dashed p-3">
+      <Button size="sm" variant="outline" onClick={handleImport}>
+        Import from my accounts
+      </Button>
+      <p className="text-[11px] text-muted-foreground">
+        Snapshot from your accounts — updates won&apos;t sync automatically. After
+        importing, classify each holding&apos;s type for the location analysis.
+      </p>
+      {message ? <p className="text-xs font-medium text-emerald-700">{message}</p> : null}
+    </div>
+  );
 }
 
 function AssetLocationCard({
