@@ -3,12 +3,15 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import {
   BarChart3,
+  Building2,
   Check,
   Coins,
+  CreditCard,
   FileUp,
   Landmark,
   LayoutDashboard,
   Receipt,
+  Repeat,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -39,6 +42,22 @@ export const Route = createFileRoute("/")({
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+    ],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "Apis Financial",
+          applicationCategory: "FinanceApplication",
+          operatingSystem: "Web",
+          url: "https://www.apisfinancial.app/",
+          offers: { "@type": "Offer", price: "0", priceCurrency: "CAD" },
+          description:
+            "Canadian portfolio tracker and retirement planner: TFSA, RRSP, FHSA and non-registered accounts in CAD, dividend tracking, benchmarking, HELOC investing tracker, debt and net-worth tracking, and a retirement plan in today's dollars with Canadian tax rules.",
+        }),
+      },
     ],
   }),
   component: Landing,
@@ -75,7 +94,86 @@ const FEATURES = [
     title: "Statement reading",
     body: "Drop a statement, CSV or screenshot and have the transactions drafted for you to check before anything is saved.",
   },
+  {
+    icon: Repeat,
+    title: "HELOC investing tracker",
+    body: "Track a readvanceable mortgage and HELOC pair: re-borrowed principal, per-draw tax tracing, deductible interest for line 22100, and the investment performance behind it.",
+  },
+  {
+    icon: CreditCard,
+    title: "Debts and net worth",
+    body: "Mortgages, HELOCs and loans in one place with a payoff-vs-invest comparison, plus liquid vs illiquid net worth over time.",
+  },
+  {
+    icon: Building2,
+    title: "Investment properties",
+    body: "Rental income, expenses and capital reserves per property, with a keep-or-sell comparison against your equity.",
+  },
 ];
+
+const FAQS = [
+  {
+    q: "Can I deduct mortgage interest on my Canadian taxes?",
+    a: "Mortgage interest on your principal residence is not deductible in Canada. But interest on money borrowed to earn income from a business or investment generally is, under section 20(1)(c) of the Income Tax Act. Strategies like the Smith Manoeuvre reorganize debt so more of your borrowing qualifies — Apis Financial's HELOC investing tracker keeps the per-draw records the CRA expects.",
+  },
+  {
+    q: "What is the Smith Manoeuvre?",
+    a: "The Smith Manoeuvre is a Canadian strategy that pairs a readvanceable mortgage with a HELOC: each mortgage payment frees up HELOC room, which is re-borrowed and invested in a non-registered account so the interest becomes tax-deductible. Apis Financial tracks the moving parts — available room, draws, deductible interest and investment performance.",
+  },
+  {
+    q: "Does Apis Financial handle TFSA, RRSP and non-registered accounts?",
+    a: "Yes — TFSA, RRSP, spousal RRSP, LIRA/LRSP, RESP, RDSP, FHSA, non-registered and corporate accounts, held in CAD or USD and totalled in Canadian dollars, with adjusted cost base tracked on every purchase.",
+  },
+  {
+    q: "How does the retirement planner deal with Canadian tax?",
+    a: "It plans in today's dollars using your CPP earnings history, OAS timing, forced RRIF and LIF minimums, and OAS clawback thresholds, then builds a year-by-year withdrawal sequence designed to keep lifetime tax low.",
+  },
+  {
+    q: "Is Apis Financial free?",
+    a: "Yes — tracking, dividends, benchmarking, debts, properties, HELOC investing and the retirement planner are all free. The only paid feature is AI reading of PDF statements and screenshots, at $10 per year.",
+  },
+  {
+    q: "Is this financial advice?",
+    a: "No. Apis Financial is an informational and record-keeping tool. It does not provide financial, investment or tax advice — always verify figures yourself and consider a qualified professional.",
+  },
+];
+
+function Faq() {
+  return (
+    <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
+      <h2 className="text-center font-display text-3xl font-semibold">
+        Questions Canadians ask
+      </h2>
+      <div className="mt-8 space-y-3">
+        {FAQS.map((f) => (
+          <details
+            key={f.q}
+            className="honey-card group px-5 py-4 [&_summary::-webkit-details-marker]:hidden"
+          >
+            <summary className="cursor-pointer text-sm font-semibold list-none">
+              {f.q}
+            </summary>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{f.a}</p>
+          </details>
+        ))}
+      </div>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: FAQS.map((f) => ({
+              "@type": "Question",
+              name: f.q,
+              acceptedAnswer: { "@type": "Answer", text: f.a },
+            })),
+          }),
+        }}
+      />
+    </section>
+  );
+}
 
 function Landing() {
   const { session, loading } = useAuth();
@@ -225,6 +323,13 @@ function Landing() {
               </div>
             ))}
           </div>
+          <p className="mx-auto w-full max-w-6xl px-4 pb-16 text-center text-sm text-muted-foreground md:px-6">
+            Doing the Smith Manoeuvre? Read our{" "}
+            <Link to="/smith-manoeuvre-guide" className="underline text-primary">
+              Canadian guide to tax-deductible mortgage interest
+            </Link>
+            .
+          </p>
         </section>
 
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
@@ -279,6 +384,8 @@ function Landing() {
             </div>
           </div>
         </section>
+
+        <Faq />
 
         <section className="border-t border-border/60 bg-background/40">
           <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center md:px-6">
