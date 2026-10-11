@@ -30,11 +30,11 @@ export const Route = createFileRoute("/_authenticated/smith")({
   staticData: { sitemap: false },
   head: () => ({
     meta: [
-      { title: "Smith Manoeuvre — Apis Financial" },
+      { title: "Home Equity Investing Tracker — Apis Financial" },
       {
         name: "description",
         content:
-          "Track your Smith Manoeuvre: monthly draws, per-tranche tax tracing, deductible interest for line 22100, and the tax savings you're building.",
+          "Track your home equity investing: draws from your readvanceable mortgage, per-tranche tax tracing, deductible interest for line 22100, and the tax savings you're building.",
       },
     ],
   }),
@@ -144,7 +144,7 @@ function SmithPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       <div>
-        <h1 className="text-2xl font-bold">Smith Manoeuvre</h1>
+        <h1 className="text-2xl font-bold">Home Equity Investing Tracker</h1>
         <p className="text-sm text-muted-foreground">
           Every mortgage principal dollar, re-borrowed and invested. Track the draws,
           keep the tracing clean, and watch the tax savings compound.
@@ -170,7 +170,7 @@ function SmithPage() {
       {/* Morale dashboard */}
       {tranches.length === 0 ? (
         <div className="rounded-xl border p-6 space-y-4">
-          <h2 className="text-lg font-semibold">How the Smith Manoeuvre tracker works</h2>
+          <h2 className="text-lg font-semibold">How the Home Equity Investing tracker works</h2>
           <ol className="space-y-3 text-sm">
             <li className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-800">1</span>
@@ -435,7 +435,7 @@ function SmithPerformanceCard({
   if (linkedIds.size === 0) {
     return (
       <div className="rounded-xl border p-4">
-        <div className="text-xs text-muted-foreground">Smith investment account</div>
+        <div className="text-xs text-muted-foreground">Investment account</div>
         <div className="text-sm text-muted-foreground mt-1">
           Link tranches to investment holdings (in the tracker below) to see how the
           borrowed money is doing.
@@ -445,7 +445,7 @@ function SmithPerformanceCard({
   }
   return (
     <div className="rounded-xl border p-4 space-y-1">
-      <div className="text-xs text-muted-foreground">Smith investment account</div>
+      <div className="text-xs text-muted-foreground">Investment account</div>
       <div className="text-2xl font-bold">{formatCad(linkedValue)}</div>
       <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700" : "text-red-700"}`}>
         {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn
@@ -486,7 +486,7 @@ function PairSetupCard({
   return (
     <div className="rounded-xl border bg-card p-4 space-y-4">
       <div>
-        <h3 className="text-base font-semibold">Set up your Smith flow</h3>
+        <h3 className="text-base font-semibold">Set up your HELOC investing flow</h3>
         <p className="text-sm text-muted-foreground">
           Link your readvanceable mortgage and HELOC. Every principal payment creates
           room you can draw — the debts stay in sync automatically.
@@ -555,7 +555,7 @@ function PairSetupCard({
         </div>
       </div>
       <div className="space-y-1 max-w-xs">
-        <Label className="text-xs">Smith start date</Label>
+        <Label className="text-xs">Start date</Label>
         <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         <p className="text-[11px] text-muted-foreground">Room accrues from this date.</p>
       </div>
@@ -792,7 +792,7 @@ function RoomDrawCard({
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Rate (%/yr)</Label>
-            <NumInput value={Math.round(heloc.rate * 1000) / 10} onCommit={() => {}} />
+            <NumInput value={Math.round(heloc.rate * 10000) / 100} onCommit={() => {}} />
             <p className="text-[11px] text-muted-foreground">From HELOC — update it on the Debts tab</p>
           </div>
           <div className="space-y-1">
