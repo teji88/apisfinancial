@@ -1,9 +1,10 @@
 /**
  * Savings allocation suggester — deterministic waterfall:
  *   1. Capture the full employer match.
- *   2. RRSP vs TFSA by current marginal rate vs expected retirement withdrawal rate.
- *   3. Spousal RRSP where there is a meaningful income/RRSP-balance gap.
- *   4. Non-registered last.
+ *   2. FHSA for eligible first-home buyers (deduction + tax-free withdrawal).
+ *   3. RRSP vs TFSA by current marginal rate vs expected retirement withdrawal rate.
+ *   4. Spousal RRSP where there is a meaningful income/RRSP-balance gap.
+ *   5. Non-registered last.
  *
  * Accuracy over cleverness: every step carries its reason, and the result is
  * informational only — never prescriptive advice.
@@ -31,6 +32,10 @@ export interface SavingsAllocatorInputs {
   rrspRoom?: number | null;
   /** TFSA contribution room available ($). Null/undefined = assume room available. */
   tfsaRoom?: number | null;
+  /** Whether the user is eligible to open/contribute to an FHSA. */
+  fhsaEligible?: boolean;
+  /** FHSA contribution room available ($). Null/undefined = assume room available. */
+  fhsaRoom?: number | null;
   married: boolean;
   /** Absolute income gap between spouses ($/yr). */
   incomeGap?: number;
@@ -40,7 +45,7 @@ export interface SavingsAllocatorInputs {
   oasClawbackExposure?: boolean;
 }
 
-export type AllocationBucket = "employer_match" | "rrsp" | "spousal_rrsp" | "tfsa" | "nonreg";
+export type AllocationBucket = "employer_match" | "fhsa" | "rrsp" | "spousal_rrsp" | "tfsa" | "nonreg";
 
 export interface AllocationStep {
   bucket: AllocationBucket;
@@ -102,7 +107,24 @@ export function suggestSavingsAllocation(inputs: SavingsAllocatorInputs): Saving
     }
   }
 
-  // 2 & 3. RRSP vs TFSA, with spousal RRSP where the gap is meaningful.
+  // 2. FHSA for eligible first-home buyers — deductible like an RRSP,
+  //    tax-free on a qualifying withdrawal like a TFSA. Strictly best when eligible.
+  const fhsaRoom = inputs.fhsaRoom ?? Number.POSITIVE_INFINITY;
+  if (remaining > 0 && inputs.fhsaEligible && fhsaRoom > 0) {
+    const amt = take(Math.min(fhsaRoom, 8000));
+    if (amt > 0) {
+      steps.push({
+        bucket: "fhsa",
+        label: "FHSA",
+        amount: amt,
+        reason:
+          "Deductible like an RRSP, tax-free on a qualifying first-home withdrawal like a TFSA — " +
+          "strictly the best account for eligible first-home buyers, so it comes before the RRSP-vs-TFSA choice.",
+      });
+    }
+  }
+
+  // 3 & 4. RRSP vs TFSA, with spousal RRSP where the gap is meaningful.
   const rrspFirst = inputs.retirementMarginalRate < inputs.currentMarginalRate;
   const useSpousal =
     inputs.married &&
@@ -150,7 +172,7 @@ export function suggestSavingsAllocation(inputs: SavingsAllocatorInputs): Saving
     }
   }
 
-  // 4. Non-registered last — no shelter left.
+  // 5. Non-registered last — no shelter left.
   if (remaining > 0) {
     const amt = take(remaining);
     if (amt > 0) {
