@@ -72,7 +72,7 @@ const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/ledger", label: "Ledger", icon: Receipt },
   { to: "/dividends", label: "Dividends", icon: Coins },
-  { to: "/smith", label: "Smith Manoeuvre", icon: Repeat },
+  { to: "/smith", label: "HELOC Investing", icon: Repeat },
   { to: "/properties", label: "Properties", icon: Building2 },
   { to: "/debts", label: "Debts", icon: CreditCard },
   { to: "/performance", label: "Performance", icon: BarChart3 },
