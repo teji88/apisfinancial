@@ -152,4 +152,50 @@ describe("suggestSavingsAllocation", () => {
       expect(allText).not.toContain(phrase);
     }
   });
+
+  it("slots FHSA second when eligible, capped at the $8,000 annual limit", () => {
+    const r = suggestSavingsAllocation({
+      ...base,
+      annualSavings: 20_000,
+      fhsaEligible: true,
+      fhsaRoom: 20_000,
+      rrspRoom: 10_000,
+      tfsaRoom: 10_000,
+    });
+    const buckets = r.steps.map((s) => s.bucket);
+    expect(buckets[0]).toBe("fhsa");
+    expect(r.steps[0].amount).toBe(8_000);
+    // FHSA comes before the RRSP-vs-TFSA choice.
+    expect(buckets.indexOf("fhsa")).toBeLessThan(buckets.indexOf("rrsp"));
+    expect(buckets.indexOf("fhsa")).toBeLessThan(buckets.indexOf("tfsa"));
+    expect(r.totalAllocated).toBe(20_000);
+  });
+
+  it("skips FHSA when not eligible", () => {
+    const r = suggestSavingsAllocation({ ...base, fhsaEligible: false, fhsaRoom: 10_000 });
+    expect(r.steps.map((s) => s.bucket)).not.toContain("fhsa");
+  });
+
+  it("FHSA respects a smaller stated room", () => {
+    const r = suggestSavingsAllocation({
+      ...base,
+      annualSavings: 20_000,
+      fhsaEligible: true,
+      fhsaRoom: 3_000,
+    });
+    const fhsa = r.steps.find((s) => s.bucket === "fhsa");
+    expect(fhsa?.amount).toBe(3_000);
+  });
+
+  it("FHSA comes after the employer match", () => {
+    const r = suggestSavingsAllocation({
+      ...base,
+      annualSavings: 20_000,
+      employerMatch: { offered: true, matchRate: 0.5, maxOfSalary: 0.06 },
+      fhsaEligible: true,
+    });
+    const buckets = r.steps.map((s) => s.bucket);
+    expect(buckets[0]).toBe("employer_match");
+    expect(buckets[1]).toBe("fhsa");
+  });
 });

@@ -39,6 +39,12 @@ const DEBT_KIND_LABELS: Record<DebtInput["kind"], string> = {
   other: "Other",
 };
 
+const DEBT_OWNER_LABELS: Record<NonNullable<DebtInput["owner"]>, string> = {
+  self: "Mine",
+  partner: "Partner's",
+  joint: "Joint",
+};
+
 function newDebt(): DebtInput {
   return {
     id: `d-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
@@ -87,7 +93,7 @@ export function DebtsForm({
                   Remove
                 </Button>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
                 <div className="space-y-1">
                   <Label className="text-[11px]">Type</Label>
                   <Select value={d.kind} onValueChange={(v) => update(d.id, { kind: v as DebtInput["kind"] })}>
@@ -95,6 +101,20 @@ export function DebtsForm({
                     <SelectContent>
                       {(Object.keys(DEBT_KIND_LABELS) as DebtInput["kind"][]).map((k) => (
                         <SelectItem key={k} value={k}>{DEBT_KIND_LABELS[k]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px]">Owner</Label>
+                  <Select
+                    value={d.owner ?? "self"}
+                    onValueChange={(v) => update(d.id, { owner: v as NonNullable<DebtInput["owner"]> })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(DEBT_OWNER_LABELS) as NonNullable<DebtInput["owner"]>[]).map((k) => (
+                        <SelectItem key={k} value={k}>{DEBT_OWNER_LABELS[k]}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

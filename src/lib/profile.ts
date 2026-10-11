@@ -62,6 +62,8 @@ export type DebtInput = {
   payment: number;
   /** Whether interest is tax-deductible (e.g. investment loan). */
   deductible: boolean;
+  /** Whose debt this is: "self" (default for untagged), "partner", or "joint" (split 50/50). */
+  owner?: "self" | "partner" | "joint";
   /** Date-stamped rate changes (for variable-rate facilities like HELOCs). */
   rateHistory?: Array<{ date: string; rate: number }>;
   /** Payment frequency for amortizing debts (mortgages). */
