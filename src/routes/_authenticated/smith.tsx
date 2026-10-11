@@ -331,6 +331,8 @@ function SmithPage() {
               },
             });
           }}
+          locked={!hasTrackerPro}
+          onUnlock={() => setUpgradeOpen(true)}
         />
       </div>
 
@@ -432,7 +434,8 @@ function SmithPage() {
         </LockedSection>
       )}
 
-      {/* Prior interest */}
+      {/* Prior interest — entry action, Pro only */}
+      <LockedSection locked={!hasTrackerPro} onUnlock={() => setUpgradeOpen(true)} label="Prior interest">
       <div className="rounded-xl border p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
@@ -449,12 +452,15 @@ function SmithPage() {
           </p>
         </div>
       </div>
+      </LockedSection>
 
-      {/* Tranche timeline */}
+      {/* Tranche timeline — tranche data stays visible read-only; edits are Pro only */}
       {p ? (
         <SmithTrackerCard
           profile={p}
           onSave={(t) => save({ smith_tranches: t })}
+          locked={!hasTrackerPro}
+          onLocked={() => setUpgradeOpen(true)}
         />
       ) : null}
 
@@ -527,6 +533,8 @@ function SmithPerformanceCard({
   onLinkHolding,
   onUnlinkHolding,
   onCreateHolding,
+  locked,
+  onUnlock,
 }: {
   tranches: SmithTranche[];
   holdings: Array<{ id: string; name: string; value: number }>;
@@ -536,6 +544,8 @@ function SmithPerformanceCard({
   onLinkHolding: (id: string) => void;
   onUnlinkHolding: (id: string) => void;
   onCreateHolding: (name: string, value: number) => void;
+  locked: boolean;
+  onUnlock: () => void;
 }) {
   const [linkId, setLinkId] = useState("");
   const [newName, setNewName] = useState("");
@@ -566,28 +576,30 @@ function SmithPerformanceCard({
             {formatCad(distributionsYtd)} distributions YTD
             {yieldPct > 0 ? ` · ${yieldPct.toFixed(1)}% yield` : ""}
           </div>
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {linkedHoldings.map((h) => (
-              <span key={h.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
-                {h.name || "Holding"} — {formatCad(h.value)}
-                {investmentHoldingIds.includes(h.id) ? (
-                  <button
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => onUnlinkHolding(h.id)}
-                    aria-label={`Unlink ${h.name}`}
-                  >
-                    ×
-                  </button>
-                ) : null}
-              </span>
-            ))}
-          </div>
         </>
       ) : (
         <div className="text-sm text-muted-foreground">
           Link the investments bought with the borrowed money — or add them here.
         </div>
       )}
+      {/* Link / unlink / create are entry actions — Pro only. Linked data stays visible read-only. */}
+      <LockedSection locked={locked} onUnlock={onUnlock} label="Investment account">
+      <div className="flex flex-wrap gap-1.5 pt-1">
+        {linkedHoldings.map((h) => (
+          <span key={h.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
+            {h.name || "Holding"} — {formatCad(h.value)}
+            {investmentHoldingIds.includes(h.id) ? (
+              <button
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => onUnlinkHolding(h.id)}
+                aria-label={`Unlink ${h.name}`}
+              >
+                ×
+              </button>
+            ) : null}
+          </span>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {unlinkedHoldings.length > 0 ? (
           <>
@@ -634,6 +646,7 @@ function SmithPerformanceCard({
           </div>
         </div>
       ) : null}
+      </LockedSection>
     </div>
   );
 }
@@ -994,8 +1007,13 @@ function RoomDrawCard({
           <Button size="sm" variant="outline" onClick={() => setShowRefinance((v) => !v)}>
             {showRefinance ? "Close" : "Refinance"}
           </Button>
-          <Button size="sm" variant="ghost" onClick={onUnlink}>
-            Unlink
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => (locked ? onUnlock() : onUnlink())}
+            title={locked ? "Pro feature — click to upgrade" : undefined}
+          >
+            {locked ? "🔒 Unlink" : "Unlink"}
           </Button>
         </div>
       </div>
