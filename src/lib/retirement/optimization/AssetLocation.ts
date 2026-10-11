@@ -270,3 +270,88 @@ export function scoreAssetLocation(inputs: LocationInputs): LocationResult {
     disclaimer: LOCATION_DISCLAIMER,
   };
 }
+
+/**
+ * One-time import of real portfolio positions into the planner's manual
+ * holdings list. This is a SNAPSHOT, not a sync — values won't update
+ * automatically after import.
+ */
+export interface PortfolioPositionSnapshot {
+  symbol: string;
+  name: string | null;
+  /** Portfolio account_type, e.g. "TFSA", "RRSP", "Non-Registered". */
+  accountType: string;
+  /** Market value in CAD. */
+  marketValueCad: number;
+  /** Annual distribution yield as a decimal (e.g. 0.035); 0 when unknown. */
+  yieldDecimal: number;
+}
+
+export interface ImportHoldingsResult {
+  /** New holdings to append to the planner list. */
+  imported: LocatedHolding[];
+  /** Count skipped because the symbol+account already exists in the list. */
+  skippedDuplicates: number;
+}
+
+/** Map a portfolio account_type to the planner's three account buckets. */
+export function mapAccountTypeToLocAccount(accountType: string): LocAccount {
+  const t = accountType.trim().toLowerCase();
+  if (t === "tfsa") return "TFSA";
+  if (
+    t === "rrsp" ||
+    t === "spousal rrsp" ||
+    t === "lira" ||
+    t === "lrsp" ||
+    t === "resp" ||
+    t === "rdsp" ||
+    t === "fhsa"
+  )
+    return "RRSP";
+  return "NON_REGISTERED";
+}
+
+function makeId(): string {
+  return `h-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+}
+
+/**
+ * Convert live portfolio positions into planner holdings, skipping any whose
+ * symbol+account already exists (name matched case-insensitively). Closed or
+ * zero-value positions are skipped as well.
+ */
+export function importHoldingsFromAccounts(
+  snapshots: PortfolioPositionSnapshot[],
+  existing: Pick<LocatedHolding, "name" | "account">[],
+): ImportHoldingsResult {
+  const seen = new Set(
+    existing.map((h) => `${h.name.trim().toLowerCase()}|${h.account}`),
+  );
+  const imported: LocatedHolding[] = [];
+  let skippedDuplicates = 0;
+
+  for (const s of snapshots) {
+    const symbol = s.symbol.trim();
+    if (!symbol) continue;
+    if (s.marketValueCad <= 0) continue;
+    const account = mapAccountTypeToLocAccount(s.accountType);
+    const key = `${symbol.toLowerCase()}|${account}`;
+    if (seen.has(key)) {
+      skippedDuplicates += 1;
+      continue;
+    }
+    seen.add(key);
+    imported.push({
+      id: makeId(),
+      name: symbol.toUpperCase(),
+      // Default classification — the user refines it in the card, which is
+      // the whole point of the asset-location analyzer.
+      taxType: "growthEquity",
+      value: Math.round(s.marketValueCad * 100) / 100,
+      yield: Math.max(0, s.yieldDecimal),
+      account,
+    });
+  }
+
+  return { imported, skippedDuplicates };
+}

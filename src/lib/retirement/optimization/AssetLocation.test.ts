@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { scoreAssetLocation, type LocatedHolding } from "./AssetLocation";
+import {
+  importHoldingsFromAccounts,
+  scoreAssetLocation,
+  type LocatedHolding,
+} from "./AssetLocation";
 
 function holding(overrides: Partial<LocatedHolding> = {}): LocatedHolding {
   return {
@@ -143,5 +147,96 @@ describe("explainers and disclaimer", () => {
     });
     expect(r.scores[0]!.explainer).toContain("0% treaty rate");
     expect(r.disclaimer).toContain("not financial, tax, or investment advice");
+  });
+});
+
+describe("importHoldingsFromAccounts", () => {
+  const pos = (o: Partial<Parameters<typeof importHoldingsFromAccounts>[0][number]> = {}) => ({
+    symbol: "VFV",
+    name: "Vanguard S&P 500",
+    accountType: "TFSA",
+    marketValueCad: 12345.678,
+    yieldDecimal: 0.012,
+    ...o,
+  });
+
+  it("maps symbol, value, yield, and account bucket", () => {
+    const r = importHoldingsFromAccounts([pos()], []);
+    expect(r.imported).toHaveLength(1);
+    expect(r.skippedDuplicates).toBe(0);
+    const h = r.imported[0];
+    expect(h.name).toBe("VFV");
+    expect(h.value).toBe(12345.68);
+    expect(h.yield).toBe(0.012);
+    expect(h.account).toBe("TFSA");
+    expect(h.taxType).toBe("growthEquity");
+    expect(h.id).toMatch(/^h-/);
+  });
+
+  it("maps registered and non-registered account types", () => {
+    const r = importHoldingsFromAccounts(
+      [
+        pos({ symbol: "A", accountType: "RRSP" }),
+        pos({ symbol: "B", accountType: "Spousal RRSP" }),
+        pos({ symbol: "C", accountType: "LIRA" }),
+        pos({ symbol: "D", accountType: "FHSA" }),
+        pos({ symbol: "E", accountType: "Non-Registered" }),
+        pos({ symbol: "F", accountType: "Corporate" }),
+        pos({ symbol: "G", accountType: "Something Else" }),
+      ],
+      [],
+    );
+    const by = Object.fromEntries(r.imported.map((h) => [h.name, h.account]));
+    expect(by).toEqual({
+      A: "RRSP",
+      B: "RRSP",
+      C: "RRSP",
+      D: "RRSP",
+      E: "NON_REGISTERED",
+      F: "NON_REGISTERED",
+      G: "NON_REGISTERED",
+    });
+  });
+
+  it("skips duplicates matching name+account case-insensitively", () => {
+    const existing = [{ name: "vfv", account: "TFSA" as const }];
+    const r = importHoldingsFromAccounts(
+      [
+        pos({ symbol: "VFV", accountType: "TFSA" }), // dup
+        pos({ symbol: "VFV", accountType: "Non-Registered" }), // same symbol, different account → import
+        pos({ symbol: "XEQT", accountType: "TFSA" }), // new
+      ],
+      existing,
+    );
+    expect(r.skippedDuplicates).toBe(1);
+    expect(r.imported.map((h) => h.name)).toEqual(["VFV", "XEQT"]);
+    expect(r.imported[0].account).toBe("NON_REGISTERED");
+  });
+
+  it("skips duplicates within the same import batch", () => {
+    const r = importHoldingsFromAccounts(
+      [pos({ symbol: "VFV" }), pos({ symbol: "vfv", accountType: "TFSA" })],
+      [],
+    );
+    expect(r.imported).toHaveLength(1);
+    expect(r.skippedDuplicates).toBe(1);
+  });
+
+  it("skips blank symbols and zero-value positions", () => {
+    const r = importHoldingsFromAccounts(
+      [pos({ symbol: "  " }), pos({ symbol: "ZERO", marketValueCad: 0 })],
+      [],
+    );
+    expect(r.imported).toHaveLength(0);
+    expect(r.skippedDuplicates).toBe(0);
+  });
+
+  it("defaults yield to 0 and clamps negative", () => {
+    const r = importHoldingsFromAccounts(
+      [pos({ symbol: "A", yieldDecimal: 0 }), pos({ symbol: "B", yieldDecimal: -0.5 })],
+      [],
+    );
+    expect(r.imported[0].yield).toBe(0);
+    expect(r.imported[1].yield).toBe(0);
   });
 });
