@@ -14,6 +14,15 @@ import { NumInput } from "@/components/ui/num-input";
 import { Switch } from "@/components/ui/switch";
 import { formatCad, summariseAccount, type Account } from "@/lib/finance";
 import { usePortfolio } from "@/lib/portfolio";
+import {
+  inferProposals,
+  parseSmithCsv,
+  proposedTrancheNote,
+  type OutflowClassification,
+  type ProposedItem,
+  type ProposedOutflow,
+  type ProposedTranche,
+} from "@/lib/retirement/smithCsvImport";
 import type { ProvinceCode } from "@/lib/tax";
 import {
   useProfile,
@@ -487,6 +496,28 @@ function SmithPage() {
       </LockedSection>
 
       {/* Tranche timeline — tranche data stays visible read-only; edits are Pro only */}
+      {p && pairHeloc ? (
+        <SmithCsvImportCard
+          heloc={pairHeloc}
+          tranches={tranches}
+          onImport={(newTranches, repaymentAdds) => {
+            const withRepayments = [...tranches, ...newTranches].map((t) => {
+              const adds = repaymentAdds.filter((r) => r.trancheId === t.id);
+              if (adds.length === 0) return t;
+              return {
+                ...t,
+                repayments: [
+                  ...t.repayments,
+                  ...adds.map((a) => ({ date: a.date, amount: a.amount })),
+                ],
+              };
+            });
+            save({ smith_tranches: withRepayments });
+          }}
+          locked={!hasTrackerPro}
+          onUnlock={() => setUpgradeOpen(true)}
+        />
+      ) : null}
       {p ? (
         <SmithTrackerCard
           profile={p}
@@ -703,6 +734,264 @@ function SmithPerformanceCard({
           </Button>
         </div>
       ) : null}
+      </LockedSection>
+    </div>
+  );
+}
+
+const OUTFLOW_LABELS: Record<OutflowClassification, string> = {
+  heloc_repayment: "HELOC repayment",
+  mortgage_prepayment: "Mortgage prepayment",
+  personal: "Personal use",
+  moved_elsewhere: "Moved elsewhere",
+};
+
+/**
+ * Import past Smith activity from a brokerage CSV. Every inferred item must
+ * be reviewed and confirmed — nothing is recorded silently. Pro-gated.
+ */
+function SmithCsvImportCard({
+  heloc,
+  tranches,
+  onImport,
+  locked,
+  onUnlock,
+}: {
+  heloc: DebtInput;
+  tranches: SmithTranche[];
+  onImport: (
+    newTranches: SmithTranche[],
+    repaymentAdds: Array<{ trancheId: string; date: string; amount: number }>,
+  ) => void;
+  locked: boolean;
+  onUnlock: () => void;
+}) {
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [proposals, setProposals] = useState<ProposedItem[] | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [classifications, setClassifications] = useState<Record<string, OutflowClassification>>({});
+  const [doneMsg, setDoneMsg] = useState<string | null>(null);
+
+  const handleFile = async (f: File | undefined) => {
+    if (!f) return;
+    setDoneMsg(null);
+    const text = await f.text();
+    const parsed = parseSmithCsv(text);
+    const items = inferProposals(parsed.rows);
+    setFileName(f.name);
+    setProposals(items);
+    setWarnings(parsed.warnings);
+    // Tranches are pre-checked (still user-confirmable); outflows need
+    // classification first, so they start unchecked.
+    setChecked(new Set(items.filter((i) => i.kind === "tranche").map((i) => i.key)));
+    setClassifications({});
+  };
+
+  const toggle = (key: string) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const confirmedTranches = (proposals ?? []).filter(
+    (i): i is ProposedTranche => i.kind === "tranche" && checked.has(i.key),
+  );
+  const confirmedOutflows = (proposals ?? []).filter(
+    (i): i is ProposedOutflow =>
+      i.kind === "outflow" && checked.has(i.key) && !!classifications[i.key],
+  );
+  const outflowsMissingClass = (proposals ?? []).filter(
+    (i): i is ProposedOutflow =>
+      i.kind === "outflow" && checked.has(i.key) && !classifications[i.key],
+  );
+  const canConfirm = confirmedTranches.length + confirmedOutflows.length > 0 && outflowsMissingClass.length === 0;
+
+  const handleConfirm = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const newTranches: SmithTranche[] = confirmedTranches.map((item, n) => ({
+      id: `s-csv-${Date.now()}-${n}`,
+      facility: heloc.name || "HELOC",
+      drawDate: item.date,
+      principal: item.amount,
+      rate: heloc.rate,
+      useOfFunds: item.symbol ?? "Investment account",
+      eligible: true,
+      purposeEvidence: "",
+      interestPaidYtd: 0,
+      repayments: [],
+      personalUse: false,
+      personalUseDate: null,
+      commingled: false,
+      disposition: null,
+      s201Deemed: 0,
+      holdingId: null,
+      distributions: [],
+      documents: proposedTrancheNote(item, today),
+    }));
+
+    // HELOC repayments apply FIFO across tranches (oldest draw first).
+    const repaymentAdds: Array<{ trancheId: string; date: string; amount: number }> = [];
+    const helocRepayments = confirmedOutflows.filter(
+      (o) => classifications[o.key] === "heloc_repayment",
+    );
+    if (helocRepayments.length > 0) {
+      const all = [...tranches, ...newTranches].sort((a, b) =>
+        a.drawDate < b.drawDate ? -1 : a.drawDate > b.drawDate ? 1 : 0,
+      );
+      for (const o of helocRepayments) {
+        let remaining = o.amount;
+        for (const t of all) {
+          const alreadyRepaid =
+            t.repayments.reduce((s, r) => s + r.amount, 0) +
+            repaymentAdds.filter((r) => r.trancheId === t.id).reduce((s, r) => s + r.amount, 0);
+          const outstanding = t.principal - alreadyRepaid;
+          if (outstanding <= 0) continue;
+          const apply = Math.min(remaining, outstanding);
+          repaymentAdds.push({ trancheId: t.id, date: o.date, amount: apply });
+          remaining -= apply;
+          if (remaining <= 0) break;
+        }
+      }
+    }
+
+    onImport(newTranches, repaymentAdds);
+    const other = confirmedOutflows.filter((o) => classifications[o.key] !== "heloc_repayment");
+    setDoneMsg(
+      `Added ${newTranches.length} tranche(s)` +
+        (repaymentAdds.length > 0 ? ` and ${repaymentAdds.length} repayment(s)` : "") +
+        (other.length > 0
+          ? `. ${other.length} outflow(s) classified (${other
+              .map((o) => OUTFLOW_LABELS[classifications[o.key]!])
+              .join(", ")}) — update the related balances manually.`
+          : "."),
+    );
+    setProposals(null);
+    setFileName(null);
+    setChecked(new Set());
+    setClassifications({});
+  };
+
+  const reset = () => {
+    setProposals(null);
+    setFileName(null);
+    setWarnings([]);
+    setChecked(new Set());
+    setClassifications({});
+    setDoneMsg(null);
+  };
+
+  return (
+    <div className="rounded-xl border p-4 space-y-3">
+      <div>
+        <h3 className="text-base font-semibold">Import past activity</h3>
+        <p className="text-sm text-muted-foreground">
+          Been running this strategy for years in a separate investment account? Upload that
+          account's CSV and we'll propose tranches from it — you review and confirm each one.
+        </p>
+      </div>
+      <LockedSection locked={locked} onUnlock={onUnlock} label="CSV import">
+        {doneMsg ? (
+          <p className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+            {doneMsg}
+          </p>
+        ) : null}
+        {proposals === null ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="file"
+              accept=".csv,text/csv"
+              className="max-w-xs"
+              onChange={(e) => void handleFile(e.target.files?.[0])}
+            />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">
+                Review proposals from {fileName} — {proposals.length} item(s)
+              </p>
+              <Button size="sm" variant="ghost" onClick={reset}>
+                Cancel
+              </Button>
+            </div>
+            {warnings.map((w, i) => (
+              <p key={i} className="text-xs text-amber-800">
+                {w}
+              </p>
+            ))}
+            <div className="space-y-2">
+              {proposals.map((item) => {
+                const isOutflow = item.kind === "outflow";
+                return (
+                  <div
+                    key={item.key}
+                    className={`flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm ${
+                      isOutflow ? "border-amber-300 bg-amber-50/50" : ""
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked.has(item.key)}
+                      onChange={() => toggle(item.key)}
+                      aria-label={`Confirm ${item.note}`}
+                    />
+                    <span className="font-medium">{formatCad(item.amount)}</span>
+                    <span className="text-muted-foreground">{item.date}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] ${
+                        isOutflow
+                          ? "bg-amber-100 text-amber-900"
+                          : "bg-sky-100 text-sky-900"
+                      }`}
+                    >
+                      {isOutflow ? "Outflow — review" : "Inferred tranche"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{item.note}</span>
+                    {isOutflow && checked.has(item.key) ? (
+                      <Select
+                        value={classifications[item.key] ?? ""}
+                        onValueChange={(v) =>
+                          setClassifications((prev) => ({
+                            ...prev,
+                            [item.key]: v as OutflowClassification,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="w-44">
+                          <SelectValue placeholder="Classify outflow…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(OUTFLOW_LABELS) as OutflowClassification[]).map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {OUTFLOW_LABELS[c]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            {outflowsMissingClass.length > 0 ? (
+              <p className="text-xs text-amber-800">
+                Classify each checked outflow before adding.
+              </p>
+            ) : null}
+            <p className="text-[11px] text-muted-foreground">
+              Inferred items are proposals only — nothing is recorded until you confirm.
+              This import reconstructs your records; it is not tax advice. Check each item
+              against your statements.
+            </p>
+            <Button size="sm" disabled={!canConfirm} onClick={handleConfirm}>
+              Add confirmed ({confirmedTranches.length + confirmedOutflows.length})
+            </Button>
+          </div>
+        )}
       </LockedSection>
     </div>
   );
