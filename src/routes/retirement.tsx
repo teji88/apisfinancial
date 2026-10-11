@@ -2376,7 +2376,7 @@ function AssetLocationCard({
               <div className="space-y-1">
                 <Label className="text-[11px]">Yield (%/yr)</Label>
                 <NumInput
-                  value={Math.round(h.yield * 1000) / 10}
+                  value={Math.round(h.yield * 10000) / 100}
                   onCommit={(n) => updateHolding(h.id, { yield: Math.max(0, n) / 100 })}
                 />
               </div>
