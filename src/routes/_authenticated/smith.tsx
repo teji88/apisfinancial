@@ -373,6 +373,13 @@ function SmithPage() {
           room={room}
           tranches={tranches}
           openingDrawn={settings.openingDrawn ?? 0}
+          homeValue={settings.homeValue ?? p?.net_worth?.homeValue ?? null}
+          onHomeValue={(v) =>
+            save({
+              smith_settings: { ...settings, homeValue: v },
+              net_worth: { ...(p?.net_worth ?? { homeValue: 0, otherPropertyValue: 0, cash: 0 }), homeValue: v ?? 0 },
+            })
+          }
           locked={!hasTrackerPro}
           onUnlock={() => setUpgradeOpen(true)}
           lastTranche={tranches.length > 0 ? tranches[tranches.length - 1] : null}
@@ -408,6 +415,7 @@ function SmithPage() {
         <LockedSection locked={!hasTrackerPro} onUnlock={() => setUpgradeOpen(true)} label="Setup">
           <PairSetupCard
             debts={debts}
+            defaultHomeValue={p?.net_worth?.homeValue ?? null}
             onSetup={(args) =>
               save({
                 smith_settings: {
@@ -653,10 +661,12 @@ function SmithPerformanceCard({
 
 function PairSetupCard({
   debts,
+  defaultHomeValue,
   onSetup,
   onCreateDebt,
 }: {
   debts: DebtInput[];
+  defaultHomeValue: number | null;
   onSetup: (args: {
     mortgageId: string;
     helocId: string;
@@ -677,7 +687,9 @@ function PairSetupCard({
   const [showNewHeloc, setShowNewHeloc] = useState(false);
   const [alreadyStarted, setAlreadyStarted] = useState(false);
   const [openingDrawn, setOpeningDrawn] = useState("");
-  const [homeValue, setHomeValue] = useState("");
+  const [homeValue, setHomeValue] = useState(
+    defaultHomeValue && defaultHomeValue > 0 ? String(defaultHomeValue) : "",
+  );
 
   const mortgage = debts.find((d) => d.id === mortgageId) ?? null;
 
@@ -691,6 +703,11 @@ function PairSetupCard({
           Link your readvanceable mortgage and HELOC. Every principal payment creates
           room you can draw — the debts stay in sync automatically.
         </p>
+      </div>
+      <div className="space-y-1 max-w-xs rounded-lg border border-primary/30 bg-primary/5 p-3">
+        <Label className="text-xs font-medium">1. What is your home worth right now? ($)</Label>
+        <NumInput value={homeValue === "" ? null : Number(homeValue)} onCommit={(n) => setHomeValue(String(Math.max(0, n)))} />
+        <p className="text-[11px] text-muted-foreground">Your readvanceable limit is based on this value.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2 rounded-lg border p-3">
@@ -758,11 +775,6 @@ function PairSetupCard({
         <Label className="text-xs">Start date</Label>
         <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         <p className="text-[11px] text-muted-foreground">Room accrues from this date.</p>
-      </div>
-      <div className="space-y-1 max-w-xs">
-        <Label className="text-xs">Current home value ($)</Label>
-        <NumInput value={homeValue === "" ? null : Number(homeValue)} onCommit={(n) => setHomeValue(String(Math.max(0, n)))} />
-        <p className="text-[11px] text-muted-foreground">What is your home worth right now? Used for readvanceable-limit context.</p>
       </div>
       <div className="rounded-lg border p-3 space-y-2">
         <div className="flex items-center gap-2">
@@ -933,6 +945,8 @@ function RoomDrawCard({
   room,
   tranches,
   openingDrawn,
+  homeValue,
+  onHomeValue,
   locked,
   onUnlock,
   lastTranche,
@@ -945,6 +959,8 @@ function RoomDrawCard({
   room: { roomCreated: number; roomAvailable: number; paymentsCounted: number };
   tranches: SmithTranche[];
   openingDrawn: number;
+  homeValue: number | null;
+  onHomeValue: (v: number | null) => void;
   locked: boolean;
   onUnlock: () => void;
   lastTranche: SmithTranche | null;
@@ -1030,7 +1046,20 @@ function RoomDrawCard({
         </LockedSection>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <div className="rounded-lg border p-3">
+          <div className="text-xs text-muted-foreground">Home value</div>
+          <div className="text-xl font-bold">{homeValue ? formatCad(homeValue) : "—"}</div>
+          <div className="mt-1">
+            <LockedSection locked={locked} onUnlock={onUnlock} label="Edit home value">
+              <NumInput
+                value={homeValue}
+                onCommit={(n) => onHomeValue(Math.max(0, n) || null)}
+              />
+            </LockedSection>
+          </div>
+          <div className="text-[11px] text-muted-foreground">Equity base for readvanceable limit</div>
+        </div>
         <div className="rounded-lg border p-3">
           <div className="text-xs text-muted-foreground">Room created</div>
           <div className="text-xl font-bold">{formatCad(room.roomCreated)}</div>

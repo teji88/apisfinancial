@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { ArrowDownRight, ArrowUpRight, PiggyBank, TrendingUp } from "lucide-react";
 import { usePortfolio } from "@/lib/portfolio";
+import { useProfile } from "@/lib/profile";
+import { computeNetWorth } from "@/lib/retirement/optimization/NetWorth";
 import {
   annualise,
   buildValuationSeries,
@@ -76,9 +78,66 @@ function CurrencyBadge({ code }: { code: string }) {
   );
 }
 
+function NetWorthStrip({
+  investments,
+  netWorth,
+  debts,
+}: {
+  investments: number;
+  netWorth: { homeValue: number; otherPropertyValue: number; cash: number } | null;
+  debts: Array<{ balance: number }>;
+}) {
+  if (!netWorth && debts.length === 0) return null;
+  const nw = netWorth ?? { homeValue: 0, otherPropertyValue: 0, cash: 0 };
+  const result = computeNetWorth({
+    cash: nw.cash,
+    investments,
+    homeValue: nw.homeValue,
+    otherPropertyValue: nw.otherPropertyValue,
+    debts,
+  });
+  return (
+    <div className="panel p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Net worth
+        </h2>
+        <Link to="/retirement" className="text-xs text-primary underline">
+          Edit values
+        </Link>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <div className="text-xs text-muted-foreground">Liquid assets</div>
+          <div className="text-lg font-semibold">{formatCad(result.liquidAssets)}</div>
+          <div className="text-[11px] text-muted-foreground">Investments + cash</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Illiquid assets</div>
+          <div className="text-lg font-semibold">{formatCad(result.illiquidAssets)}</div>
+          <div className="text-[11px] text-muted-foreground">
+            Home {formatCad(nw.homeValue)}
+            {nw.otherPropertyValue > 0 ? ` + other ${formatCad(nw.otherPropertyValue)}` : ""}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Total debts</div>
+          <div className="text-lg font-semibold">{formatCad(result.totalDebts)}</div>
+          <div className="text-[11px] text-muted-foreground">{debts.length} debt(s)</div>
+        </div>
+        <div className="rounded-lg bg-emerald-50 p-3">
+          <div className="text-xs text-muted-foreground">Net worth</div>
+          <div className="text-xl font-bold text-emerald-800">{formatCad(result.netWorth)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard() {
   const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
     usePortfolio();
+  const { data: profile } = useProfile();
 
   const positions = useMemo(
     () => computePositions(holdings, transactions, quotes, fxUsdCad),
@@ -222,6 +281,12 @@ function Dashboard() {
           tone={totals.realized + totals.dividends >= 0 ? "gain" : "loss"}
         />
       </div>
+
+      <NetWorthStrip
+        investments={totals.totalValue}
+        netWorth={profile?.net_worth ?? null}
+        debts={profile?.debts ?? []}
+      />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="panel p-5 lg:col-span-2">
