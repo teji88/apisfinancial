@@ -86,16 +86,11 @@ import {
 } from "@/lib/retirement/optimization/CppOasTiming";
 import {
   suggestSavingsAllocation,
+  SPOUSAL_GAP_THRESHOLD,
   type SavingsAllocationResult,
 } from "@/lib/retirement/optimization/SavingsAllocation";
 import {
-  scoreAssetLocation,
-  LOCATION_DISCLAIMER,
   importHoldingsFromAccounts,
-  type HoldingTaxType,
-  type LocAccount,
-  type LocatedHolding,
-  type LocationResult,
 } from "@/lib/retirement/optimization/AssetLocation";
 import { computeNetWorth } from "@/lib/retirement/optimization/NetWorth";
 import {
@@ -1128,8 +1123,6 @@ function RetirementPage() {
             existing={p.asset_holdings ?? []}
             onImport={(merged) => set({ asset_holdings: merged })}
           />
-          <AssetLocationCard profile={p} onSave={(holdings) => set({ asset_holdings: holdings })} />
-
           <NetWorthCard
             profile={p}
             investments={(balances.tfsa ?? 0) + (balances.rrsp ?? 0) + (balances.lira ?? 0) + (balances.nonreg ?? 0)}
@@ -1574,6 +1567,12 @@ function RetirementPage() {
               <Field label="Spouse RRSP">
                               <NumInput value={p.spouse_rrsp} onCommit={(n) => set({ spouse_rrsp: n })} />
               </Field>
+              <PullSpouseButton
+                portfolio={{ accounts, holdings, transactions, quotes, fxUsdCad }}
+                onPull={(spouseRrsp, spouseTfsa) =>
+                  set({ spouse_rrsp: spouseRrsp, spouse_tfsa: spouseTfsa })
+                }
+              />
               <Field label="Spouse LIRA / LIF">
                               <NumInput value={p.spouse_lira} onCommit={(n) => set({ spouse_lira: n })} />
               </Field>
@@ -2086,6 +2085,8 @@ function SavingsAllocatorCard({
   const [annualSavings, setAnnualSavings] = useState(profile.annual_savings ?? 12000);
   const [rrspRoom, setRrspRoom] = useState("");
   const [tfsaRoom, setTfsaRoom] = useState("");
+  const [fhsaEligible, setFhsaEligible] = useState(false);
+  const [fhsaRoom, setFhsaRoom] = useState("");
 
   const defaultCurrentRate = marginalRateAt(salary, province, currentAge) * 100;
   const defaultRetireRate =
@@ -2101,10 +2102,21 @@ function SavingsAllocatorCard({
   const oasExposure =
     (profile.desired_income ?? 0) >= CANADA_2026_PARAMETERS.oasRecovery.startIncome;
 
+  // Planner-first gate: never run on silent defaults. If the key planner
+  // inputs are missing, tell the user to fill them in instead of guessing.
+  const missingPlannerInputs: string[] = [];
+  if (!salary) missingPlannerInputs.push("Your expected income until retirement");
+  if (married && !(profile.spouse_cpp_future_income ?? 0))
+    missingPlannerInputs.push("Spouse expected income until retirement");
+  if (!(profile.desired_income ?? 0))
+    missingPlannerInputs.push("Desired after-tax household income (today's $)");
+
   // Clear stale results when inputs change.
   const inputsKey = JSON.stringify([
     matchOffered, matchRatePct, matchMaxPct, annualSavings, rrspRoom, tfsaRoom,
+    fhsaEligible, fhsaRoom,
     currentRatePct, retireRatePct, salary, profile.desired_income, married, incomeGap, rrspGap,
+    missingPlannerInputs.length,
   ]);
   useEffect(() => {
     setResult(null);
@@ -2124,6 +2136,8 @@ function SavingsAllocatorCard({
       },
       rrspRoom: rrspRoom === "" ? null : Number(rrspRoom),
       tfsaRoom: tfsaRoom === "" ? null : Number(tfsaRoom),
+      fhsaEligible,
+      fhsaRoom: fhsaRoom === "" ? null : Number(fhsaRoom),
       married,
       incomeGap,
       rrspBalanceGap: rrspGap,
@@ -2135,7 +2149,9 @@ function SavingsAllocatorCard({
   const apply = () => {
     if (!result || annualSavings <= 0) return;
     const amt = (b: string) => result.steps.find((s) => s.bucket === b)?.amount ?? 0;
-    const rrspPct = ((amt("employer_match") + amt("rrsp") + amt("spousal_rrsp")) / annualSavings) * 100;
+    // The planner's savings split has no FHSA field; FHSA is deductible like an
+    // RRSP, so its share folds into the RRSP percentage for projection purposes.
+    const rrspPct = ((amt("employer_match") + amt("fhsa") + amt("rrsp") + amt("spousal_rrsp")) / annualSavings) * 100;
     const tfsaPct = (amt("tfsa") / annualSavings) * 100;
     const nonregPct = Math.max(0, 100 - rrspPct - tfsaPct);
     onApply(Math.round(rrspPct * 10) / 10, Math.round(tfsaPct * 10) / 10, Math.round(nonregPct * 10) / 10);
@@ -2171,6 +2187,23 @@ function SavingsAllocatorCard({
             onChange={(e) => setTfsaRoom(e.target.value.replace(/[^0-9]/g, ""))}
             placeholder="Available"
           />
+        </div>
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">Eligible for FHSA?</Label>
+            <Switch checked={fhsaEligible} onCheckedChange={setFhsaEligible} />
+          </div>
+          {fhsaEligible ? (
+            <div className="space-y-1">
+              <Label className="text-[11px]">FHSA room ($) — blank = assume room</Label>
+              <Input
+                value={fhsaRoom}
+                onChange={(e) => setFhsaRoom(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="Available"
+              />
+              <p className="text-[11px] text-muted-foreground">$8,000/yr max, $40,000 lifetime.</p>
+            </div>
+          ) : null}
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Marginal rate today (%)</Label>
@@ -2209,9 +2242,23 @@ function SavingsAllocatorCard({
       </div>
 
       <div>
-        <Button size="sm" onClick={run}>
-          {result ? "Recalculate" : "Suggest allocation"}
-        </Button>
+        {missingPlannerInputs.length > 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p className="text-sm font-medium">Complete these planner fields first:</p>
+            <ul className="mt-1 list-disc pl-5 text-sm">
+              {missingPlannerInputs.map((m) => (
+                <li key={m}>{m}</li>
+              ))}
+            </ul>
+            <p className="mt-1 text-xs text-muted-foreground">
+              The allocator needs your actual numbers — it won&apos;t guess.
+            </p>
+          </div>
+        ) : (
+          <Button size="sm" onClick={run}>
+            {result ? "Recalculate" : "Suggest allocation"}
+          </Button>
+        )}
       </div>
 
       {result ? (
@@ -2234,6 +2281,16 @@ function SavingsAllocatorCard({
             </ol>
           )}
 
+          {married ? (
+            <p className="text-xs text-muted-foreground">
+              Spousal math — income gap {formatCad(incomeGap)} · RRSP balance gap{" "}
+              {formatCad(rrspGap)} · threshold {formatCad(SPOUSAL_GAP_THRESHOLD)}{" "}
+              {result.steps.some((s) => s.bucket === "spousal_rrsp")
+                ? "(gap met → spousal RRSP)"
+                : "(gap not met → your RRSP)"}
+            </p>
+          ) : null}
+
           {result.warnings.length > 0 ? (
             <ul className="space-y-1 text-xs text-amber-800">
               {result.warnings.map((w, i) => (
@@ -2255,23 +2312,6 @@ function SavingsAllocatorCard({
   );
 }
 
-const TAX_TYPE_LABELS: Record<HoldingTaxType, string> = {
-  interest: "Interest (GICs, bonds)",
-  eligibleDividend: "Eligible Canadian dividends",
-  canadianReit: "Canadian REITs",
-  usDirect: "US stocks/ETFs held directly",
-  canadianListedUS: "Canadian-listed US equity ETF (e.g. VFV)",
-  foreignNonUS: "International (non-US) dividends",
-  usReit: "US REITs",
-  growthEquity: "Growth equity (minimal distributions)",
-  swapBased: "Swap-based ETF (e.g. HXS)",
-};
-
-const ACCOUNT_LABELS: Record<LocAccount, string> = {
-  TFSA: "TFSA",
-  RRSP: "RRSP/RRIF",
-  NON_REGISTERED: "Non-registered",
-};
 
 function newHolding(): AssetHoldingInput {
   return {
@@ -2353,226 +2393,69 @@ function ImportHoldingsButton({
   );
 }
 
-function AssetLocationCard({
-  profile,
-  onSave,
+function PullSpouseButton({
+  portfolio,
+  onPull,
 }: {
-  profile: Profile;
-  onSave: (holdings: AssetHoldingInput[]) => void;
-}) {
-  const province = (profile.province as ProvinceCode) ?? "AB";
-  const salary = profile.cpp_future_income ?? 0;
-  const [holdings, setHoldings] = useState<AssetHoldingInput[]>(
-    profile.asset_holdings ?? [],
-  );
-  const [ratePct, setRatePct] = useState<number | null>(null);
-  const [result, setResult] = useState<LocationResult | null>(null);
-  const [showExplainer, setShowExplainer] = useState<string | null>(null);
-
-  const defaultRate = marginalRateAt(salary, province, profile.current_age ?? 40) * 100;
-
-  // Keep local state in sync if the profile loads after mount.
-  useEffect(() => {
-    if (profile.asset_holdings) setHoldings(profile.asset_holdings);
-  }, [profile.asset_holdings]);
-
-  const updateHolding = (id: string, patch: Partial<AssetHoldingInput>) => {
-    const next = holdings.map((h) => (h.id === id ? { ...h, ...patch } : h));
-    setHoldings(next);
-    setResult(null);
+  portfolio: {
+    accounts: Account[];
+    holdings: Holding[];
+    transactions: Transaction[];
+    quotes: Record<string, Quote>;
+    fxUsdCad: number;
   };
+  onPull: (spouseRrsp: number, spouseTfsa: number, count: number) => void;
+}) {
+  const [message, setMessage] = useState<string | null>(null);
 
-  const analyze = () => {
-    const clean = holdings.filter((h) => h.value > 0 && h.name.trim() !== "");
-    onSave(clean);
-    const r = scoreAssetLocation({
-      holdings: clean.map((h) => ({
-        id: h.id,
-        name: h.name,
-        taxType: h.taxType,
-        value: h.value,
-        yield: h.yield,
-        account: h.account,
-      })),
-      marginalRate: (ratePct ?? defaultRate) / 100,
-    });
-    setResult(r);
+  const partnerAccounts = portfolio.accounts.filter(
+    (a) => (a.owner_type ?? "self") === "partner",
+  );
+  if (partnerAccounts.length === 0) return null;
+
+  const handlePull = () => {
+    let rrsp = 0;
+    let tfsa = 0;
+    for (const a of partnerAccounts) {
+      const s = summariseAccount(
+        a,
+        portfolio.transactions.filter((t) => t.account_id === a.id),
+        portfolio.holdings.filter((h) => h.account_id === a.id),
+        portfolio.quotes,
+        portfolio.fxUsdCad,
+      );
+      const v = Math.max(0, s.marketValue);
+      if (a.account_type === "TFSA") tfsa += v;
+      else if (
+        a.account_type === "RRSP" ||
+        a.account_type === "Spousal RRSP" ||
+        a.account_type === "LIRA" ||
+        a.account_type === "LRSP"
+      )
+        rrsp += v;
+    }
+    const r = Math.round(rrsp * 100) / 100;
+    const t = Math.round(tfsa * 100) / 100;
+    onPull(r, t, partnerAccounts.length);
+    setMessage(
+      `Pulled ${formatCad(r + t)} from ${partnerAccounts.length} partner account${partnerAccounts.length === 1 ? "" : "s"} (RRSP ${formatCad(r)}, TFSA ${formatCad(t)}).`,
+    );
   };
 
   return (
-    <div className="rounded-xl border bg-card p-4 space-y-4">
-      <div>
-        <h3 className="text-base font-semibold">Asset location</h3>
-        <p className="text-sm text-muted-foreground">
-          Which account each holding sits in changes its annual tax drag. Classify your
-          holdings and see where each one costs the least tax to hold.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        {holdings.map((h) => (
-          <div key={h.id} className="rounded-lg border p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <Input
-                value={h.name}
-                onChange={(e) => updateHolding(h.id, { name: e.target.value })}
-                placeholder="Holding name (e.g. VFV)"
-                className="flex-1"
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  const next = holdings.filter((x) => x.id !== h.id);
-                  setHoldings(next);
-                  setResult(null);
-                }}
-              >
-                Remove
-              </Button>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="space-y-1">
-                <Label className="text-[11px]">Type</Label>
-                <Select
-                  value={h.taxType}
-                  onValueChange={(v) => updateHolding(h.id, { taxType: v as HoldingTaxType })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(TAX_TYPE_LABELS) as HoldingTaxType[]).map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {TAX_TYPE_LABELS[t]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[11px]">Value ($)</Label>
-                <NumInput
-                  value={h.value}
-                  onCommit={(n) => updateHolding(h.id, { value: Math.max(0, n) })}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[11px]">Yield (%/yr)</Label>
-                <NumInput
-                  value={Math.round(h.yield * 10000) / 100}
-                  onCommit={(n) => updateHolding(h.id, { yield: Math.max(0, n) / 100 })}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[11px]">Held in</Label>
-                <Select
-                  value={h.account}
-                  onValueChange={(v) => updateHolding(h.id, { account: v as LocAccount })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(ACCOUNT_LABELS) as LocAccount[]).map((a) => (
-                      <SelectItem key={a} value={a}>
-                        {ACCOUNT_LABELS[a]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-        ))}
-        <Button size="sm" variant="outline" onClick={() => setHoldings([...holdings, newHolding()])}>
-          Add holding
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs">Marginal tax rate (%)</Label>
-          <NumInput
-            value={ratePct ?? Math.round(defaultRate * 10) / 10}
-            onCommit={(n) => setRatePct(Math.max(0, Math.min(100, n)))}
-          />
-          <p className="text-[11px] text-muted-foreground">Estimated {defaultRate.toFixed(1)}% from your income</p>
-        </div>
-        <Button size="sm" onClick={analyze} disabled={holdings.length === 0}>
-          Analyze location
-        </Button>
-      </div>
-
-      {result ? (
-        <div className="space-y-3">
-          <div className="rounded-lg border bg-emerald-50 p-4">
-            <div className="text-xs text-muted-foreground">Estimated tax saved per year if all moves are followed</div>
-            <div className="text-2xl font-bold text-emerald-800">
-              {formatCad(result.totalAnnualSavings)}/yr
-            </div>
-            {result.moves.length === 0 ? (
-              <p className="text-xs text-muted-foreground mt-1">
-                Every holding is already in its best account — nothing to move.
-              </p>
-            ) : null}
-          </div>
-
-          {result.moves.length > 0 ? (
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">Suggested moves (biggest savings first)</h4>
-              <ul className="space-y-1">
-                {result.moves.map((m) => (
-                  <li key={m.holdingId} className="flex items-center justify-between gap-2 text-sm rounded-lg border p-2">
-                    <span>
-                      {m.name}: {ACCOUNT_LABELS[m.from]} → {ACCOUNT_LABELS[m.to]}
-                    </span>
-                    <span className="font-medium text-emerald-700">+{formatCad(m.annualSavings)}/yr</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Per-holding detail</h4>
-            {result.scores.map((s) => (
-              <div key={s.holdingId} className="rounded-lg border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{s.name}</span>
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground underline"
-                    onClick={() => setShowExplainer(showExplainer === s.holdingId ? null : s.holdingId)}
-                  >
-                    {showExplainer === s.holdingId ? "Hide why" : "Why this account?"}
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Now: {ACCOUNT_LABELS[s.currentAccount]} · Best: {ACCOUNT_LABELS[s.bestAccount]}
-                  {s.annualSavingsIfMoved > 1 ? ` · Save ${formatCad(s.annualSavingsIfMoved)}/yr by moving` : " · Already optimal"}
-                </p>
-                {showExplainer === s.holdingId ? (
-                  <p className="text-xs text-muted-foreground mt-2 rounded bg-muted/50 p-2">{s.explainer}</p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-
-          {result.warnings.length > 0 ? (
-            <ul className="space-y-1 text-xs text-amber-800">
-              {result.warnings.map((w, i) => (
-                <li key={i}>⚠ {w}</li>
-              ))}
-            </ul>
-          ) : null}
-
-          <p className="text-xs text-muted-foreground">{result.disclaimer || LOCATION_DISCLAIMER}</p>
-        </div>
-      ) : null}
+    <div className="space-y-1 rounded-lg border border-dashed p-3 sm:col-span-2">
+      <Button size="sm" variant="outline" onClick={handlePull}>
+        Pull spouse accounts
+      </Button>
+      <p className="text-[11px] text-muted-foreground">
+        One-time import from partner-tagged accounts — not auto-synced. Review the
+        values below after pulling.
+      </p>
+      {message ? <p className="text-xs font-medium text-emerald-700">{message}</p> : null}
     </div>
   );
 }
+
 
 function TimingOptimizerCard({
   profile,
