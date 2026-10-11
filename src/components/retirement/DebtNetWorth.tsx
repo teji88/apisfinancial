@@ -253,11 +253,12 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
 
   const run = () => {
     if (!debt) return;
+    const ownerShare = (debt.owner ?? "self") === "joint" ? 0.5 : 1;
     setResult(
       comparePayoffVsInvest({
-        balance: debt.balance,
+        balance: debt.balance * ownerShare,
         annualRate: debt.rate,
-        monthlyPayment: debt.payment,
+        monthlyPayment: debt.payment * ownerShare,
         extraMonthly: extra,
         expectedReturn: expectedReturnPct / 100,
         marginalRate,
@@ -295,6 +296,7 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
               {debts.map((d) => (
                 <SelectItem key={d.id} value={d.id}>
                   {d.name || DEBT_KIND_LABELS[d.kind]} — {formatCad(d.balance)}
+                  {(d.owner ?? "self") !== "self" ? ` · ${DEBT_OWNER_LABELS[d.owner ?? "self"]}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -311,6 +313,16 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
       </div>
       <div>
         <Button size="sm" onClick={run} disabled={!debt}>Compare</Button>
+        {debt && (debt.owner ?? "self") === "joint" ? (
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Joint debt — analysis uses your 50% share ({formatCad(debt.balance / 2)} of {formatCad(debt.balance)}).
+          </p>
+        ) : null}
+        {debt && (debt.owner ?? "self") === "partner" ? (
+          <p className="text-[11px] text-muted-foreground mt-1">
+            This is your partner's debt — the comparison uses the full balance.
+          </p>
+        ) : null}
       </div>
       {result && debt ? (
         <div className="space-y-3">
