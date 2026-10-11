@@ -130,7 +130,7 @@ const FAQS = [
   },
   {
     q: "Is Apis Financial free?",
-    a: "Yes — tracking, dividends, benchmarking, debts, properties, HELOC investing and the retirement planner are all free. The only paid feature is AI reading of PDF statements and screenshots, at $10 per year.",
+    a: "Mostly — tracking, dividends, benchmarking, debts, properties and the retirement planner are all free. The HELOC investing tracker and AI reading of PDF statements and screenshots are Pro features, at $10 per year.",
   },
   {
     q: "Is this financial advice?",
@@ -262,7 +262,8 @@ function Landing() {
               </Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              No card needed. Everything is free — only PDF and screenshot reading is $10 a year.
+              No card needed. Everything is free except Pro — the HELOC investing tracker plus
+              PDF and screenshot reading, $10 a year.
             </p>
           </div>
         </section>
@@ -335,8 +336,8 @@ function Landing() {
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
           <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
           <p className="mx-auto mt-3 max-w-xl text-center text-sm text-muted-foreground">
-            Everything is free. The only paid extra is having PDF statements and screenshots read
-            for you.
+            Everything is free. Pro ($10 a year) adds the HELOC investing tracker, plus having
+            PDF statements and screenshots read for you.
           </p>
           <div className="mx-auto mt-10 grid max-w-3xl gap-5 md:grid-cols-2">
             <div className="honey-card p-6">
@@ -361,7 +362,7 @@ function Landing() {
               </Button>
             </div>
             <div className="honey-card border-accent/60 p-6 ring-1 ring-accent/30">
-              <h3 className="text-lg font-semibold">Statement reading</h3>
+              <h3 className="text-lg font-semibold">Pro</h3>
               <p className="num mt-2 text-3xl font-semibold">
                 $10<span className="text-base font-normal text-muted-foreground">/year</span>
               </p>
@@ -369,6 +370,7 @@ function Landing() {
               <ul className="mt-5 space-y-2 text-sm">
                 {[
                   "Everything in Free",
+                  "HELOC investing tracker",
                   "Upload PDF statements and screenshots",
                   "Transactions drafted for you to check",
                 ].map((p) => (

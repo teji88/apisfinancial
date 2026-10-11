@@ -441,9 +441,14 @@ function DistributionEditor({
 export function SmithTrackerCard({
   profile,
   onSave,
+  locked = false,
+  onLocked,
 }: {
   profile: Profile;
   onSave: (t: SmithTranche[]) => void;
+  /** When true, tranche data renders read-only; edit actions open the upgrade prompt. */
+  locked?: boolean;
+  onLocked?: () => void;
 }) {
   const [tranches, setTranches] = useState<SmithTranche[]>(profile.smith_tranches ?? []);
   const [result, setResult] = useState<SmithLedgerResult | null>(null);
@@ -509,19 +514,32 @@ export function SmithTrackerCard({
                   ) : null}
                 </span>
                 <div className="flex gap-1">
-                  <button type="button" className="text-xs underline text-muted-foreground" onClick={() => setExpanded(isOpen ? null : t.id)}>
-                    {isOpen ? "Collapse" : "Edit"}
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs underline text-muted-foreground"
-                    onClick={() => {
-                      setTranches(tranches.filter((x) => x.id !== t.id));
-                      setResult(null);
-                    }}
-                  >
-                    Remove
-                  </button>
+                  {locked ? (
+                    <button
+                      type="button"
+                      className="text-xs underline text-muted-foreground"
+                      onClick={onLocked}
+                      title="Pro feature — click to upgrade"
+                    >
+                      🔒 Edit
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button" className="text-xs underline text-muted-foreground" onClick={() => setExpanded(isOpen ? null : t.id)}>
+                        {isOpen ? "Collapse" : "Edit"}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs underline text-muted-foreground"
+                        onClick={() => {
+                          setTranches(tranches.filter((x) => x.id !== t.id));
+                          setResult(null);
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               {isOpen ? (
@@ -620,9 +638,15 @@ export function SmithTrackerCard({
             </div>
           );
         })}
-        <Button size="sm" variant="outline" onClick={() => setTranches([...tranches, newSmithTranche()])}>
-          Add tranche
-        </Button>
+        {locked ? (
+          <Button size="sm" variant="outline" onClick={onLocked} title="Pro feature — click to upgrade">
+            🔒 Add tranche
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => setTranches([...tranches, newSmithTranche()])}>
+            Add tranche
+          </Button>
+        )}
       </div>
 
       <div>
