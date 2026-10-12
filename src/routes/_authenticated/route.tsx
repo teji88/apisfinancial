@@ -134,10 +134,18 @@ export function AppHeader() {
     refreshPrices,
   } = usePortfolio();
 
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("apis-theme") === "dark";
+  });
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
+    try {
+      window.localStorage.setItem("apis-theme", dark ? "dark" : "light");
+    } catch {
+      /* storage unavailable — theme just won't persist */
+    }
   }, [dark]);
 
   const summaries = accounts.map((a) =>
