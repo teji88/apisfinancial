@@ -28,7 +28,8 @@ import {
   type LearnedProfile,
 } from "@/lib/csv-learn";
 import { findDuplicateRows } from "@/lib/duplicate-check";
-import { useAccounts, useHoldings, useAddTransaction, createAccount, useTransactions } from "@/lib/portfolio";
+import { useAccounts, useHoldings, useAddTransactions, createAccount, useTransactions, type NewTransaction } from "@/lib/portfolio";
+import { filterNewRows } from "@/lib/importDedupe";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { ACCOUNT_TYPES, OWNER_LABELS, TRANSACTION_TYPES } from "@/lib/finance";
@@ -96,7 +97,6 @@ type Mapping = {
 
 const ACCEPT = ".csv,.txt,.pdf,.png,.jpg,.jpeg";
 const PAGE_SIZE = 50;
-const SAVE_BATCH = 250;
 
 function readAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -126,7 +126,7 @@ function ImportPage() {
   const holdingsQuery = useHoldings();
   const transactionsQuery = useTransactions();
   const { entitlement } = useEntitlement();
-  const addTransaction = useAddTransaction();
+  const addTransactions = useAddTransactions();
   const fxOnDate = useServerFn(getFxRateOn);
   const parseStatementFn = useServerFn(parseStatement);
   const learnMappingFn = useServerFn(learnCsvMapping);
@@ -138,6 +138,7 @@ function ImportPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [saveTotal, setSaveTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [portfolios, setPortfolios] = useState<CsvPortfolio[]>([]);
   const [mapping, setMapping] = useState<Record<string, Mapping>>({});
@@ -515,9 +516,36 @@ function ImportPage() {
       return;
     }
 
+    // Idempotency: skip rows already in the ledger so re-uploading after an
+    // interrupted save never creates duplicates.
+    const symbolByHoldingId = new Map(holdings.map((h) => [h.id, h.symbol]));
+    const { fresh, skipped } = filterNewRows(
+      rows,
+      ledgerTransactions.map((t) => ({
+        account_id: t.account_id,
+        transaction_date: t.transaction_date,
+        transaction_type: t.transaction_type,
+        symbol: (t.holding_id && symbolByHoldingId.get(t.holding_id)) || "",
+        units: t.units,
+        amount: t.amount,
+        price_per_unit: t.price_per_unit,
+      })),
+    );
+    if (skipped > 0) {
+      toast.info(
+        `${skipped} row${skipped === 1 ? "" : "s"} already in your ledger — skipped.`,
+      );
+    }
+    if (fresh.length === 0) {
+      toast.info("Nothing new to save — every row is already in your ledger.");
+      setRows([]);
+      setBroker(null);
+      return;
+    }
+
     setSaving(true);
     setProgress(0);
-    let saved = 0;
+    setSaveTotal(fresh.length);
     const rateCache = new Map<string, number>();
     const rateFor = async (currency: string, date: string, fx?: number): Promise<number> => {
       if (currency !== "USD") return 1;
@@ -532,7 +560,9 @@ function ImportPage() {
       return rate;
     };
     try {
-      for (const row of rows) {
+      // Resolve FX rates up front so the bulk insert is a pure write phase.
+      const inputs: NewTransaction[] = [];
+      for (const row of fresh) {
         // Guarded by the incomplete-rows check above; the assertions keep the types honest.
         const rowType = row.type!;
         const rowDate = row.date!;
@@ -540,7 +570,7 @@ function ImportPage() {
         const units = row.quantity ?? 0;
         const price = row.price ?? 0;
         const cashAmount = row.amount ?? derivedAmount(row) ?? 0;
-        await addTransaction.mutateAsync({
+        inputs.push({
           accountId: row.accountId,
           symbol: row.symbol ?? "",
           name: row.name,
@@ -556,22 +586,46 @@ function ImportPage() {
           fee: row.fee ?? 0,
           date: rowDate,
         });
-        saved += 1;
-        if (saved % 25 === 0 || saved === rows.length) setProgress(saved);
-        // Let the browser breathe between batches on very large imports.
-        if (saved % SAVE_BATCH === 0) await new Promise((r) => setTimeout(r, 0));
       }
-      toast.success(`${saved} transactions added to your ledger.`);
+      // One bulk mutation: holdings ensured once, chunks of 500, a single
+      // portfolio invalidation at the end — no per-row refetch churn.
+      // Progress is monotonic (only moves forward per completed chunk).
+      const result = await addTransactions.mutateAsync({
+        inputs,
+        onProgress: (saved) => setProgress(saved),
+      });
+      setProgress(result.saved);
+      const failedCount = result.failed.reduce((s, f) => s + f.rowCount, 0);
+      if (result.failed.length === 0) {
+        toast.success(
+          `${result.saved} transaction${result.saved === 1 ? "" : "s"} added to your ledger.`,
+        );
+      } else {
+        const firstError = result.failed[0]?.message ?? "";
+        toast.error(
+          `Saved ${result.saved} of ${inputs.length}. ${failedCount} failed. ${firstError}`,
+        );
+      }
       setRows([]);
       setBroker(null);
     } catch (error) {
       toast.error(
-        `Saved ${saved} of ${rows.length}. ${error instanceof Error ? error.message : ""}`,
+        `Save failed: ${error instanceof Error ? error.message : "unknown error"}`,
       );
     } finally {
       setSaving(false);
     }
   }
+
+  // Warn on refresh/close while a save is in flight.
+  useEffect(() => {
+    if (!saving) return;
+    const guard = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [saving]);
 
   return (
     <div className="space-y-6">
@@ -845,9 +899,7 @@ function ImportPage() {
               </Button>
               <Button size="sm" onClick={() => void commit()} disabled={saving}>
                 {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-                {saving && rows.length > PAGE_SIZE
-                  ? `Saving ${progress} of ${rows.length}…`
-                  : "Approve & add to ledger"}
+                {saving ? "Saving…" : "Approve & add to ledger"}
               </Button>
             </div>
           </div>
@@ -1118,6 +1170,40 @@ function ImportPage() {
               : "This import goes past the free plan's ten holdings. Pro removes the limit."
         }
       />
+
+      {saving ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          role="dialog"
+          aria-label="Saving import"
+        >
+          <div className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-lg space-y-4">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <h3 className="text-base font-semibold">
+                Saving {progress} of {saveTotal}…
+              </h3>
+            </div>
+            <div
+              className="h-2 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-valuenow={saveTotal > 0 ? Math.round((progress / saveTotal) * 100) : 0}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{
+                  width: `${saveTotal > 0 ? Math.min(100, (progress / saveTotal) * 100) : 0}%`,
+                }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Please don&apos;t refresh or close this tab while saving.
+            </p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
