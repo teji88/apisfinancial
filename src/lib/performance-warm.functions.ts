@@ -44,7 +44,13 @@ export const warmPerformanceSnapshots = createServerFn({ method: "POST" })
     }
   });
 
-async function warm(scope: string, userId: string): Promise<WarmResult> {
+/**
+ * Core warm-up logic, exported for the live-DB test (`performance-warm.live.test.ts`).
+ * Reads the user's ledger from the live database, diffs month hashes against
+ * stored snapshots, and upserts fresh rows. Safe to call with a user that has
+ * no transactions — it returns `{ warmed: 0 }` without writing anything.
+ */
+export async function warm(scope: string, userId: string): Promise<WarmResult> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const today = new Date().toISOString().slice(0, 10);
 
