@@ -39,6 +39,8 @@ export interface SmithTrancheInput {
     amount: number;
     destination: "mortgage" | "reinvested" | "personal";
   }>;
+  /** Ledger transaction IDs for this tranche's purchases (set when recorded via the linked ledger). */
+  ledgerTransactionIds?: string[];
 }
 
 export interface TrancheAssessment {
@@ -195,4 +197,23 @@ export function assessSmithLedger(tranches: SmithTrancheInput[]): SmithLedgerRes
   }
 
   return { tranches: assessments, totalDeductibleInterestYtd, distributions, warnings: ledgerWarnings, disclaimer: SMITH_DISCLAIMER };
+}
+
+/**
+ * Total-return gain for the tracker: (current investment value + cash already
+ * withdrawn) − drawn. Only distributions that LEFT the investment account
+ * (mortgage paydown, personal spending) count — reinvested distributions are
+ * already reflected in the investment value.
+ */
+export function totalReturnGain(
+  investmentValue: number,
+  withdrawnDistributions: number,
+  drawn: number,
+): number {
+  return Math.max(0, investmentValue) + Math.max(0, withdrawnDistributions) - Math.max(0, drawn);
+}
+
+/** Cash withdrawn from the investments: distributions paid to the mortgage or spent personally. */
+export function withdrawnDistributionsTotal(d: DistributionBreakdown): number {
+  return Math.max(0, d.mortgage) + Math.max(0, d.personal);
 }
