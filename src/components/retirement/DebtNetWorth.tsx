@@ -720,7 +720,7 @@ export function SmithSummaryCard({ profile }: { profile: Profile }) {
     <div className="rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-base font-semibold">HELOC Investing</h3>
-        <a href="/plan-ahead?tab=heloc" className="text-xs underline text-muted-foreground">
+        <a href="/debts?tab=heloc" className="text-xs underline text-muted-foreground">
           Open tracker →
         </a>
       </div>
