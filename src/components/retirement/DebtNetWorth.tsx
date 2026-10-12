@@ -226,9 +226,9 @@ export function NetWorthCard({
           <dt className="text-xs text-muted-foreground">Total debts</dt>
           <dd className="font-medium">{formatCad(result.totalDebts)}</dd>
         </div>
-        <div className="rounded-lg border bg-emerald-50 p-3">
+        <div className="rounded-lg border bg-emerald-50 dark:bg-emerald-950 p-3">
           <dt className="text-xs text-muted-foreground">Net worth</dt>
-          <dd className="text-lg font-bold text-emerald-800">{formatCad(result.netWorth)}</dd>
+          <dd className="text-lg font-bold text-emerald-800 dark:text-emerald-300">{formatCad(result.netWorth)}</dd>
         </div>
       </dl>
     </div>
@@ -330,7 +330,7 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
             <div className="text-xs text-muted-foreground">
               {result.netAdvantageInvesting >= 0 ? "Investing ahead on expected value by" : "Payoff ahead by"}
             </div>
-            <div className={`text-2xl font-bold ${result.netAdvantageInvesting >= 0 ? "text-sky-800" : "text-emerald-800"}`}>
+            <div className={`text-2xl font-bold ${result.netAdvantageInvesting >= 0 ? "text-sky-800 dark:text-sky-300" : "text-emerald-800 dark:text-emerald-300"}`}>
               {formatCad(Math.abs(result.netAdvantageInvesting))}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -359,7 +359,7 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
             </div>
           </dl>
           {result.warnings.length > 0 ? (
-            <ul className="space-y-1 text-xs text-amber-800">
+            <ul className="space-y-1 text-xs text-amber-800 dark:text-amber-300">
               {result.warnings.map((w, i) => (
                 <li key={i}>⚠ {w}</li>
               ))}
@@ -540,7 +540,7 @@ export function SmithTrackerCard({
                   ) : null}
                   {t.facility || "Tranche"} — {formatCad(t.principal)}
                   {a ? (
-                    <span className={`ml-2 text-xs font-normal ${a.deductible ? "text-emerald-700" : "text-red-700"}`}>
+                    <span className={`ml-2 text-xs font-normal ${a.deductible ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
                       {a.deductible ? "✓ deductible" : "✗ not deductible"}
                     </span>
                   ) : null}
@@ -661,7 +661,7 @@ export function SmithTrackerCard({
                 </div>
               ) : null}
               {a && a.warnings.length > 0 ? (
-                <ul className="space-y-1 text-xs text-amber-800">
+                <ul className="space-y-1 text-xs text-amber-800 dark:text-amber-300">
                   {a.warnings.map((w, i) => (
                     <li key={i}>⚠ {w}</li>
                   ))}
@@ -689,19 +689,19 @@ export function SmithTrackerCard({
 
       {result ? (
         <div className="space-y-3">
-          <div className="rounded-lg border bg-emerald-50 p-4">
+          <div className="rounded-lg border bg-emerald-50 dark:bg-emerald-950 p-4">
             <div className="text-xs text-muted-foreground">Total deductible interest, year-to-date (T1 line 22100)</div>
-            <div className="text-2xl font-bold text-emerald-800">{formatCad(result.totalDeductibleInterestYtd)}</div>
+            <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-300">{formatCad(result.totalDeductibleInterestYtd)}</div>
           </div>
           {result.warnings.length > 0 ? (
-            <ul className="space-y-1 text-xs text-amber-800">
+            <ul className="space-y-1 text-xs text-amber-800 dark:text-amber-300">
               {result.warnings.map((w, i) => (
                 <li key={i}>⚠ {w}</li>
               ))}
             </ul>
           ) : null}
           <p className="text-xs text-muted-foreground">{result.disclaimer}</p>
-          <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs font-medium text-amber-900">
+          <p className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-3 text-xs font-medium text-amber-900 dark:text-amber-100">
             {CRA_FILING_DISCLAIMER}
           </p>
         </div>
@@ -720,7 +720,7 @@ export function SmithSummaryCard({ profile }: { profile: Profile }) {
     <div className="rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-base font-semibold">HELOC Investing</h3>
-        <a href="/smith" className="text-xs underline text-muted-foreground">
+        <a href="/plan-ahead?tab=heloc" className="text-xs underline text-muted-foreground">
           Open tracker →
         </a>
       </div>
