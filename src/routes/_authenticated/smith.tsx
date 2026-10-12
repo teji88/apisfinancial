@@ -51,12 +51,13 @@ import { computeRoomSegmented, type TermSegment } from "@/lib/retirement/optimiz
 import { SmithTrackerCard } from "@/components/retirement/DebtNetWorth";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
+import { AiQuotaNote } from "@/components/AiQuotaNote";
 
 export const Route = createFileRoute("/_authenticated/smith")({
   staticData: { sitemap: false },
   head: () => ({
     meta: [
-      { title: "Home Equity Investing Tracker â Apis Financial" },
+      { title: "Home Equity Investing Tracker — Apis Financial" },
       {
         name: "description",
         content:
@@ -67,7 +68,7 @@ export const Route = createFileRoute("/_authenticated/smith")({
   component: SmithRedirect,
 });
 
-// HELOC Investing now lives under the "Debts" tab â keep the old URL working.
+// HELOC Investing now lives under the "Debts" tab — keep the old URL working.
 function SmithRedirect() {
   throw redirect({ to: "/debts", search: { tab: "heloc" } });
 }
@@ -93,10 +94,10 @@ function LockedSection({
         type="button"
         onClick={onUnlock}
         className="absolute inset-0 flex items-center justify-center rounded-xl bg-background/40 backdrop-blur-[1px]"
-        aria-label={`${label} â Pro feature, click to upgrade`}
+        aria-label={`${label} — Pro feature, click to upgrade`}
       >
         <span className="rounded-full border bg-card px-4 py-2 text-sm font-medium shadow-sm">
-          ð {label} â Pro feature
+          🔒 {label} — Pro feature
         </span>
       </button>
     </div>
@@ -106,12 +107,13 @@ function LockedSection({
 export function SmithPage() {
   const { data: profile, isLoading } = useProfile();
   const updateProfile = useUpdateProfile();
-  const { entitlement } = useEntitlement();
+  const { hasStatementAi } = useEntitlement();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  // HELOC investing tracker is a Pro feature; free users see data read-only.
-  const hasTrackerPro = entitlement.tier !== "free";
+  // The HELOC tracker is free for everyone. Only AI features (statement
+  // reading, AI pre-sort, layout learning) stay behind Pro — they cost
+  // money to run. hasStatementAi gates exactly those.
 
-  // Real portfolio accounts (Accounts tab) â the primary source for linked investments.
+  // Real portfolio accounts (Accounts tab) — the primary source for linked investments.
   const {
     accounts: portfolioAccounts,
     holdings: portfolioHoldings,
@@ -141,7 +143,7 @@ export function SmithPage() {
   const save = (patch: Parameters<typeof updateProfile.mutate>[0]) =>
     updateProfile.mutate(patch);
 
-  // Linked portfolio account (Accounts tab) â computed live from the real ledger.
+  // Linked portfolio account (Accounts tab) — computed live from the real ledger.
   const linkedAccount = useMemo(
     () =>
       settings.investmentAccountId
@@ -150,7 +152,7 @@ export function SmithPage() {
     [portfolioAccounts, settings.investmentAccountId],
   );
   // Ledger rows of the linked account, shaped for tranche reconstruction
-  // (reuses the CSV inference rules â no upload needed).
+  // (reuses the CSV inference rules — no upload needed).
   const linkedSmithRows = useMemo(() => {
     if (!linkedAccount) return [];
     const symbolByHoldingId = new Map(portfolioHoldings.map((h) => [h.id, h.symbol]));
@@ -240,6 +242,7 @@ export function SmithPage() {
       : trancheRates.length > 0
         ? trancheRates.reduce((s, r) => s + r, 0) / trancheRates.length
         : 0.055;
+  const helocRateEstimated = !(heloc && heloc.rate > 0) && trancheRates.length === 0;
 
   const [stopRedraw, setStopRedraw] = useState(false);
   const [rateBump, setRateBump] = useState(false);
@@ -266,7 +269,7 @@ export function SmithPage() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <p className="text-sm text-muted-foreground">Loadingâ¦</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
@@ -276,7 +279,7 @@ export function SmithPage() {
       <UpgradeDialog
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
-        reason="The HELOC investing tracker is a Pro feature. Upgrade to set up your readvanceable mortgage pair, record draws, and keep per-tranche tax records."
+        reason="AI statement reading is the one paid feature ($10 a year) — it's what costs us to run. Everything else in the tracker is free."
       />
       <div>
         <h1 className="text-2xl font-bold">Home Equity Investing Tracker</h1>
@@ -309,15 +312,15 @@ export function SmithPage() {
           <ol className="space-y-3 text-sm">
             <li className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900 text-xs font-bold text-emerald-800 dark:text-emerald-300">1</span>
-              <span><strong>Add your HELOC</strong> below â it lands in your debts list automatically.</span>
+              <span><strong>Add your HELOC</strong> below — it lands in your debts list automatically.</span>
             </li>
             <li className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900 text-xs font-bold text-emerald-800 dark:text-emerald-300">2</span>
-              <span><strong>Record each month's draw</strong> in the check-in: principal paid â room created â amount drawn â what it bought.</span>
+              <span><strong>Record each month's draw</strong> in the check-in: principal paid → room created → amount drawn → what it bought.</span>
             </li>
             <li className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900 text-xs font-bold text-emerald-800 dark:text-emerald-300">3</span>
-              <span><strong>Watch the dashboard</strong> â tax saved this year, all-time, and projected through payoff, plus a clean tracing ledger for tax time.</span>
+              <span><strong>Watch the dashboard</strong> — tax saved this year, all-time, and projected through payoff, plus a clean tracing ledger for tax time.</span>
             </li>
           </ol>
         </div>
@@ -327,7 +330,7 @@ export function SmithPage() {
           <div className="text-xs text-muted-foreground">Tax saved this year</div>
           <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-300">{formatCad(savings.taxSavedYtd)}</div>
           <div className="text-[11px] text-muted-foreground">
-            {formatCad(interestPaidYtd)} deductible interest Ã {(marginalRate * 100).toFixed(0)}%
+            {formatCad(interestPaidYtd)} deductible interest × {(marginalRate * 100).toFixed(0)}%
           </div>
         </div>
         <div className="rounded-xl border p-4">
@@ -353,14 +356,19 @@ export function SmithPage() {
           </div>
           <div className="text-[11px] text-muted-foreground mt-1">
             Borrowing now costs {(savings.effectiveRate * 100).toFixed(2)}% after tax
+            {helocRateEstimated ? (
+              <span className="text-amber-800 dark:text-amber-300">
+                {" "}· using a 5.50% HELOC rate estimate — set the actual rate on the debt in the Debts tab.
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="rounded-xl border p-4">
           <div className="text-xs text-muted-foreground">Distributions received YTD</div>
           <div className="text-2xl font-bold">{formatCad(ledger.distributions.total)}</div>
           <div className="text-[11px] text-muted-foreground">
-            {formatCad(ledger.distributions.mortgage)} to mortgage Â·{" "}
-            {formatCad(ledger.distributions.reinvested)} reinvested Â·{" "}
+            {formatCad(ledger.distributions.mortgage)} to mortgage ·{" "}
+            {formatCad(ledger.distributions.reinvested)} reinvested ·{" "}
             {formatCad(ledger.distributions.personal)} spent
           </div>
         </div>
@@ -394,14 +402,12 @@ export function SmithPage() {
           }
           linkedAccountName={linkedAccount?.account_name ?? null}
           linkedAccountValue={linkedAccountValue}
-          locked={!hasTrackerPro}
-          onUnlock={() => setUpgradeOpen(true)}
         />
       </div>
 
       {/* What-if toggles */}
       <div className="rounded-xl border p-4 space-y-2">
-        <h3 className="text-sm font-semibold">What ifâ¦</h3>
+        <h3 className="text-sm font-semibold">What if…</h3>
         <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
           <label className="flex items-center gap-2 cursor-pointer">
             <Switch checked={stopRedraw} onCheckedChange={setStopRedraw} />
@@ -418,7 +424,7 @@ export function SmithPage() {
             <span className="font-bold">{formatCad(savings.totalProjected)}</span>
             <span className="text-muted-foreground text-xs ml-2">
               {stopRedraw ? "no new draws; " : ""}
-              {rateBump ? `rate ${(helocRate * 100).toFixed(2)}% â ${((helocRate + 0.02) * 100).toFixed(2)}%` : ""}
+              {rateBump ? `rate ${(helocRate * 100).toFixed(2)}% → ${((helocRate + 0.02) * 100).toFixed(2)}%` : ""}
             </span>
           </p>
         ) : (
@@ -428,7 +434,7 @@ export function SmithPage() {
         )}
       </div>
 
-      {/* Smith flow: pair setup â room â draws */}
+      {/* Smith flow: pair setup → room → draws */}
       {pairReady && pairMortgage && pairHeloc && room ? (
         <RoomDrawCard
           mortgage={pairMortgage}
@@ -443,8 +449,6 @@ export function SmithPage() {
               net_worth: { ...(p?.net_worth ?? { homeValue: 0, otherPropertyValue: 0, cash: 0 }), homeValue: v ?? 0 },
             })
           }
-          locked={!hasTrackerPro}
-          onUnlock={() => setUpgradeOpen(true)}
           lastTranche={tranches.length > 0 ? tranches[tranches.length - 1] : null}
           linkedAccountId={settings.investmentAccountId ?? null}
           linkedAccountName={portfolioAccounts.find((a) => a.id === settings.investmentAccountId)?.account_name ?? null}
@@ -480,8 +484,7 @@ export function SmithPage() {
           }
         />
       ) : (
-        <LockedSection locked={!hasTrackerPro} onUnlock={() => setUpgradeOpen(true)} label="Setup">
-          <PairSetupCard
+        <PairSetupCard
             debts={debts}
             defaultHomeValue={p?.net_worth?.homeValue ?? null}
             onSetup={(args) =>
@@ -507,11 +510,9 @@ export function SmithPage() {
             }
             onCreateDebt={(debt) => save({ debts: [...debts, debt] })}
           />
-        </LockedSection>
       )}
 
-      {/* Prior interest â entry action, Pro only */}
-      <LockedSection locked={!hasTrackerPro} onUnlock={() => setUpgradeOpen(true)} label="Prior interest">
+      {/* Prior interest — one-time entry so all-time savings include earlier years */}
       <div className="rounded-xl border p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
@@ -528,9 +529,8 @@ export function SmithPage() {
           </p>
         </div>
       </div>
-      </LockedSection>
 
-      {/* Tranche timeline â tranche data stays visible read-only; edits are Pro only */}
+      {/* Tranche timeline */}
       {p && pairHeloc ? (
         <SmithCsvImportCard
           heloc={pairHeloc}
@@ -548,8 +548,8 @@ export function SmithPage() {
             });
             save({ smith_tranches: withRepayments });
           }}
-          locked={!hasTrackerPro}
-          onUnlock={() => setUpgradeOpen(true)}
+          hasAi={hasStatementAi}
+          onUnlockAi={() => setUpgradeOpen(true)}
           linkedAccountName={linkedAccount?.account_name ?? null}
           linkedRows={linkedSmithRows}
         />
@@ -558,8 +558,6 @@ export function SmithPage() {
         <SmithTrackerCard
           profile={p}
           onSave={(t) => save({ smith_tranches: t })}
-          locked={!hasTrackerPro}
-          onLocked={() => setUpgradeOpen(true)}
         />
       ) : null}
 
@@ -603,7 +601,7 @@ function BocNudge({
   const daysSince = lastChecked
     ? Math.floor((new Date(today).getTime() - new Date(lastChecked + "T00:00:00").getTime()) / 86_400_000)
     : 999;
-  // BoC announces 8Ã/year (~every 6 weeks). Nudge if never checked or > 45 days.
+  // BoC announces 8×/year (~every 6 weeks). Nudge if never checked or > 45 days.
   if (daysSince <= 45) return null;
   return (
     <div className="rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950 p-4 space-y-2">
@@ -613,7 +611,7 @@ function BocNudge({
         days. Your HELOC is at {(heloc.rate * 100).toFixed(2)}%
         {lastChecked ? ` (last confirmed ${lastChecked})` : ""}. If your bank moved
         it, update the rate on the{" "}
-        <Link to="/debts" search={{ tab: "debts" }} className="underline">Debts tab</Link> â future
+        <Link to="/debts" search={{ tab: "debts" }} className="underline">Debts tab</Link> — future
         projections and the room math will use the new rate.
       </p>
       <Button size="sm" variant="outline" onClick={onChecked}>
@@ -637,8 +635,6 @@ function SmithPerformanceCard({
   onSelectAccount,
   linkedAccountName,
   linkedAccountValue,
-  locked,
-  onUnlock,
 }: {
   tranches: SmithTranche[];
   holdings: Array<{ id: string; name: string; value: number }>;
@@ -654,8 +650,6 @@ function SmithPerformanceCard({
   onSelectAccount: (id: string | null) => void;
   linkedAccountName: string | null;
   linkedAccountValue: number | null;
-  locked: boolean;
-  onUnlock: () => void;
 }) {
   const [linkId, setLinkId] = useState("");
 
@@ -679,9 +673,7 @@ function SmithPerformanceCard({
   return (
     <div className="rounded-xl border p-4 space-y-2">
       <div className="text-xs text-muted-foreground">Investment account</div>
-      {/* Portfolio account linking is an entry action â Pro only. Linked data stays visible read-only. */}
-      <LockedSection locked={locked} onUnlock={onUnlock} label="Investment account">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
           <Select
             value={investmentAccountId ?? ""}
             onValueChange={(v) => onSelectAccount(v === "" ? null : v)}
@@ -702,13 +694,11 @@ function SmithPerformanceCard({
               size="sm"
               variant="ghost"
               onClick={() => onSelectAccount(null)}
-              title={locked ? "Pro feature â click to upgrade" : undefined}
             >
               Unlink
             </Button>
           ) : null}
-        </div>
-      </LockedSection>
+      </div>
       {linkedAccountValue != null ? (
         <>
           <div className="text-2xl font-bold">{formatCad(linkedAccountValue)}</div>
@@ -718,7 +708,7 @@ function SmithPerformanceCard({
           </div>
           <div className="text-[11px] text-muted-foreground">
             {formatCad(distributionsYtd)} distributions YTD
-            {yieldPct > 0 ? ` Â· ${yieldPct.toFixed(1)}% yield` : ""}
+            {yieldPct > 0 ? ` · ${yieldPct.toFixed(1)}% yield` : ""}
           </div>
         </>
       ) : linkedHoldings.length > 0 ? (
@@ -729,7 +719,7 @@ function SmithPerformanceCard({
           </div>
           <div className="text-[11px] text-muted-foreground">
             {formatCad(distributionsYtd)} distributions YTD
-            {yieldPct > 0 ? ` Â· ${yieldPct.toFixed(1)}% yield` : ""}
+            {yieldPct > 0 ? ` · ${yieldPct.toFixed(1)}% yield` : ""}
           </div>
         </>
       ) : (
@@ -739,7 +729,7 @@ function SmithPerformanceCard({
       )}
       {investmentAccountId ? (
         <p className="text-[11px] text-muted-foreground">
-          Using every holding in {linkedAccountName ?? "the linked account"} â add or edit
+          Using every holding in {linkedAccountName ?? "the linked account"} — add or edit
           investments normally in the{" "}
           <Link to="/accounts" className="text-primary underline">
             Accounts tab
@@ -753,21 +743,19 @@ function SmithPerformanceCard({
             <Link to="/accounts" className="text-primary underline">
               Accounts tab
             </Link>{" "}
-            â they appear here once this account is linked. Or link individual holdings below.
+            — they appear here once this account is linked. Or link individual holdings below.
           </p>
-          {/* Link / unlink are entry actions â Pro only. Linked data stays visible read-only. */}
-          <LockedSection locked={locked} onUnlock={onUnlock} label="Investment holdings">
           <div className="flex flex-wrap gap-1.5 pt-1">
             {linkedHoldings.map((h) => (
               <span key={h.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
-                {h.name || "Holding"} â {formatCad(h.value)}
+                {h.name || "Holding"} — {formatCad(h.value)}
                 {investmentHoldingIds.includes(h.id) ? (
                   <button
                     className="text-muted-foreground hover:text-foreground"
                     onClick={() => onUnlinkHolding(h.id)}
                     aria-label={`Unlink ${h.name}`}
                   >
-                    Ã
+                    ×
                   </button>
                 ) : null}
               </span>
@@ -788,7 +776,6 @@ function SmithPerformanceCard({
               </Button>
             </div>
           ) : null}
-          </LockedSection>
         </>
       )}
     </div>
@@ -804,14 +791,14 @@ const OUTFLOW_LABELS: Record<OutflowClassification, string> = {
 
 /**
  * Import past Smith activity from a brokerage CSV. Every inferred item must
- * be reviewed and confirmed â nothing is recorded silently. Pro-gated.
+ * be reviewed and confirmed — nothing is recorded silently. Pro-gated.
  */
 function SmithCsvImportCard({
   heloc,
   tranches,
   onImport,
-  locked,
-  onUnlock,
+  hasAi,
+  onUnlockAi,
   linkedAccountName,
   linkedRows,
 }: {
@@ -821,8 +808,9 @@ function SmithCsvImportCard({
     newTranches: SmithTranche[],
     repaymentAdds: Array<{ trancheId: string; date: string; amount: number }>,
   ) => void;
-  locked: boolean;
-  onUnlock: () => void;
+  /** AI features (statement reading, pre-sort, layout learning) stay Pro-gated. */
+  hasAi: boolean;
+  onUnlockAi: () => void;
   linkedAccountName: string | null;
   linkedRows: SmithCsvRow[];
 }) {
@@ -874,6 +862,10 @@ function SmithCsvImportCard({
     // reader (bank prompt); text files go through the deterministic CSV parser.
     const kind = classifyFile(new Uint8Array(await f.slice(0, 32).arrayBuffer()), f.name, f.type);
     if (kind === "pdf" || kind === "image") {
+      if (!hasAi) {
+        onUnlockAi();
+        return;
+      }
       await handleStatementFile(f);
       return;
     }
@@ -948,7 +940,7 @@ function SmithCsvImportCard({
       setPresorting(false);
     }
   };
-  /** Reconstruct proposals from the already-imported linked account â no CSV needed. */
+  /** Reconstruct proposals from the already-imported linked account — no CSV needed. */
   const handleLedgerReconstruct = () => {
     if (linkedRows.length === 0) return;
     setDoneMsg(null);
@@ -1017,7 +1009,7 @@ function SmithCsvImportCard({
   );
   const canConfirm = confirmedTranches.length + confirmedOutflows.length > 0 && outflowsMissingClass.length === 0;
 
-  /** Filtered + sorted view of the proposals (review only â confirm uses the full list). */
+  /** Filtered + sorted view of the proposals (review only — confirm uses the full list). */
   const visibleProposals = (proposals ?? [])
     .filter((i) => kindFilter === "all" || i.kind === kindFilter)
     .filter((i) => catFilter === "all" || proposalCategory(i.rawType) === catFilter)
@@ -1101,7 +1093,7 @@ function SmithCsvImportCard({
         (other.length > 0
           ? `. ${other.length} outflow(s) classified (${other
               .map((o) => OUTFLOW_LABELS[classifications[o.key]!])
-              .join(", ")}) â update the related balances manually.`
+              .join(", ")}) — update the related balances manually.`
           : "."),
     );
     setProposals(null);
@@ -1136,11 +1128,10 @@ function SmithCsvImportCard({
         <h3 className="text-base font-semibold">Import past activity</h3>
         <p className="text-sm text-muted-foreground">
           Been running this strategy for years? Reconstruct tranches from your linked
-          investment account â or upload that account's CSV and we'll propose tranches
+          investment account — or upload that account's CSV and we'll propose tranches
           from it. You review and confirm each one.
         </p>
       </div>
-      <LockedSection locked={locked} onUnlock={onUnlock} label="CSV import">
         {doneMsg ? (
           <p className="rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950 p-3 text-sm text-emerald-900 dark:text-emerald-100">
             {doneMsg}
@@ -1150,21 +1141,21 @@ function SmithCsvImportCard({
           <div className="space-y-4">
             {linkedAccountName && linkedRows.length > 0 ? (
               <div className="space-y-1.5">
-                <p className="text-xs font-medium">1 Â· From your ledger (recommended)</p>
+                <p className="text-xs font-medium">1 · From your ledger (recommended)</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button size="sm" onClick={handleLedgerReconstruct}>
                     Reconstruct from {linkedAccountName}
                   </Button>
                   <span className="text-xs text-muted-foreground">
                     {linkedRows.length} transaction{linkedRows.length === 1 ? "" : "s"} already
-                    in your ledger â no upload needed.
+                    in your ledger — no upload needed.
                   </span>
                 </div>
               </div>
             ) : null}
             <div className="space-y-1.5">
               <p className="text-xs font-medium">
-                {linkedAccountName && linkedRows.length > 0 ? "2 Â· From a file" : "From a file"}
+                {linkedAccountName && linkedRows.length > 0 ? "2 · From a file" : "From a file"}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Input
@@ -1173,11 +1164,12 @@ function SmithCsvImportCard({
                   className="max-w-xs"
                   onChange={(e) => void handleFile(e.target.files?.[0])}
                 />
-                {reading ? <span className="text-xs text-muted-foreground">Reading statement with AIâ¦</span> : null}
+                {reading ? <span className="text-xs text-muted-foreground">Reading statement with AI…</span> : null}
               </div>
               <p className="text-[11px] text-muted-foreground">
                 CSVs parse instantly on your device. PDF or image statements are read with AI
-                (Pro) â draws become proposed tranches, payments become outflows for review.
+                (Pro) — draws become proposed tranches, payments become outflows for review.{" "}
+                {hasAi ? <AiQuotaNote /> : null}
               </p>
             </div>
             {proposals === null && warnings.length > 0 && !unreadable
@@ -1188,23 +1180,26 @@ function SmithCsvImportCard({
             {unreadable ? (
               <div className="space-y-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3">
                 <p className="text-sm">
-                  We couldn't read <span className="font-medium">{unreadable.fileName}</span> â
+                  We couldn't read <span className="font-medium">{unreadable.fileName}</span> —
                   the column layout wasn't recognized.
                 </p>
                 {warnings.map((w, i) => (
                   <p key={i} className="text-xs text-amber-800 dark:text-amber-300">{w}</p>
                 ))}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button size="sm" onClick={() => void handleLearnLayout()} disabled={learning}>
-                    {learning ? "Learningâ¦" : "Learn this layout with AI"}
-                  </Button>
+                  <LockedSection locked={!hasAi} onUnlock={onUnlockAi} label="AI layout learning">
+                    <Button size="sm" onClick={() => void handleLearnLayout()} disabled={learning}>
+                      {learning ? "Learning…" : "Learn this layout with AI"}
+                    </Button>
+                  </LockedSection>
                   <Button size="sm" variant="ghost" onClick={reset}>
                     Dismiss
                   </Button>
+                  {hasAi ? <AiQuotaNote /> : null}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   AI reads only the header row and a few sample lines to learn the column
-                  mapping â never your full file. The layout is saved on this device, so
+                  mapping — never your full file. The layout is saved on this device, so
                   future files with the same layout parse instantly with no AI involved.
                 </p>
                 {learnError ? <p className="text-xs text-red-700 dark:text-red-400">{learnError}</p> : null}
@@ -1215,7 +1210,7 @@ function SmithCsvImportCard({
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">
-                Review proposals from {fileName} â {proposals.length} item(s)
+                Review proposals from {fileName} — {proposals.length} item(s)
                 <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                   {source === "ledger" ? "From your ledger" : source === "statement" ? "From statement" : "From CSV"}
                 </span>
@@ -1226,23 +1221,26 @@ function SmithCsvImportCard({
                 ) : null}
               </p>
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handlePresort()}
-                  disabled={presorting}
-                  title="Let AI suggest which tranches look like Smith-manoeuvre money. You still confirm each one."
-                >
-                  {presorting ? "Pre-sortingâ¦" : "AI pre-sort"}
-                </Button>
+                <LockedSection locked={!hasAi} onUnlock={onUnlockAi} label="AI pre-sort">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handlePresort()}
+                    disabled={presorting}
+                    title="Let AI suggest which tranches look like Smith-manoeuvre money. You still confirm each one."
+                  >
+                    {presorting ? "Pre-sorting…" : "AI pre-sort"}
+                  </Button>
+                </LockedSection>
                 <Button size="sm" variant="ghost" onClick={reset}>
                   Cancel
                 </Button>
+                {hasAi ? <AiQuotaNote /> : null}
               </div>
             </div>
             {aiPresorted ? (
               <p className="text-[11px] text-muted-foreground">
-                AI suggested the initial checks from draw amounts and timing â outflows are
+                AI suggested the initial checks from draw amounts and timing — outflows are
                 never pre-checked. You still confirm each item.
               </p>
             ) : null}
@@ -1286,7 +1284,7 @@ function SmithCsvImportCard({
                   {outflowsMissingClass.length} checked outflow{outflowsMissingClass.length === 1 ? "" : "s"} need{outflowsMissingClass.length === 1 ? "s" : ""} tagging:
                 </span>
                 <Select value={bulkClass} onValueChange={(v) => setBulkClass(v as OutflowClassification)}>
-                  <SelectTrigger className="w-44"><SelectValue placeholder="Classify all asâ¦" /></SelectTrigger>
+                  <SelectTrigger className="w-44"><SelectValue placeholder="Classify all as…" /></SelectTrigger>
                   <SelectContent>
                     {(Object.keys(OUTFLOW_LABELS) as OutflowClassification[]).map((c) => (
                       <SelectItem key={c} value={c}>{OUTFLOW_LABELS[c]}</SelectItem>
@@ -1323,7 +1321,7 @@ function SmithCsvImportCard({
                           : "bg-sky-100 dark:bg-sky-900 text-sky-900 dark:text-sky-100"
                       }`}
                     >
-                      {isOutflow ? "Outflow" : "Tranche"} Â· {proposalCategory(item.rawType)}
+                      {isOutflow ? "Outflow" : "Tranche"} · {proposalCategory(item.rawType)}
                     </span>
                     <span className="text-xs text-muted-foreground">{item.note}</span>
                     {presortNotes[item.key] ? (
@@ -1342,7 +1340,7 @@ function SmithCsvImportCard({
                         }
                       >
                         <SelectTrigger className="w-44">
-                          <SelectValue placeholder="Classify outflowâ¦" />
+                          <SelectValue placeholder="Classify outflow…" />
                         </SelectTrigger>
                         <SelectContent>
                           {(Object.keys(OUTFLOW_LABELS) as OutflowClassification[]).map((c) => (
@@ -1363,7 +1361,7 @@ function SmithCsvImportCard({
               </p>
             ) : null}
             <p className="text-[11px] text-muted-foreground">
-              Inferred items are proposals only â nothing is recorded until you confirm.
+              Inferred items are proposals only — nothing is recorded until you confirm.
               This import reconstructs your records; it is not tax advice. Check each item
               against your statements.
             </p>
@@ -1372,7 +1370,6 @@ function SmithCsvImportCard({
             </Button>
           </div>
         )}
-      </LockedSection>
     </div>
   );
 }
@@ -1419,7 +1416,7 @@ function PairSetupCard({
         <h3 className="text-base font-semibold">Set up your HELOC investing flow</h3>
         <p className="text-sm text-muted-foreground">
           Link your readvanceable mortgage and HELOC. Every principal payment creates
-          room you can draw â the debts stay in sync automatically.
+          room you can draw — the debts stay in sync automatically.
         </p>
       </div>
       <div className="space-y-1 max-w-xs rounded-lg border border-primary/30 bg-primary/5 p-3">
@@ -1436,7 +1433,7 @@ function PairSetupCard({
               <SelectContent>
                 {mortgages.map((d) => (
                   <SelectItem key={d.id} value={d.id}>
-                    {d.name || "Mortgage"} â {formatCad(d.balance)}
+                    {d.name || "Mortgage"} — {formatCad(d.balance)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1466,7 +1463,7 @@ function PairSetupCard({
               <SelectContent>
                 {helocs.map((d) => (
                   <SelectItem key={d.id} value={d.id}>
-                    {d.name || "HELOC"} â {formatCad(d.balance)}
+                    {d.name || "HELOC"} — {formatCad(d.balance)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1497,7 +1494,7 @@ function PairSetupCard({
       <div className="rounded-lg border p-3 space-y-2">
         <div className="flex items-center gap-2">
           <Switch checked={alreadyStarted} onCheckedChange={setAlreadyStarted} />
-          <Label className="text-xs">Already doing this â I have draws from before</Label>
+          <Label className="text-xs">Already doing this — I have draws from before</Label>
         </div>
         {alreadyStarted ? (
           <div className="space-y-1 max-w-xs">
@@ -1505,7 +1502,7 @@ function PairSetupCard({
             <NumInput value={openingDrawn === "" ? null : Number(openingDrawn)} onCommit={(n) => setOpeningDrawn(String(Math.max(0, n)))} />
             <p className="text-[11px] text-muted-foreground">
               How much have you already drawn on this HELOC for investing? This becomes your
-              opening position â new draws are tracked on top, not re-entered.
+              opening position — new draws are tracked on top, not re-entered.
             </p>
           </div>
         ) : null}
@@ -1644,12 +1641,12 @@ function ReconciliationLine({
       {matches ? (
         <span className="text-emerald-700 dark:text-emerald-400">
           {" "}= {formatCad(Math.max(0, openingDrawn))} opening + {formatCad(trancheTotal)} draws
-          {repayments > 0 ? ` â ${formatCad(repayments)} repaid` : ""} â
+          {repayments > 0 ? ` − ${formatCad(repayments)} repaid` : ""} ✓
         </span>
       ) : (
         <span className="text-amber-700 dark:text-amber-400">
           {" "}doesn&apos;t match the ledger ({formatCad(Math.max(0, openingDrawn))} opening +{" "}
-          {formatCad(trancheTotal)} draws{repayments > 0 ? ` â ${formatCad(repayments)} repaid` : ""}{" "}
+          {formatCad(trancheTotal)} draws{repayments > 0 ? ` − ${formatCad(repayments)} repaid` : ""}{" "}
           = {formatCad(expected)}). Check the balance on the Debts tab.
         </span>
       )}
@@ -1693,8 +1690,6 @@ function RoomDrawCard({
   openingDrawn,
   homeValue,
   onHomeValue,
-  locked,
-  onUnlock,
   lastTranche,
   linkedAccountId,
   linkedAccountName,
@@ -1712,8 +1707,6 @@ function RoomDrawCard({
   openingDrawn: number;
   homeValue: number | null;
   onHomeValue: (v: number | null) => void;
-  locked: boolean;
-  onUnlock: () => void;
   lastTranche: SmithTranche | null;
   linkedAccountId: string | null;
   linkedAccountName: string | null;
@@ -1876,7 +1869,7 @@ function RoomDrawCard({
         <div>
           <h3 className="text-base font-semibold">HELOC room</h3>
           <p className="text-sm text-muted-foreground">
-            {mortgage.name || "Mortgage"} â {heloc.name || "HELOC"} Â·{" "}
+            {mortgage.name || "Mortgage"} → {heloc.name || "HELOC"} ·{" "}
             {room.paymentsCounted} payments counted
           </p>
         </div>
@@ -1887,16 +1880,14 @@ function RoomDrawCard({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => (locked ? onUnlock() : onUnlink())}
-            title={locked ? "Pro feature â click to upgrade" : undefined}
+            onClick={() => onUnlink()}
           >
-            {locked ? "ð Unlink" : "Unlink"}
+            Unlink
           </Button>
         </div>
       </div>
 
       {showRefinance ? (
-        <LockedSection locked={locked} onUnlock={onUnlock} label="Refinance">
           <RefinanceForm
             mortgage={mortgage}
             onRefinance={(snapshot, newTerms) => {
@@ -1904,20 +1895,17 @@ function RoomDrawCard({
               setShowRefinance(false);
             }}
           />
-        </LockedSection>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-4">
         <div className="rounded-lg border p-3">
           <div className="text-xs text-muted-foreground">Home value</div>
-          <div className="text-xl font-bold">{homeValue ? formatCad(homeValue) : "â"}</div>
+          <div className="text-xl font-bold">{homeValue ? formatCad(homeValue) : "—"}</div>
           <div className="mt-1">
-            <LockedSection locked={locked} onUnlock={onUnlock} label="Edit home value">
-              <NumInput
-                value={homeValue}
-                onCommit={(n) => onHomeValue(Math.max(0, n) || null)}
-              />
-            </LockedSection>
+            <NumInput
+              value={homeValue}
+              onCommit={(n) => onHomeValue(Math.max(0, n) || null)}
+            />
           </div>
           <div className="text-[11px] text-muted-foreground">Equity base for readvanceable limit</div>
         </div>
@@ -1949,8 +1937,7 @@ function RoomDrawCard({
         tranches={tranches}
       />
 
-      <LockedSection locked={locked} onUnlock={onUnlock} label="Record a draw">
-        <div className="space-y-3 rounded-lg border p-3">
+      <div className="space-y-3 rounded-lg border p-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium">Record a draw</h4>
             {lastTranche ? (
@@ -2152,7 +2139,7 @@ function RoomDrawCard({
         ) : null}
         {drawError ? <p className="text-xs text-red-700 dark:text-red-400">{drawError}</p> : null}
         <Button size="sm" onClick={() => void record()} disabled={drawn <= 0 || drawn > room.roomAvailable || recording}>
-          {recording ? "Recordingâ¦" : "Record draw"}
+          {recording ? "Recording…" : "Record draw"}
         </Button>
         <p className="text-[11px] text-muted-foreground">
           The HELOC balance on your Debts tab updates automatically.
@@ -2161,7 +2148,6 @@ function RoomDrawCard({
             : ""}
         </p>
         </div>
-      </LockedSection>
     </div>
   );
 }
@@ -2186,7 +2172,7 @@ function RefinanceForm({
 
   return (
     <div className="rounded-lg border p-3 space-y-3">
-      <h4 className="text-sm font-medium">Refinance â update mortgage terms</h4>
+      <h4 className="text-sm font-medium">Refinance — update mortgage terms</h4>
       <p className="text-[11px] text-muted-foreground">
         Today's terms are snapshotted to history before the new ones take effect.
       </p>
