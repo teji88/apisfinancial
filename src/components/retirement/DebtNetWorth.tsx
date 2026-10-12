@@ -52,7 +52,9 @@ function newDebt(): DebtInput {
     name: "",
     kind: "loan",
     balance: 0,
-    rate: 0.05,
+    // No silent rate guess: rate 0 means "not entered yet" — downstream
+    // cards prompt for the real rate instead of computing on an assumption.
+    rate: 0,
     payment: 0,
     deductible: false,
   };
@@ -130,6 +132,9 @@ export function DebtsForm({
                 <div className="space-y-1">
                   <Label className="text-[11px]">Rate (%/yr)</Label>
                   <NumInput value={Math.round(d.rate * 10000) / 100} onCommit={(n) => update(d.id, { rate: Math.max(0, n) / 100 })} />
+                  {d.rate <= 0 ? (
+                    <p className="text-[10px] text-amber-800 dark:text-amber-300">Enter the actual rate — calculations need it.</p>
+                  ) : null}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[11px]">Payment ($/mo)</Label>
@@ -250,10 +255,20 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
 
   useEffect(() => {
     setResult(null);
+    setRateMissing(false);
   }, [debtId, extra, expectedReturnPct]);
+
+  const [rateMissing, setRateMissing] = useState(false);
 
   const run = () => {
     if (!debt) return;
+    // No silent rate guess: block the comparison until the real rate is entered.
+    if (debt.rate <= 0) {
+      setRateMissing(true);
+      setResult(null);
+      return;
+    }
+    setRateMissing(false);
     const ownerShare = (debt.owner ?? "self") === "joint" ? 0.5 : 1;
     setResult(
       comparePayoffVsInvest({
@@ -329,7 +344,21 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
             No regular payment recorded for this debt — enter it in the Debts tab first, or the comparison can't run.
           </p>
         ) : null}
+        {debt && debt.rate <= 0 ? (
+          <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1">
+            No interest rate recorded for this debt — enter it in the Debts tab first, or the comparison can't run.
+          </p>
+        ) : null}
       </div>
+      {rateMissing && debt ? (
+        <div className="rounded-lg border p-4 space-y-2">
+          <p className="text-sm font-medium">Enter the interest rate to run this comparison.</p>
+          <p className="text-sm text-muted-foreground">
+            Enter the interest rate for this debt in the Debts tab — the comparison needs the real
+            rate; we won't assume one.
+          </p>
+        </div>
+      ) : null}
       {result && debt ? (
         result.ok === false ? (
           <div className="rounded-lg border p-4 space-y-2">
@@ -533,14 +562,9 @@ function DistributionEditor({
 export function SmithTrackerCard({
   profile,
   onSave,
-  locked = false,
-  onLocked,
 }: {
   profile: Profile;
   onSave: (t: SmithTranche[]) => void;
-  /** When true, tranche data renders read-only; edit actions open the upgrade prompt. */
-  locked?: boolean;
-  onLocked?: () => void;
 }) {
   const [tranches, setTranches] = useState<SmithTranche[]>(profile.smith_tranches ?? []);
   const [result, setResult] = useState<SmithLedgerResult | null>(null);
@@ -606,32 +630,19 @@ export function SmithTrackerCard({
                   ) : null}
                 </span>
                 <div className="flex gap-1">
-                  {locked ? (
-                    <button
-                      type="button"
-                      className="text-xs underline text-muted-foreground"
-                      onClick={onLocked}
-                      title="Pro feature — click to upgrade"
-                    >
-                      🔒 Edit
-                    </button>
-                  ) : (
-                    <>
-                      <button type="button" className="text-xs underline text-muted-foreground" onClick={() => setExpanded(isOpen ? null : t.id)}>
-                        {isOpen ? "Collapse" : "Edit"}
-                      </button>
-                      <button
-                        type="button"
-                        className="text-xs underline text-muted-foreground"
-                        onClick={() => {
-                          setTranches(tranches.filter((x) => x.id !== t.id));
-                          setResult(null);
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </>
-                  )}
+                  <button type="button" className="text-xs underline text-muted-foreground" onClick={() => setExpanded(isOpen ? null : t.id)}>
+                    {isOpen ? "Collapse" : "Edit"}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs underline text-muted-foreground"
+                    onClick={() => {
+                      setTranches(tranches.filter((x) => x.id !== t.id));
+                      setResult(null);
+                    }}
+                  >
+                    Remove
+                  </button>
                 </div>
               </div>
               {isOpen ? (
@@ -738,15 +749,9 @@ export function SmithTrackerCard({
             </div>
           );
         })}
-        {locked ? (
-          <Button size="sm" variant="outline" onClick={onLocked} title="Pro feature — click to upgrade">
-            🔒 Add tranche
-          </Button>
-        ) : (
-          <Button size="sm" variant="outline" onClick={() => setTranches([...tranches, newSmithTranche()])}>
-            Add tranche
-          </Button>
-        )}
+        <Button size="sm" variant="outline" onClick={() => setTranches([...tranches, newSmithTranche()])}>
+          Add tranche
+        </Button>
       </div>
 
       <div>
