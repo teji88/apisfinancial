@@ -22,14 +22,15 @@ const FREE_POINTS = [
   "Ledger with adjusted cost base",
   "Dividends, benchmarking and performance",
   "The full household retirement planner",
+  "HELOC investing tracker — draws, tranches, tax records",
   "CSV imports and typing transactions in",
 ];
 
 const PAID_POINTS = [
   "Everything in the free plan",
-  "HELOC investing tracker — set up draws, keep per-tranche tax records",
   "Upload a PDF statement and have it read for you",
   "Upload a screenshot or photo of a statement",
+  "50 AI pages a month — fair-use cap, resets monthly",
   "Rows are drafted for you to check before saving",
 ];
 
@@ -159,7 +160,7 @@ export function UpgradeDialog({
           <DialogTitle>Apis Financial plans</DialogTitle>
           <DialogDescription>
             {reason ??
-              "Most of Apis Financial is free. Pro adds the HELOC investing tracker plus AI reading of PDFs and photos."}
+              "Everything is free. Pro ($10 a year) covers AI statement reading — the one thing that costs us to run."}
           </DialogDescription>
         </DialogHeader>
         <PlanUpgrade onDone={() => onOpenChange(false)} />
