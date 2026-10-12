@@ -799,7 +799,19 @@ function PerformancePage() {
         history.isLoading ||
         (period === "ALL" && benchmarkHistory.isLoading) ||
         (period !== "ALL" && chartHistory.isLoading) ? (
-          <p className="mt-4 text-sm text-muted-foreground">Loading market history…</p>
+          <div className="mt-4 space-y-1">
+            <p className="text-sm text-muted-foreground">
+              {history.isLoading
+                ? `Fetching market prices for ${
+                    positions.filter((p) => Math.abs(p.units) > 1e-9).length
+                  } holdings…`
+                : "Replaying your transaction history…"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Large accounts can take a minute or two on the first visit — afterwards it's
+              instant.
+            </p>
+          </div>
         ) : transactions.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">
             Add some transactions and this chart will compare them against the index.
