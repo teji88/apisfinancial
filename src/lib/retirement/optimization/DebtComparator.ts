@@ -27,11 +27,19 @@ export interface PayoffVsInvestInputs {
   interestDeductible: boolean;
 }
 
-export interface PayoffVsInvestResult {
-  baseMonths: number;
+/** Outcome of amortizing one payment schedule — discriminated, no Infinity/-1 sentinels. */
+export type AmortizationOutcome =
+  | { ok: true; months: number; interest: number }
+  | { ok: false; reason: "never-amortizes" };
+
+export interface PayoffVsInvestSuccess {
+  ok: true;
+  /** Null when the base scenario never amortizes (regular payment doesn't cover interest). */
+  baseMonths: number | null;
   acceleratedMonths: number;
-  monthsSaved: number;
-  baseInterest: number;
+  /** Null when the base scenario never amortizes. */
+  monthsSaved: number | null;
+  baseInterest: number | null;
   acceleratedInterest: number;
   /** Interest saved, after-tax when the interest is deductible. */
   interestSavedAfterTax: number;
@@ -43,17 +51,35 @@ export interface PayoffVsInvestResult {
   disclaimer: string;
 }
 
+export interface PayoffVsInvestBlocked {
+  ok: false;
+  reason: "missing-payment" | "never-amortizes";
+  /** Monthly interest on the balance — shown so the user sees the shortfall. */
+  monthlyInterest: number;
+  monthlyPayment: number;
+  /** Regular payment + extra. */
+  fullPayment: number;
+  disclaimer: string;
+}
+
+export type PayoffVsInvestResult = PayoffVsInvestSuccess | PayoffVsInvestBlocked;
+
 export const PAYOFF_DISCLAIMER =
   "Comparison based on the rates shown and assumes the extra amount is invested " +
   "monthly at the expected return. Investing involves risk — the payoff saving is " +
   "guaranteed, the investment outcome is not. For information only — not financial advice.";
 
-function amortize(balance: number, annualRate: number, monthlyPayment: number): { months: number; interest: number } {
-  if (balance <= 0) return { months: 0, interest: 0 };
+export const MISSING_PAYMENT_PROMPT =
+  "Enter the regular monthly payment for this debt in the Debts tab — the extra amount goes on top of it, " +
+  "so the comparison needs the real payment underneath. (It can't be derived from the balance and rate: " +
+  "the remaining amortization is unknowable.)";
+
+function amortize(balance: number, annualRate: number, monthlyPayment: number): AmortizationOutcome {
+  if (balance <= 0) return { ok: true, months: 0, interest: 0 };
   const r = annualRate / 12;
   if (monthlyPayment <= balance * r) {
     // Payment doesn't cover interest — never amortizes.
-    return { months: Number.POSITIVE_INFINITY, interest: Number.POSITIVE_INFINITY };
+    return { ok: false, reason: "never-amortizes" };
   }
   let b = balance;
   let interest = 0;
@@ -65,26 +91,54 @@ function amortize(balance: number, annualRate: number, monthlyPayment: number): 
     months++;
     if (b < 0) b = 0;
   }
-  return { months, interest };
+  return { ok: true, months, interest };
 }
 
 export function comparePayoffVsInvest(inputs: PayoffVsInvestInputs): PayoffVsInvestResult {
-  const warnings: string[] = [];
   const balance = Math.max(0, inputs.balance);
   const extra = Math.max(0, inputs.extraMonthly);
-  const fullPayment = inputs.monthlyPayment + extra;
+  const payment = Math.max(0, inputs.monthlyPayment);
+  const fullPayment = payment + extra;
+  const monthlyInterest = balance * (inputs.annualRate / 12);
 
-  const base = amortize(balance, inputs.annualRate, inputs.monthlyPayment);
+  // Missing payment: block. The extra is meaningless without the real payment
+  // underneath it — and the payment can't be derived from balance + rate.
+  if (payment <= 0) {
+    return {
+      ok: false,
+      reason: "missing-payment",
+      monthlyInterest,
+      monthlyPayment: payment,
+      fullPayment,
+      disclaimer: PAYOFF_DISCLAIMER,
+    };
+  }
+
+  const base = amortize(balance, inputs.annualRate, payment);
   const accelerated = amortize(balance, inputs.annualRate, fullPayment);
 
-  if (!Number.isFinite(base.months)) {
+  // Even with the extra, the payment doesn't cover monthly interest —
+  // the balance would keep growing. Covers genuine interest-only debts too.
+  if (!accelerated.ok) {
+    return {
+      ok: false,
+      reason: "never-amortizes",
+      monthlyInterest,
+      monthlyPayment: payment,
+      fullPayment,
+      disclaimer: PAYOFF_DISCLAIMER,
+    };
+  }
+
+  const warnings: string[] = [];
+  if (!base.ok) {
     warnings.push(
       "The regular payment does not cover the monthly interest — this debt never amortizes at the current payment.",
     );
   }
 
   const afterTaxFactor = inputs.interestDeductible ? 1 - inputs.marginalRate : 1;
-  const interestSavedAfterTax = Number.isFinite(base.interest)
+  const interestSavedAfterTax = base.ok
     ? Math.max(0, base.interest - accelerated.interest) * afterTaxFactor
     : 0;
 
@@ -96,29 +150,25 @@ export function comparePayoffVsInvest(inputs: PayoffVsInvestInputs): PayoffVsInv
   const fv = (pmt: number, n: number) =>
     n > 0 && pmt > 0 ? (rm > 0 ? pmt * ((Math.pow(1 + rm, n) - 1) / rm) : pmt * n) : 0;
 
-  const nBase = Number.isFinite(base.months) ? base.months : 0;
-  const nAccel = Number.isFinite(accelerated.months) ? accelerated.months : 0;
+  const nBase = base.ok ? base.months : 0;
+  const nAccel = accelerated.months;
   // Wealth at month nBase:
   //   payoff path: -acceleratedInterest + FV(fullPayment, nBase - nAccel)
   //   invest path: -baseInterest + FV(extra, nBase)
-  const payoffWealth =
-    -(Number.isFinite(accelerated.interest) ? accelerated.interest * afterTaxFactor : 0) +
-    fv(fullPayment, nBase - nAccel);
-  const investWealth =
-    -(Number.isFinite(base.interest) ? base.interest * afterTaxFactor : 0) + fv(extra, nBase);
+  const payoffWealth = -(accelerated.interest * afterTaxFactor) + fv(fullPayment, nBase - nAccel);
+  const investWealth = -(base.ok ? base.interest * afterTaxFactor : 0) + fv(extra, nBase);
   const netAdvantageInvesting = investWealth - payoffWealth;
 
   // For display: FV of the extra invested over the accelerated horizon (simple view).
   const investFutureValue = fv(extra, nAccel);
 
   return {
-    baseMonths: Number.isFinite(base.months) ? base.months : -1,
-    acceleratedMonths: Number.isFinite(accelerated.months) ? accelerated.months : -1,
-    monthsSaved: Number.isFinite(base.months) && Number.isFinite(accelerated.months)
-      ? base.months - accelerated.months
-      : 0,
-    baseInterest: Number.isFinite(base.interest) ? base.interest : -1,
-    acceleratedInterest: Number.isFinite(accelerated.interest) ? accelerated.interest : -1,
+    ok: true,
+    baseMonths: base.ok ? base.months : null,
+    acceleratedMonths: accelerated.months,
+    monthsSaved: base.ok ? base.months - accelerated.months : null,
+    baseInterest: base.ok ? base.interest : null,
+    acceleratedInterest: accelerated.interest,
     interestSavedAfterTax,
     investFutureValue,
     netAdvantageInvesting,
