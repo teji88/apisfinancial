@@ -28,6 +28,7 @@ import {
   type LearnedProfile,
 } from "@/lib/csv-learn";
 import { findDuplicateRows } from "@/lib/duplicate-check";
+import { isValidFxDate, resolveFxRates } from "@/lib/fxCache";
 import { useAccounts, useHoldings, useAddTransactions, createAccount, useTransactions, type NewTransaction } from "@/lib/portfolio";
 import { filterNewRows } from "@/lib/importDedupe";
 import { useEntitlement } from "@/lib/entitlement";
@@ -139,6 +140,7 @@ function ImportPage() {
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState(0);
   const [saveTotal, setSaveTotal] = useState(0);
+  const [savePhase, setSavePhase] = useState<"fx" | "saving">("saving");
   const [page, setPage] = useState(0);
   const [portfolios, setPortfolios] = useState<CsvPortfolio[]>([]);
   const [mapping, setMapping] = useState<Record<string, Mapping>>({});
@@ -546,19 +548,30 @@ function ImportPage() {
     setSaving(true);
     setProgress(0);
     setSaveTotal(fresh.length);
-    const rateCache = new Map<string, number>();
-    const rateFor = async (currency: string, date: string, fx?: number): Promise<number> => {
+    setSavePhase("fx");
+    // Collect unique USD dates needing a lookup: skip non-USD rows, rows with
+    // a file-supplied rate (the trade-date rate wins), and malformed dates.
+    const fxDates = new Set<string>();
+    for (const row of fresh) {
+      const cur = row.currency ?? "CAD";
+      const d = row.date ?? "";
+      if (cur !== "USD") continue;
+      if (row.fx && row.fx > 0 && row.fx !== 1) continue;
+      if (isValidFxDate(d)) fxDates.add(d);
+    }
+    // Permanent localStorage cache + parallel fetch for the missing dates
+    // (bounded concurrency) — replaces the old sequential per-date round-trips.
+    const rateMap = await resolveFxRates([...fxDates], async (date) => {
+      const res = await fxOnDate({ data: { date } });
+      return res.rate ?? 1;
+    });
+    const rateFor = (currency: string, date: string, fx?: number): number => {
       if (currency !== "USD") return 1;
       // A rate supplied by the file is the actual trade-date rate — keep it.
       if (fx && fx > 0 && fx !== 1) return fx;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 1;
-      const cached = rateCache.get(date);
-      if (cached) return cached;
-      const res = await fxOnDate({ data: { date } });
-      const rate = res.rate ?? 1;
-      rateCache.set(date, rate);
-      return rate;
+      return rateMap.get(date) ?? 1;
     };
+    setSavePhase("saving");
     try {
       // Resolve FX rates up front so the bulk insert is a pure write phase.
       const inputs: NewTransaction[] = [];
@@ -582,7 +595,7 @@ function ImportPage() {
             ? cashAmount
             : null,
           currency: rowCurrency,
-          fxRate: await rateFor(rowCurrency, rowDate, row.fx),
+          fxRate: rateFor(rowCurrency, rowDate, row.fx),
           fee: row.fee ?? 0,
           date: rowDate,
         });
@@ -1181,7 +1194,7 @@ function ImportPage() {
             <div className="flex items-center gap-3">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
               <h3 className="text-base font-semibold">
-                Saving {progress} of {saveTotal}…
+                {savePhase === "fx" ? "Resolving FX rates…" : `Saving ${progress} of ${saveTotal}…`}
               </h3>
             </div>
             <div
