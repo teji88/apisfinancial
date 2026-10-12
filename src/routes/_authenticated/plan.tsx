@@ -28,12 +28,12 @@ export const Route = createFileRoute("/_authenticated/plan")({
       {
         name: "description",
         content:
-          "Most of Apis Financial is free. Pro ($10 a year) adds the HELOC investing tracker plus AI reading of PDF statements and screenshots.",
+          "Everything in Apis Financial is free. Pro ($10 a year) covers AI statement reading — the one thing that costs us to run.",
       },
       { property: "og:title", content: "Your plan — Apis Financial" },
       {
         property: "og:description",
-        content: "Most of Apis Financial is free. Pro ($10 a year) adds the HELOC investing tracker plus AI statement reading.",
+        content: "Everything in Apis Financial is free. Pro ($10 a year) covers AI statement reading.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -134,8 +134,8 @@ function PlanPage() {
       <div>
         <h1 className="text-2xl font-semibold">Your plan</h1>
         <p className="text-sm text-muted-foreground">
-          Most of Apis Financial is free. Pro adds the HELOC investing tracker plus having PDF
-          statements and screenshots read for you — $10 a year.
+          Everything in Apis Financial is free. Pro ($10 a year) covers AI statement
+          reading — the one thing that costs us to run.
         </p>
       </div>
 
@@ -178,7 +178,7 @@ function PlanPage() {
         {entitlement.readOnly ? (
           <p className="mt-3 text-sm text-muted-foreground">
             {entitlement.readOnlyReason === "overlimit"
-              ? "Your data stays safe — nothing is deleted. Pro unlocks the HELOC investing tracker and AI statement reading."
+              ? "Your data stays safe — nothing is deleted. Pro adds AI statement reading."
               : `Your access ended on ${formatDate(entitlement.accessEndsAt)}. Your data stays safe — nothing is deleted.`}
           </p>
         ) : entitlement.accessEndsAt ? (
@@ -201,8 +201,8 @@ function PlanPage() {
           </p>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">
-            You are on the free plan — every feature except the Pro ones (HELOC investing tracker
-            and AI statement reading) is included.
+            You are on the free plan — every feature is included. Pro adds AI statement
+            reading (50 AI pages a month).
           </p>
         )}
 
