@@ -13,6 +13,12 @@ export interface MonthlyFinancialLedgerInput {
   debtPayments: Money;
   debtPrincipal: Money;
   debtInterest: Money;
+  /**
+   * Withdrawal proceeds reinvested into the portfolio within the same month
+   * (fill-to-ceiling meltdown surplus parked in non-registered). It leaves
+   * household cash but not the portfolio, so the cash equation subtracts it.
+   */
+  reinvested?: Money;
   endingPortfolio: Money;
   endingHouseholdCash: Money;
   beginningDebt: Money;
@@ -77,7 +83,8 @@ export function reconcileMonthlyFinancialLedger(
     input.withdrawals -
     input.taxes -
     input.spending -
-    input.debtPayments;
+    input.debtPayments -
+    (input.reinvested ?? 0);
   const cashShortfall = Math.max(0, -expectedEndingHouseholdCash);
   const cashReconciliation =
     input.endingHouseholdCash - Math.max(0, expectedEndingHouseholdCash);
