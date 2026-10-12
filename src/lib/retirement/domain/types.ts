@@ -221,7 +221,25 @@ export interface MonthlySnapshot {
   debtInterest?: Money;
   debtPrincipal?: Money;
   shortfall: Money;
+  /** Fill-to-ceiling meltdown gross withdrawn this month (TAX_TARGETED). */
+  meltdownWithdrawals?: Money;
+  /** Nominal OAS-clawback fill target (threshold + tolerance) when melting. */
+  meltdownCeiling?: Money;
   cashFlow?: MonthlyCashFlowSnapshot;
+}
+
+/**
+ * Per-year tax ledger captured during simulation, for the projection-derived
+ * withdrawal marginal rate. TaxIncomeComponents are nominal dollars for the
+ * calendar year; the rate derived from them is dimensionless.
+ */
+export interface AnnualTaxCapture {
+  year: number;
+  ages: Partial<Record<PersonRole, number>>;
+  pensionSplitPercent: number;
+  province: string;
+  inflationRate: number;
+  taxInputs: Record<PersonRole, import("../engines/TaxEngine").TaxIncomeComponents>;
 }
 
 export interface SimulationMetrics {
@@ -258,6 +276,8 @@ export interface SimulationResult {
   engineVersion: string;
   rulesVersion: string;
   scenarioHash: string;
+  /** Per-year tax ledgers (captured at each year-end); powers the derived rate. */
+  annualTaxInputs?: AnnualTaxCapture[];
 }
 
 export interface OptimizationCandidate {

@@ -21,11 +21,14 @@ import { calculateCppBenefit } from "../benefits/CppCalculator";
 import { createDefaultRetirementScenario } from "../scenario/defaults";
 import type {
   AccountScenario,
+  AnnualTaxCapture,
   DbPension,
   PersonRole,
   RetirementScenario,
   SimulationResult,
 } from "../domain/types";
+import { calculateHouseholdTax } from "../engines/TaxEngine";
+import { clawbackIncomeOf } from "../engines/MeltdownEngine";
 
 // Re-export old types
 export type WithdrawalPolicy =
@@ -148,6 +151,10 @@ export type Projection = {
   totalClawback: number;
   estateTax: number;
   estateRegistered: number;
+  /** Per-year tax ledgers for the projection-derived withdrawal marginal rate. */
+  annualTaxInputs?: AnnualTaxCapture[];
+  /** Total GIS received (today's $) — disclosed in the derived-rate label. */
+  totalGis?: number;
 };
 
 // Constants
@@ -161,7 +168,7 @@ export const WITHDRAWAL_POLICIES: {
   {
     key: "TAX_TARGETED",
     label: "Tax-targeted meltdown",
-    blurb: "Melts down registered accounts but stops at the OAS clawback line (plus your tolerance), then uses taxable/TFSA. Avoids OAS clawback while drawing down registered.",
+    blurb: "Draws registered money each year up to the clawback/bracket ceiling — withdrawing beyond spending need in low-income years and parking the after-tax surplus in non-registered — then taxable, then TFSA.",
   },
   {
     key: "REGISTERED_FIRST",
@@ -378,8 +385,9 @@ function simulationToProjection(
   // Aggregate monthly to yearly
   const yearlyMap = new Map<number, {
     rrifDraw: number; lifDraw: number; nonregDraw: number; tfsaDraw: number;
-    cpp: number; oas: number; oasClawback: number; otherIncome: number;
+    cpp: number; oas: number; gis: number; oasClawback: number; otherIncome: number;
     taxes: number; spending: number; shortfall: number;
+    meltdown: number; meltdownCeiling: number;
     endingPortfolio: number; endingTfsa: number; endingRegistered: number; endingLira: number; endingNonReg: number;
     people: Map<string, {
       label: string; age: number;
@@ -394,13 +402,16 @@ function simulationToProjection(
     if (!y) {
       y = {
         rrifDraw: 0, lifDraw: 0, nonregDraw: 0, tfsaDraw: 0,
-        cpp: 0, oas: 0, oasClawback: 0, otherIncome: 0,
+        cpp: 0, oas: 0, gis: 0, oasClawback: 0, otherIncome: 0,
         taxes: 0, spending: 0, shortfall: 0,
+        meltdown: 0, meltdownCeiling: 0,
         endingPortfolio: 0, endingTfsa: 0, endingRegistered: 0, endingLira: 0, endingNonReg: 0,
         people: new Map(),
       };
       yearlyMap.set(year, y);
     }
+    y.meltdown += m.meltdownWithdrawals ?? 0;
+    y.meltdownCeiling = Math.max(y.meltdownCeiling, m.meltdownCeiling ?? 0);
     const ws = m.withdrawalSources;
     if (ws) {
       y.rrifDraw += ws.registered;
@@ -410,11 +421,14 @@ function simulationToProjection(
     }
     y.cpp += m.benefitSources?.cpp ?? 0;
     y.oas += (m.benefitSources?.oas ?? 0) + (m.benefitSources?.gis ?? 0);
+    y.gis += m.benefitSources?.gis ?? 0;
     y.oasClawback += m.oasRecovery ?? 0;
     y.taxes += m.taxes;
     y.spending += m.spending;
     y.shortfall = Math.max(y.shortfall, m.shortfall);
-    y.otherIncome += m.grossIncome - m.benefits;
+    // grossIncome bundles withdrawals (which now include the meltdown gross);
+    // back the meltdown out so otherIncome stays pension/rental-type income.
+    y.otherIncome += m.grossIncome - m.benefits - (m.meltdownWithdrawals ?? 0);
     // Aggregate per-person data
     const bp = m.benefitsByPerson;
     const wp = m.withdrawalsByPerson;
@@ -476,8 +490,8 @@ function simulationToProjection(
       spending: y.spending / d,
       shortfall: y.shortfall / d,
       pensionSplit: 0,
-      effectiveCeiling: 0,
-      meltdownFlag: false,
+      effectiveCeiling: y.meltdownCeiling / d,
+      meltdownFlag: y.meltdown > 0,
       people: Array.from(y.people.values()).map((p) => ({
         label: p.label,
         age: p.age,
@@ -537,6 +551,11 @@ function simulationToProjection(
     totalClawback: deflatedTotalClawback,
     estateTax: (metrics.estateTax ?? 0) / endDeflator,
     estateRegistered: (lastRow?.balances.rrsp ?? 0) + (lastRow?.balances.lira ?? 0),
+    annualTaxInputs: result.annualTaxInputs,
+    totalGis: sortedYears.reduce(
+      (s, year) => s + (yearlyMap.get(year)?.gis ?? 0) / deflatorFor(year),
+      0,
+    ),
   };
 }
 
@@ -737,6 +756,135 @@ export function compareWithdrawalStrategies(
 
   const best = [...results].sort((a, b) => score(b) - score(a))[0];
   return { results, best: best?.policy ?? "TAX_TARGETED" };
+}
+
+export type DerivedWithdrawalRate = {
+  /** Withdrawal-weighted household marginal rate on the next registered dollar, 0–1. */
+  rate: number;
+  /** Transparent derivation, e.g. "~22% based on your projected withdrawals — split-adjusted across both spouses; includes OAS clawback in ages 72–78". */
+  label: string;
+  /** Number of projected years with registered withdrawals. */
+  years: number;
+  /** Ages where the projection shows OAS clawback, or null. */
+  clawbackAges: number[] | null;
+};
+
+/**
+ * Derive the withdrawal marginal rate from the projection itself, instead of
+ * guessing it from household after-tax spending.
+ *
+ * For each projected year with registered withdrawals: bump household
+ * registered withdrawals by $1,000 allocated to the lower-income person
+ * (respecting the plan's pensionSplitPercent for eligible income), recompute
+ * total household tax + OAS recovery via the engine's own tax model, and
+ * divide the increase by $1,000. The annual rates are weighted by that year's
+ * registered withdrawals.
+ *
+ * This captures brackets, age credits, OAS clawback (via the projection's
+ * claw-aware tax figures, not computeTax alone), pension splitting, and the
+ * effect of existing balances automatically. Single filer = same
+ * household-level method with one person.
+ *
+ * Limitations: GIS phase-out is not captured (GIS is a benefit, not part of
+ * the tax recompute); spousal-RRSP withdrawals are assumed outside the
+ * 3-year attribution window (correct for long-horizon planning).
+ *
+ * Returns null when the projection has no registered withdrawals (or no
+ * captured tax ledgers) — the caller must fall back to manual input
+ * (planner-first gate: never silently guess).
+ */
+export function deriveWithdrawalMarginalRate(projection: Projection): DerivedWithdrawalRate | null {
+  const captures = projection.annualTaxInputs;
+  if (!captures || captures.length === 0) return null;
+
+  const byYear = new Map<number, AnnualTaxCapture>();
+  for (const c of captures) byYear.set(c.year, c);
+
+  let weightedSum = 0;
+  let weightTotal = 0;
+  let years = 0;
+  for (const row of projection.rows) {
+    const regWithdraw = row.rrifDraw + row.lifDraw;
+    if (regWithdraw < 100) continue;
+    const cap = byYear.get(row.year);
+    if (!cap) continue;
+
+    const payerBase = cap.taxInputs.MAIN_USER ?? {};
+    const spouseBase = cap.taxInputs.PARTNER ?? {};
+    const hasSpouse = (spouseBase.age ?? 0) > 0 || clawbackIncomeOf(spouseBase) > 0 || (cap.ages.PARTNER ?? 0) > 0;
+    const taxArgs = {
+      province: cap.province as Parameters<typeof calculateHouseholdTax>[0]["province"],
+      payerAge: cap.ages.MAIN_USER ?? 65,
+      spouseAge: cap.ages.PARTNER ?? 65,
+      pensionSplitPercent: cap.pensionSplitPercent ?? 0,
+      taxYear: cap.year,
+      inflationRate: cap.inflationRate,
+    };
+    const baseTax = calculateHouseholdTax({
+      ...taxArgs,
+      payer: payerBase,
+      spouse: hasSpouse ? spouseBase : undefined,
+    }).householdTax;
+
+    // Allocate the $1,000 bump to the lower-income person (tax-efficient).
+    const payerIncome = clawbackIncomeOf(payerBase);
+    const spouseIncome = hasSpouse ? clawbackIncomeOf(spouseBase) : Infinity;
+    const bumpRole = spouseIncome < payerIncome ? "PARTNER" : "MAIN_USER";
+    const bumpAge = cap.ages[bumpRole] ?? 65;
+    const bumpedPayer = bumpRole === "MAIN_USER"
+      ? {
+          ...payerBase,
+          rrspRrif: (payerBase.rrspRrif ?? 0) + 1000,
+          ...(bumpAge >= 65
+            ? { eligiblePensionIncome: (payerBase.eligiblePensionIncome ?? 0) + 1000 }
+            : {}),
+        }
+      : payerBase;
+    const bumpedSpouse = bumpRole === "PARTNER"
+      ? {
+          ...spouseBase,
+          rrspRrif: (spouseBase.rrspRrif ?? 0) + 1000,
+          ...(bumpAge >= 65
+            ? { eligiblePensionIncome: (spouseBase.eligiblePensionIncome ?? 0) + 1000 }
+            : {}),
+        }
+      : spouseBase;
+    const bumpedTax = calculateHouseholdTax({
+      ...taxArgs,
+      payer: bumpedPayer,
+      spouse: hasSpouse ? bumpedSpouse : undefined,
+    }).householdTax;
+
+    const annualRate = Math.max(0, (bumpedTax - baseTax) / 1000);
+    weightedSum += annualRate * regWithdraw;
+    weightTotal += regWithdraw;
+    years++;
+  }
+
+  if (years === 0 || weightTotal <= 0) return null;
+  const rate = weightedSum / weightTotal;
+
+  const clawbackAges = projection.rows
+    .filter((r) => r.oasClawback > 1)
+    .map((r) => r.age);
+  const hasSpouse = projection.rows.some((r) => r.people.length > 1);
+
+  const parts = [`~${Math.round(rate * 100)}% based on your projected withdrawals`];
+  if (hasSpouse) parts.push("split-adjusted across both spouses");
+  if (clawbackAges.length > 0) {
+    const lo = Math.min(...clawbackAges);
+    const hi = Math.max(...clawbackAges);
+    parts.push(`includes OAS clawback in ages ${lo}–${hi}`);
+  }
+  if ((projection.totalGis ?? 0) > 100) {
+    parts.push("excludes GIS phase-out");
+  }
+  return {
+    rate,
+    label: parts.join("; "),
+    years,
+    clawbackAges: clawbackAges.length > 0 ? clawbackAges : null,
+  };
 }
 
 export type StressSeverity = "mild" | "moderate" | "severe";
