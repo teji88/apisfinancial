@@ -311,6 +311,94 @@ export function useAddTransaction() {
   });
 }
 
+export type BulkAddResult = {
+  saved: number;
+  failed: Array<{ chunkIndex: number; rowCount: number; message: string }>;
+};
+
+/**
+ * Bulk insert of transactions. Ensures holdings for the unique
+ * (accountId, symbol) pairs first, then inserts in chunks of 500.
+ * Portfolio queries are invalidated ONCE on success — not per row —
+ * so large imports don't cause refetch churn.
+ *
+ * Failure policy: a failed chunk does not stop the remaining chunks.
+ * Failures are collected and returned; the caller reports them.
+ */
+export function useAddTransactions() {
+  const invalidate = useInvalidatePortfolio();
+  return useMutation({
+    mutationFn: async ({
+      inputs,
+      onProgress,
+    }: {
+      inputs: NewTransaction[];
+      onProgress?: (saved: number, total: number) => void;
+    }): Promise<BulkAddResult> => {
+      const { data: auth } = await supabase.auth.getUser();
+      const userId = auth.user?.id;
+      if (!userId) throw new Error("You need to be signed in.");
+
+      // Ensure holdings for each unique (accountId, symbol) pair first.
+      // Symbols are few, so sequential is fine.
+      const holdingIds = new Map<string, string | null>();
+      for (const input of inputs) {
+        const pairKey = `${input.accountId}|${input.symbol.trim().toUpperCase()}`;
+        if (holdingIds.has(pairKey)) continue;
+        let holdingId: string | null = null;
+        if (NEEDS_SYMBOL.includes(input.transactionType) && input.symbol.trim()) {
+          holdingId = await ensureHolding(
+            userId,
+            input.accountId,
+            input.symbol,
+            input.name ?? null,
+            input.assetType,
+            input.currency,
+          );
+        }
+        holdingIds.set(pairKey, holdingId);
+      }
+
+      const CHUNK = 500;
+      const failed: BulkAddResult["failed"] = [];
+      let saved = 0;
+      for (let i = 0; i < inputs.length; i += CHUNK) {
+        const chunk = inputs.slice(i, i + CHUNK);
+        const chunkIndex = Math.floor(i / CHUNK);
+        const payload = chunk.map((input) => {
+          const pairKey = `${input.accountId}|${input.symbol.trim().toUpperCase()}`;
+          return {
+            user_id: userId,
+            account_id: input.accountId,
+            holding_id: holdingIds.get(pairKey) ?? null,
+            transaction_type: input.transactionType,
+            units: input.units,
+            price_per_unit: input.pricePerUnit,
+            amount: input.amount,
+            currency: input.currency,
+            fx_rate: input.fxRate,
+            fee: input.fee,
+            transaction_date: input.date,
+          };
+        });
+        const { error } = await supabase.from("transactions").insert(payload);
+        if (error) {
+          failed.push({
+            chunkIndex,
+            rowCount: chunk.length,
+            message: error.message,
+          });
+        } else {
+          saved += chunk.length;
+        }
+        onProgress?.(saved, inputs.length);
+      }
+      return { saved, failed };
+    },
+    onSuccess: invalidate,
+  });
+}
+
 export type TransactionEdit = {
   id: string;
   accountId: string;

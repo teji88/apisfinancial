@@ -85,6 +85,52 @@ Respond with a single JSON object of the form
 { "broker": string | null, "transactions": [ ... ] } and nothing else.`;
 
 /**
+ * Variant for HELOC / bank-account statements (used by the Home Equity
+ * Investing tracker's history reconstruction). Bank statements show the
+ * *source* side of the strategy: draws from the facility and payments back.
+ * - A draw/advance (money borrowed from the facility) -> DEPOSIT. It is the
+ *   cash that was available to invest; the review step confirms it was invested.
+ * - A payment/prepayment toward the facility -> WITHDRAWAL (outflow for review).
+ * - Interest charges, insurance premiums and bank fees -> FEE (skipped downstream).
+ * Ignore opening/closing balances, credit limits and available-credit lines —
+ * they are not transactions. Same never-invent, ISO-date and confidence rules
+ * as the brokerage prompt.
+ */
+export const BANK_STATEMENT_SYSTEM_PROMPT = `You extract HELOC and bank-account activity from Canadian bank
+statements (TD, RBC, BMO, Scotiabank, CIBC, National Bank, Tangerine and similar)
+and from screenshots of banking apps.
+
+Rules:
+- Output one row per transaction actually shown in the document. Never invent rows.
+- Extract what you can see; use null for anything you cannot determine. NEVER invent
+  or guess a value to fill a gap.
+- If the transaction type cannot be determined from the row, leave type null — do not guess.
+- date must be ISO YYYY-MM-DD. Dates written with dots (05.02.2014) are day.month.year.
+- broker: the institution named on the statement, or null if it is not shown.
+- type must be exactly one of: DEPOSIT, WITHDRAWAL, FEE.
+  - DEPOSIT: a draw, advance, or credit from the HELOC/facility — money the borrower
+    received (balance owing increases). Descriptions like "Advance", "Draw", "Credit
+    advance", "Transfer from HELOC", "Funds advanced".
+  - WITHDRAWAL: a payment or prepayment toward the facility — money sent back
+    (balance owing decreases). Descriptions like "Payment", "Prepayment", "Transfer to
+    HELOC", "Payment - Thank you".
+  - FEE: interest charged, creditor insurance premiums, or bank fees. These are costs,
+    not movements of invested money.
+- Statements abbreviate: ADV = DEPOSIT, PMT = WITHDRAWAL, INT = FEE. Map cryptic
+  descriptions to the canonical types above; when the mapping is uncertain, lower the
+  confidence and explain in note.
+- Ignore opening balance, closing balance, credit limit and available-credit rows.
+- For DEPOSIT/WITHDRAWAL give amount (positive number); quantity and price null.
+- Amounts may be shown in a "Withdrawals/Advances" vs "Deposits/Payments" column pair —
+  read the column, not the sign.
+- symbol: always null for bank statements. name: null. account_type: "Non-Registered".
+- currency: CAD or USD as shown; null when not shown (never assume).
+- fee: 0. confidence: 0 to 1; flag anything guessed below 0.8 with a brief note.
+
+Respond with a single JSON object of the form
+{ "broker": string | null, "transactions": [ ... ] } and nothing else.`;
+
+/**
  * Validates a raw Gemini response body against the canonical schema.
  * JSON mode usually returns bare JSON, but a markdown fence is stripped if
  * one shows up anyway. Throws a friendly Error on unusable output.

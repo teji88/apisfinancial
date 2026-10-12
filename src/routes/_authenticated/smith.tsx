@@ -22,7 +22,19 @@ import {
   type ProposedItem,
   type ProposedOutflow,
   type ProposedTranche,
+  type SmithCsvRow,
 } from "@/lib/retirement/smithCsvImport";
+import { ledgerTransactionsToSmithRows, parsedStatementToSmithRows } from "@/lib/retirement/smithLedgerImport";
+import { applyPresortDecisions } from "@/lib/retirement/smithPresort";
+import { presortSmithProposals } from "@/lib/smith-presort.functions";
+import { useServerFn } from "@tanstack/react-start";
+import { learnCsvMapping } from "@/lib/csv-learn.functions";
+import { parseStatement } from "@/lib/import.functions";
+import { classifyFile } from "@/lib/file-kind";
+import {
+  buildLearnedProfile,
+  saveLearnedProfile,
+} from "@/lib/csv-learn";
 import type { ProvinceCode } from "@/lib/tax";
 import {
   useProfile,
@@ -130,6 +142,16 @@ function SmithPage() {
         : null,
     [portfolioAccounts, settings.investmentAccountId],
   );
+  // Ledger rows of the linked account, shaped for tranche reconstruction
+  // (reuses the CSV inference rules — no upload needed).
+  const linkedSmithRows = useMemo(() => {
+    if (!linkedAccount) return [];
+    const symbolByHoldingId = new Map(portfolioHoldings.map((h) => [h.id, h.symbol]));
+    return ledgerTransactionsToSmithRows(
+      portfolioTransactions.filter((t) => t.account_id === linkedAccount.id),
+      symbolByHoldingId,
+    );
+  }, [linkedAccount, portfolioTransactions, portfolioHoldings]);
   const linkedAccountValue = useMemo(() => {
     if (!linkedAccount) return null;
     const s = summariseAccount(
@@ -500,8 +522,7 @@ function SmithPage() {
         <SmithCsvImportCard
           heloc={pairHeloc}
           tranches={tranches}
-          onImport={(newTranches, repaymentAdds) => {
-            const withRepayments = [...tranches, ...newTranches].map((t) => {
+          onImport={(newTranches, repaymentAdds) => {            const withRepayments = [...tranches, ...newTranches].map((t) => {
               const adds = repaymentAdds.filter((r) => r.trancheId === t.id);
               if (adds.length === 0) return t;
               return {
@@ -516,6 +537,8 @@ function SmithPage() {
           }}
           locked={!hasTrackerPro}
           onUnlock={() => setUpgradeOpen(true)}
+          linkedAccountName={linkedAccount?.account_name ?? null}
+          linkedRows={linkedSmithRows}
         />
       ) : null}
       {p ? (
@@ -756,6 +779,8 @@ function SmithCsvImportCard({
   onImport,
   locked,
   onUnlock,
+  linkedAccountName,
+  linkedRows,
 }: {
   heloc: DebtInput;
   tranches: SmithTranche[];
@@ -765,6 +790,8 @@ function SmithCsvImportCard({
   ) => void;
   locked: boolean;
   onUnlock: () => void;
+  linkedAccountName: string | null;
+  linkedRows: SmithCsvRow[];
 }) {
   const [fileName, setFileName] = useState<string | null>(null);
   const [proposals, setProposals] = useState<ProposedItem[] | null>(null);
@@ -772,20 +799,159 @@ function SmithCsvImportCard({
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [classifications, setClassifications] = useState<Record<string, OutflowClassification>>({});
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
+  const [source, setSource] = useState<"csv" | "ledger" | "statement">("csv");
+  const [unreadable, setUnreadable] = useState<{ fileName: string; text: string } | null>(null);
+  const [learning, setLearning] = useState(false);
+  const [learnError, setLearnError] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
+  const [presorting, setPresorting] = useState(false);
+  const [presortNotes, setPresortNotes] = useState<Record<string, string>>({});
+  const [aiPresorted, setAiPresorted] = useState(false);
+  const learnMapping = useServerFn(learnCsvMapping);
+  const parseStatementFn = useServerFn(parseStatement);
+  const presortFn = useServerFn(presortSmithProposals);
 
-  const handleFile = async (f: File | undefined) => {
-    if (!f) return;
-    setDoneMsg(null);
-    const text = await f.text();
-    const parsed = parseSmithCsv(text);
-    const items = inferProposals(parsed.rows);
-    setFileName(f.name);
+  const showProposals = (items: ProposedItem[], label: string, warn: string[], src: "csv" | "ledger" | "statement") => {
+    setFileName(label);
     setProposals(items);
-    setWarnings(parsed.warnings);
+    setWarnings(warn);
+    setSource(src);
+    setUnreadable(null);
     // Tranches are pre-checked (still user-confirmable); outflows need
     // classification first, so they start unchecked.
     setChecked(new Set(items.filter((i) => i.kind === "tranche").map((i) => i.key)));
     setClassifications({});
+    setPresortNotes({});
+    setAiPresorted(false);
+  };
+
+  const handleFile = async (f: File | undefined) => {
+    if (!f) return;
+    setDoneMsg(null);
+    setLearnError(null);
+    // Route by content, not extension: PDFs/images go to the AI statement
+    // reader (bank prompt); text files go through the deterministic CSV parser.
+    const kind = classifyFile(new Uint8Array(await f.slice(0, 32).arrayBuffer()), f.name, f.type);
+    if (kind === "pdf" || kind === "image") {
+      await handleStatementFile(f);
+      return;
+    }
+    const text = await f.text();
+    const parsed = parseSmithCsv(text);
+    if (parsed.rows.length === 0) {
+      // Keep the file around so "Learn this layout with AI" can use it.
+      setUnreadable({ fileName: f.name, text });
+      setProposals(null);
+      setWarnings(parsed.warnings);
+      return;
+    }
+    const items = inferProposals(parsed.rows);
+    showProposals(items, f.name, parsed.warnings, "csv");
+  };
+
+  /** Read a PDF/image bank or HELOC statement with AI, then propose tranches. */
+  const handleStatementFile = async (f: File) => {
+    setReading(true);
+    setWarnings([]);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.onerror = () => reject(new Error("Could not read that file."));
+        r.readAsDataURL(f);
+      });
+      const result = await parseStatementFn({
+        data: { fileName: f.name, mimeType: f.type, dataUrl, text: null, statementKind: "bank" },
+      });
+      const rows = parsedStatementToSmithRows(result.transactions);
+      if (rows.length === 0) {
+        setProposals(null);
+        setWarnings(["The AI couldn't find any usable transactions in that statement."]);
+        return;
+      }
+      showProposals(inferProposals(rows), f.name, [], "statement");
+    } catch (e) {
+      setProposals(null);
+      setWarnings([e instanceof Error ? e.message : "Could not read that statement."]);
+    } finally {
+      setReading(false);
+    }
+  };
+
+  /** AI pre-sort: suggest which proposed tranches look like Smith money. */
+  const handlePresort = async () => {
+    if (!proposals || presorting) return;
+    setPresorting(true);
+    try {
+      const result = await presortFn({
+        data: {
+          items: proposals.map((i) => ({
+            key: i.key,
+            kind: i.kind,
+            date: i.date,
+            amount: i.amount,
+            symbol: i.symbol,
+            note: i.note,
+          })),
+          existingTranches: tranches.map((t) => ({ drawDate: t.drawDate, principal: t.principal })),
+          helocName: heloc.name || "HELOC",
+        },
+      });
+      const { checked: next, notes } = applyPresortDecisions(proposals, result.decisions);
+      setChecked(next);
+      setPresortNotes(notes);
+      setAiPresorted(true);
+    } catch (e) {
+      setWarnings((w) => [...w, e instanceof Error ? e.message : "AI pre-sort failed."]);
+    } finally {
+      setPresorting(false);
+    }
+  };
+  /** Reconstruct proposals from the already-imported linked account — no CSV needed. */
+  const handleLedgerReconstruct = () => {
+    if (linkedRows.length === 0) return;
+    setDoneMsg(null);
+    setLearnError(null);
+    const items = inferProposals(linkedRows);
+    showProposals(
+      items,
+      linkedAccountName ?? "Linked account",
+      [],
+      "ledger",
+    );
+  };
+
+  /** Teach the parser this CSV's layout with AI (Pro), then re-parse deterministically. */
+  const handleLearnLayout = async () => {
+    if (!unreadable || learning) return;
+    setLearning(true);
+    setLearnError(null);
+    try {
+      const sample = unreadable.text.split("\n").slice(0, 30).join("\n");
+      const mapping = await learnMapping({ data: { fileName: unreadable.fileName, sample } });
+      const headerLine = unreadable.text.split("\n")[0] ?? "";
+      const headers = headerLine.split(",").map((h) => h.replace(/^"|"$/g, ""));
+      saveLearnedProfile(
+        buildLearnedProfile({
+          name: mapping.institution_name,
+          headers,
+          columns: mapping.columns,
+          typeMap: mapping.type_map,
+        }),
+      );
+      // Re-parse: parseSmithCsv picks up the just-saved profile automatically.
+      const parsed = parseSmithCsv(unreadable.text);
+      if (parsed.rows.length === 0) {
+        setLearnError("The layout was saved, but no usable rows were found. Check the file and try again.");
+        setWarnings(parsed.warnings);
+        return;
+      }
+      showProposals(inferProposals(parsed.rows), unreadable.fileName, parsed.warnings, "csv");
+    } catch (e) {
+      setLearnError(e instanceof Error ? e.message : "Could not learn this layout.");
+    } finally {
+      setLearning(false);
+    }
   };
 
   const toggle = (key: string) => {
@@ -830,7 +996,15 @@ function SmithCsvImportCard({
       s201Deemed: 0,
       holdingId: null,
       distributions: [],
-      documents: proposedTrancheNote(item, today),
+      documents: proposedTrancheNote(
+        item,
+        today,
+        source === "ledger"
+          ? "linked investment account"
+          : source === "statement"
+            ? "bank statement (AI-read)"
+            : "brokerage CSV",
+      ),
     }));
 
     // HELOC repayments apply FIFO across tranches (oldest draw first).
@@ -882,6 +1056,13 @@ function SmithCsvImportCard({
     setChecked(new Set());
     setClassifications({});
     setDoneMsg(null);
+    setSource("csv");
+    setUnreadable(null);
+    setLearnError(null);
+    setReading(false);
+    setPresorting(false);
+    setPresortNotes({});
+    setAiPresorted(false);
   };
 
   return (
@@ -889,8 +1070,9 @@ function SmithCsvImportCard({
       <div>
         <h3 className="text-base font-semibold">Import past activity</h3>
         <p className="text-sm text-muted-foreground">
-          Been running this strategy for years in a separate investment account? Upload that
-          account's CSV and we'll propose tranches from it — you review and confirm each one.
+          Been running this strategy for years? Reconstruct tranches from your linked
+          investment account — or upload that account's CSV and we'll propose tranches
+          from it. You review and confirm each one.
         </p>
       </div>
       <LockedSection locked={locked} onUnlock={onUnlock} label="CSV import">
@@ -900,24 +1082,100 @@ function SmithCsvImportCard({
           </p>
         ) : null}
         {proposals === null ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              type="file"
-              accept=".csv,text/csv"
-              className="max-w-xs"
-              onChange={(e) => void handleFile(e.target.files?.[0])}
-            />
+          <div className="space-y-3">
+            {linkedAccountName && linkedRows.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" onClick={handleLedgerReconstruct}>
+                  Reconstruct from {linkedAccountName}
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {linkedRows.length} transaction{linkedRows.length === 1 ? "" : "s"} already
+                  in your ledger — no upload needed.
+                </span>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {linkedAccountName && linkedRows.length > 0 ? (
+                <span className="text-xs text-muted-foreground">Or upload a file:</span>
+              ) : null}
+              <Input
+                type="file"
+                accept=".csv,text/csv,.pdf,application/pdf,image/png,image/jpeg"
+                className="max-w-xs"
+                onChange={(e) => void handleFile(e.target.files?.[0])}
+              />
+              {reading ? <span className="text-xs text-muted-foreground">Reading statement with AI…</span> : null}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              CSVs parse instantly on your device. PDF or image statements are read with AI
+              (Pro) — draws become proposed tranches, payments become outflows for review.
+            </p>
+            {proposals === null && warnings.length > 0 && !unreadable
+              ? warnings.map((w, i) => (
+                  <p key={i} className="text-xs text-amber-800">{w}</p>
+                ))
+              : null}
+            {unreadable ? (
+              <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/50 p-3">
+                <p className="text-sm">
+                  We couldn't read <span className="font-medium">{unreadable.fileName}</span> —
+                  the column layout wasn't recognized.
+                </p>
+                {warnings.map((w, i) => (
+                  <p key={i} className="text-xs text-amber-800">{w}</p>
+                ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" onClick={() => void handleLearnLayout()} disabled={learning}>
+                    {learning ? "Learning…" : "Learn this layout with AI"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={reset}>
+                    Dismiss
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  AI reads only the header row and a few sample lines to learn the column
+                  mapping — never your full file. The layout is saved on this device, so
+                  future files with the same layout parse instantly with no AI involved.
+                </p>
+                {learnError ? <p className="text-xs text-red-700">{learnError}</p> : null}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">
                 Review proposals from {fileName} — {proposals.length} item(s)
+                <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                  {source === "ledger" ? "From your ledger" : source === "statement" ? "From statement" : "From CSV"}
+                </span>
+                {source === "statement" || aiPresorted ? (
+                  <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] text-violet-900">
+                    AI-assisted
+                  </span>
+                ) : null}
               </p>
-              <Button size="sm" variant="ghost" onClick={reset}>
-                Cancel
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handlePresort()}
+                  disabled={presorting}
+                  title="Let AI suggest which tranches look like Smith-manoeuvre money. You still confirm each one."
+                >
+                  {presorting ? "Pre-sorting…" : "AI pre-sort"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={reset}>
+                  Cancel
+                </Button>
+              </div>
             </div>
+            {aiPresorted ? (
+              <p className="text-[11px] text-muted-foreground">
+                AI suggested the initial checks from draw amounts and timing — outflows are
+                never pre-checked. You still confirm each item.
+              </p>
+            ) : null}
             {warnings.map((w, i) => (
               <p key={i} className="text-xs text-amber-800">
                 {w}
@@ -951,6 +1209,11 @@ function SmithCsvImportCard({
                       {isOutflow ? "Outflow — review" : "Inferred tranche"}
                     </span>
                     <span className="text-xs text-muted-foreground">{item.note}</span>
+                    {presortNotes[item.key] ? (
+                      <span className="w-full text-[11px] text-violet-800">
+                        AI: {presortNotes[item.key]}
+                      </span>
+                    ) : null}
                     {isOutflow && checked.has(item.key) ? (
                       <Select
                         value={classifications[item.key] ?? ""}

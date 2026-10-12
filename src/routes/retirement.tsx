@@ -93,6 +93,7 @@ import {
   importHoldingsFromAccounts,
 } from "@/lib/retirement/optimization/AssetLocation";
 import { computeNetWorth } from "@/lib/retirement/optimization/NetWorth";
+import { expandSimplifiedToDetailed } from "@/lib/retirement/cppExpand";
 import {
   comparePayoffVsInvest,
   type PayoffVsInvestResult,
@@ -712,6 +713,69 @@ function RetirementPage() {
 
   const set = (patch: Partial<Profile>) => setForm({ ...(form ?? p), ...patch });
   const married = (p.marital_status ?? "Single") !== "Single";
+
+  // ---- CPP input modes: simplified and detailed are mutually exclusive ----
+  // When detailed history exists, the simplified fields are blanked and frozen
+  // (disabled) so the same earnings can never be entered twice. Switching to
+  // detailed expands the simplified numbers into per-year rows first, so
+  // nothing the user entered is lost.
+  const selfBirthYear = new Date().getFullYear() - (p.current_age ?? 40);
+  const selfDetailedActive = (p.cpp_detailed_history?.length ?? 0) > 0;
+  const spouseBirthYear = new Date().getFullYear() - (p.spouse_age ?? p.current_age ?? 40);
+  const spouseDetailedActive = (p.spouse_cpp_detailed_history?.length ?? 0) > 0;
+
+  const expandSelfCppToDetailed = () => {
+    if (selfDetailedActive) return;
+    const history = expandSimplifiedToDetailed(
+      {
+        avgIncome: p.cpp_avg_income ?? 0,
+        yearsWorked: p.cpp_years_worked ?? 0,
+        futureIncome: p.cpp_future_income ?? 0,
+      },
+      selfBirthYear,
+      p.target_retirement_age ?? 65,
+    );
+    if (history.length === 0) return; // nothing to expand — stay in simplified mode
+    set({
+      cpp_detailed_history: history,
+      cpp_avg_income: 0,
+      cpp_years_worked: 0,
+      cpp_future_income: 0,
+    });
+  };
+  const revertSelfCppToSimplified = () => {
+    set({
+      cpp_detailed_history: [],
+      cpp_detailed_future_earnings: 0,
+      cpp_detailed_child_rearing: [],
+    });
+  };
+  const expandSpouseCppToDetailed = () => {
+    if (spouseDetailedActive) return;
+    const history = expandSimplifiedToDetailed(
+      {
+        avgIncome: p.spouse_cpp_avg_income ?? 0,
+        yearsWorked: p.spouse_cpp_years_worked ?? 0,
+        futureIncome: p.spouse_cpp_future_income ?? 0,
+      },
+      spouseBirthYear,
+      p.spouse_retirement_age ?? 65,
+    );
+    if (history.length === 0) return;
+    set({
+      spouse_cpp_detailed_history: history,
+      spouse_cpp_avg_income: 0,
+      spouse_cpp_years_worked: 0,
+      spouse_cpp_future_income: 0,
+    });
+  };
+  const revertSpouseCppToSimplified = () => {
+    set({
+      spouse_cpp_detailed_history: [],
+      spouse_cpp_detailed_future_earnings: 0,
+      spouse_cpp_detailed_child_rearing: [],
+    });
+  };
 
   const save = () => {
     const { id: _id, display_name: _dn, base_currency: _bc, ...rest } = p;
@@ -1427,13 +1491,25 @@ function RetirementPage() {
             subtitle={`We credit each year at your income divided by the yearly maximum, over the best 39 years. Estimated entitlement: ${derived.selfPct}% of the maximum.`}
           >
             <Field label="Typical income in past working years (today's $)">
-              <NumInput value={p.cpp_avg_income} onCommit={(n) => set({ cpp_avg_income: n })} />
+              <NumInput
+                value={selfDetailedActive ? undefined : p.cpp_avg_income}
+                onCommit={(n) => set({ cpp_avg_income: n })}
+                disabled={selfDetailedActive}
+              />
             </Field>
             <Field label="Years worked in Canada so far">
-              <NumInput value={p.cpp_years_worked} onCommit={(n) => set({ cpp_years_worked: n })} />
+              <NumInput
+                value={selfDetailedActive ? undefined : p.cpp_years_worked}
+                onCommit={(n) => set({ cpp_years_worked: n })}
+                disabled={selfDetailedActive}
+              />
             </Field>
             <Field label="Expected income until retirement (today's $)">
-              <NumInput value={p.cpp_future_income} onCommit={(n) => set({ cpp_future_income: n })} />
+              <NumInput
+                value={selfDetailedActive ? undefined : p.cpp_future_income}
+                onCommit={(n) => set({ cpp_future_income: n })}
+                disabled={selfDetailedActive}
+              />
             </Field>
             <Field label="CPP start age (60–70)" {...lockProps}>
               <AgeSelect
@@ -1469,16 +1545,19 @@ function RetirementPage() {
                 <p className="text-xs text-emerald-700 mb-2">
                   ✓ Using your saved detailed earnings history ({p.cpp_detailed_history!.length} years) —
                   stored on this device and reloaded automatically when you log back in.
+                  The simplified fields above are frozen while detailed history is active.
                 </p>
               )}
               <OldUiCppHistoryEditor
                 birthYear={new Date().getFullYear() - (p.current_age ?? 40)}
+                retirementAge={p.target_retirement_age ?? 65}
                 earningsHistory={p.cpp_detailed_history ?? []}
                 futureEarnings={p.cpp_detailed_future_earnings ?? 0}
                 childRearingYears={p.cpp_detailed_child_rearing ?? []}
                 onHistoryChange={(history) => set({ cpp_detailed_history: history })}
-                onFutureEarningsChange={(value) => set({ cpp_detailed_future_earnings: value })}
                 onChildRearingChange={(years) => set({ cpp_detailed_child_rearing: years })}
+                onBeforeExpand={expandSelfCppToDetailed}
+                onRevertToSimplified={revertSelfCppToSimplified}
               />
             </div>
           </Section>
@@ -1521,13 +1600,25 @@ function RetirementPage() {
                 />
               </Field>
               <Field label="Spouse typical past income (today's $)">
-                              <NumInput value={p.spouse_cpp_avg_income} onCommit={(n) => set({ spouse_cpp_avg_income: n })} />
+                              <NumInput
+                                value={spouseDetailedActive ? undefined : p.spouse_cpp_avg_income}
+                                onCommit={(n) => set({ spouse_cpp_avg_income: n })}
+                                disabled={spouseDetailedActive}
+                              />
               </Field>
               <Field label="Spouse years worked so far">
-                              <NumInput value={p.spouse_cpp_years_worked} onCommit={(n) => set({ spouse_cpp_years_worked: n })} />
+                              <NumInput
+                                value={spouseDetailedActive ? undefined : p.spouse_cpp_years_worked}
+                                onCommit={(n) => set({ spouse_cpp_years_worked: n })}
+                                disabled={spouseDetailedActive}
+                              />
               </Field>
               <Field label="Spouse expected income until retirement">
-                              <NumInput value={p.spouse_cpp_future_income} onCommit={(n) => set({ spouse_cpp_future_income: n })} />
+                              <NumInput
+                                value={spouseDetailedActive ? undefined : p.spouse_cpp_future_income}
+                                onCommit={(n) => set({ spouse_cpp_future_income: n })}
+                                disabled={spouseDetailedActive}
+                              />
               </Field>
               <Field label="Spouse years in Canada after 18">
                               <NumInput value={p.spouse_oas_years_in_canada} onCommit={(n) => set({ spouse_oas_years_in_canada: n })} />
@@ -1551,16 +1642,19 @@ function RetirementPage() {
                   <p className="text-xs text-emerald-700 mb-2">
                     ✓ Using the saved detailed earnings history ({p.spouse_cpp_detailed_history!.length} years) —
                     stored on this device and reloaded automatically when you log back in.
+                    The simplified fields above are frozen while detailed history is active.
                   </p>
                 )}
                 <OldUiCppHistoryEditor
                   birthYear={new Date().getFullYear() - (p.spouse_age ?? p.current_age ?? 40)}
+                  retirementAge={p.spouse_retirement_age ?? 65}
                   earningsHistory={p.spouse_cpp_detailed_history ?? []}
                   futureEarnings={p.spouse_cpp_detailed_future_earnings ?? 0}
                   childRearingYears={p.spouse_cpp_detailed_child_rearing ?? []}
                   onHistoryChange={(history) => set({ spouse_cpp_detailed_history: history })}
-                  onFutureEarningsChange={(value) => set({ spouse_cpp_detailed_future_earnings: value })}
                   onChildRearingChange={(years) => set({ spouse_cpp_detailed_child_rearing: years })}
+                  onBeforeExpand={expandSpouseCppToDetailed}
+                  onRevertToSimplified={revertSpouseCppToSimplified}
                 />
               </div>
 
@@ -1860,6 +1954,7 @@ export function NumInput({
   min,
   max,
   placeholder,
+  disabled,
 }: {
   value: number | null | undefined;
   onCommit: (n: number) => void;
@@ -1867,6 +1962,7 @@ export function NumInput({
   min?: string;
   max?: string;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   const [text, setText] = useState<string | null>(null);
   const display = text ?? (value ?? "");
@@ -1879,6 +1975,7 @@ export function NumInput({
       min={min}
       max={max}
       placeholder={placeholder}
+      disabled={disabled}
       onChange={(e) => {
         const t = e.target.value;
         setText(t);

@@ -23,6 +23,11 @@ import {
   parseCsvTable,
   toNumber,
 } from "../csv-parse";
+import {
+  loadLearnedProfiles,
+  matchLearnedProfile,
+  type LearnedProfile,
+} from "../csv-learn";
 
 export type SmithCsvRow = {
   date: string; // YYYY-MM-DD
@@ -108,9 +113,51 @@ function mapHeaders(header: string[]): HeaderMap {
 
 /* -------------------------------- parsing ------------------------------- */
 
+/** Build a HeaderMap from a learned profile's exact header texts. */
+function headerMapFromLearned(header: string[], columns: LearnedProfile["columns"]): HeaderMap {
+  const idx: HeaderMap = {};
+  const fields: Array<keyof HeaderMap> = ["date", "type", "symbol", "quantity", "price", "amount"];
+  for (const field of fields) {
+    const want = columns[field];
+    if (!want) continue;
+    const i = header.findIndex((h) => h.trim() === want.trim());
+    if (i >= 0) idx[field] = i;
+  }
+  return idx;
+}
+
+/** Canonical AI-learned types -> words the inference regexes understand. */
+const CANONICAL_WORD: Record<string, string> = {
+  BUY: "Buy",
+  SELL: "Sell",
+  DIVIDEND: "Dividend",
+  DRIP: "Dividend",
+  DEPOSIT: "Deposit",
+  WITHDRAWAL: "Withdrawal",
+  TRANSFER_IN: "Transfer in",
+  TRANSFER_OUT: "Transfer out",
+};
+/** Fees and splits are neither draws nor outflows — skip silently. */
+const SKIP_CANONICAL = new Set(["FEE", "SPLIT"]);
+
+function applyTypeMap(
+  rawType: string,
+  typeMap: Record<string, string> | undefined,
+): { word: string; skip: boolean } {
+  if (!typeMap) return { word: rawType, skip: false };
+  const canonical = typeMap[rawType.trim().toLowerCase()];
+  if (!canonical) return { word: rawType, skip: false };
+  if (SKIP_CANONICAL.has(canonical)) return { word: "", skip: true };
+  return { word: CANONICAL_WORD[canonical] ?? rawType, skip: false };
+}
+
 /**
  * Parse a CSV export into normalized rows. Tolerant of column order and
  * naming; strict about dates and amounts (unparseable -> skipped).
+ *
+ * Column mapping order: AI-learned profile for this exact header layout
+ * (when one was saved) -> built-in header aliases. A learned typeMap also
+ * translates cryptic action words into canonical types.
  */
 export function parseSmithCsv(text: string): SmithCsvParseResult {
   const warnings: string[] = [];
@@ -118,7 +165,13 @@ export function parseSmithCsv(text: string): SmithCsvParseResult {
   if (table.length < 2) {
     return { rows: [], skipped: 0, warnings: ["The file has no data rows."] };
   }
-  const idx = mapHeaders(table[0]);
+  const header = table[0]!;
+  const learned = matchLearnedProfile(header, loadLearnedProfiles());
+  const idx = learned ? headerMapFromLearned(header, learned.columns) : mapHeaders(header);
+  const typeMap = learned?.typeMap;
+  if (learned && idx.date == null) {
+    return { rows: [], skipped: table.length - 1, warnings: ["The saved layout for this file no longer matches its date column."] };
+  }
   if (idx.date == null) {
     return { rows: [], skipped: table.length - 1, warnings: ["No date column found — nothing could be dated."] };
   }
@@ -133,10 +186,18 @@ export function parseSmithCsv(text: string): SmithCsvParseResult {
   const rows: SmithCsvRow[] = [];
   let skipped = 0;
   for (let r = 1; r < table.length; r++) {
-    const cells = table[r];
+    const cells = table[r]!;
     if (cells.every((c) => c.trim() === "")) continue; // blank line
     const date = normaliseDate(cells[idx.date] ?? "");
     if (!date) {
+      skipped++;
+      continue;
+    }
+    const { word: rawType, skip } = applyTypeMap(
+      idx.type != null ? (cells[idx.type] ?? "") : "",
+      typeMap,
+    );
+    if (skip) {
       skipped++;
       continue;
     }
@@ -153,7 +214,7 @@ export function parseSmithCsv(text: string): SmithCsvParseResult {
     const symbolRaw = idx.symbol != null ? (cells[idx.symbol] ?? "").trim().toUpperCase() : "";
     rows.push({
       date,
-      rawType: idx.type != null ? (cells[idx.type] ?? "").trim() : "",
+      rawType,
       symbol: symbolRaw && symbolRaw !== "CASH" && symbolRaw !== "-" ? symbolRaw : null,
       quantity,
       price,
@@ -246,6 +307,10 @@ export function inferProposals(rows: SmithCsvRow[]): ProposedItem[] {
  * Build a SmithTranche-compatible record from a confirmed proposed tranche.
  * Marks the source so imported tranches stay visually distinct.
  */
-export function proposedTrancheNote(item: ProposedTranche, confirmedDate: string): string {
-  return `CSV import — inferred from brokerage CSV, confirmed ${confirmedDate}. ${item.note}`;
+export function proposedTrancheNote(
+  item: ProposedTranche,
+  confirmedDate: string,
+  sourceLabel = "brokerage CSV",
+): string {
+  return `Import — inferred from ${sourceLabel}, confirmed ${confirmedDate}. ${item.note}`;
 }

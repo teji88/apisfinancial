@@ -186,7 +186,7 @@ function AccountsPage() {
             <Label htmlFor="member">Family member name</Label>
             <Input
               id="member"
-              placeholder={ownerType === "child" ? "Tejas" : "Partner's first name"}
+              placeholder={ownerType === "child" ? "Child's first name" : "Partner's first name"}
               value={memberName}
               onChange={(e) => setMemberName(e.target.value)}
             />
