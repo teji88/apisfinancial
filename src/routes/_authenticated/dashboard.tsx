@@ -188,9 +188,9 @@ function NetWorthStrip({
               {debts.length} debt(s){totalDebts !== mine.totalDebts ? " · joint split 50/50" : ""}
             </div>
           </div>
-          <div className="rounded-lg bg-emerald-50 p-3">
+          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950 p-3">
             <div className="text-xs text-muted-foreground">Net worth</div>
-            <div className="text-xl font-bold text-emerald-800">{formatCad(mine.netWorth)}</div>
+            <div className="text-xl font-bold text-emerald-800 dark:text-emerald-300">{formatCad(mine.netWorth)}</div>
           </div>
         </div>
       ) : (
@@ -209,9 +209,9 @@ function NetWorthStrip({
               Investments {formatCad(partnerInvestments)} · debts {formatCad(partner.totalDebts)}
             </div>
           </div>
-          <div className="rounded-lg bg-emerald-50 p-3">
+          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950 p-3">
             <div className="text-xs text-muted-foreground">Household net worth</div>
-            <div className="text-xl font-bold text-emerald-800">
+            <div className="text-xl font-bold text-emerald-800 dark:text-emerald-300">
               {formatCad(householdNetWorth)}
             </div>
             <div className="text-[11px] text-muted-foreground">
