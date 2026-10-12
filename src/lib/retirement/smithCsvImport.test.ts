@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   inferProposals,
   parseSmithCsv,
+  proposalCategory,
   type ProposedOutflow,
   type ProposedTranche,
 } from "./smithCsvImport";
@@ -123,5 +124,31 @@ describe("inferProposals", () => {
     expect(items).toHaveLength(1);
     expect(items[0].kind).toBe("outflow");
     expect((items[0] as ProposedOutflow).classification).toBeNull();
+  });
+});
+
+describe("proposalCategory", () => {
+  it("buckets raw types for review filtering", () => {
+    expect(proposalCategory("BUY")).toBe("Buy");
+    expect(proposalCategory("Bought")).toBe("Buy");
+    expect(proposalCategory("SELL")).toBe("Sell");
+    expect(proposalCategory("Deposit")).toBe("Deposit");
+    expect(proposalCategory("Transfer In")).toBe("Deposit");
+    expect(proposalCategory("Withdrawal")).toBe("Withdrawal");
+    // Note: "EFT out" matches the cash-in pattern first (same order as inferProposals),
+    // so it is consistently categorized as a deposit, not a withdrawal.
+    expect(proposalCategory("EFT out")).toBe("Deposit");
+    expect(proposalCategory("Dividend")).toBe("Distribution");
+    expect(proposalCategory("Journal")).toBe("Other");
+    expect(proposalCategory("")).toBe("Other");
+  });
+
+  it("threads rawType through inferred proposals", () => {
+    const items = inferProposals([
+      { date: "2022-01-01", rawType: "BUY", symbol: "VFV", quantity: 10, price: 100, amount: 1000 },
+      { date: "2022-02-01", rawType: "Withdrawal", symbol: null, quantity: null, price: null, amount: 500 },
+    ]);
+    expect(items[0].rawType).toBe("BUY");
+    expect(items[1].rawType).toBe("Withdrawal");
   });
 });
