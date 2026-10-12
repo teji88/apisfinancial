@@ -1,4 +1,4 @@
-import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole, PersonScenario } from "../domain/types";
+import type { RetirementScenario, SimulationResult, MonthlySnapshot, PersonRole, PersonScenario, AnnualTaxCapture } from "../domain/types";
 import { RETIREMENT_ENGINE_VERSION, RETIREMENT_RULES_VERSION } from "../scenario/defaults";
 import { estimateGovernmentBenefits, estimateCppSurvivorAnnual } from "./BenefitEngine";
 import { dbPensionMonthlyAt, dbSurvivorMonthlyAt } from "./DbPensionEngine";
@@ -10,6 +10,7 @@ import { validateRetirementScenario } from "../validation/RetirementValidation";
 import { createDebtState, accrueDebtMonth, type DebtState } from "./DebtEngine";
 import { reconcileMonthlyCashFlow } from "./CashFlowEngine";
 import { reconcileMonthlyFinancialLedger } from "./MonthlyFinancialLedger";
+import { projectFutureClawbackBreach, clawbackIncomeOf, mergeTaxInputs } from "./MeltdownEngine";
 
 function ageAtMonth(birthYear: number, birthMonth: number, date: Date) {
   return date.getUTCFullYear() - birthYear - (date.getUTCMonth() + 1 < birthMonth ? 1 : 0);
@@ -218,6 +219,7 @@ export function runRetirementSimulation(
   let cumulativeTaxLiability = 0;
   let cumulativeOasRecovery = 0;
   const yearTaxInputs: Record<PersonRole, TaxIncomeComponents> = { MAIN_USER: {}, PARTNER: {} };
+  const annualTaxCaptures: AnnualTaxCapture[] = [];
   let previousStage: "BOTH_ALIVE" | "SURVIVOR" | "ESTATE" = "BOTH_ALIVE";
 
   for (let i = 0; i < months; i++) {
@@ -706,6 +708,164 @@ export function runRetirementSimulation(
       }
     }
 
+    // True fill-to-ceiling meltdown (TAX_TARGETED only). After the year's
+    // spending needs are met, deliberately withdraw registered funds beyond
+    // need in low-income years up to the OAS clawback ceiling (+ tolerance),
+    // and park the after-tax surplus in non-registered accounts.
+    //
+    // Runs once per year in December so the year's needs get first claim on
+    // the ceiling room; the meltdown fills whatever headroom is left.
+    // Accounting: the gross meltdown is booked to withdrawals (it leaves the
+    // registered accounts) and the parked net to contributions (reinvested),
+    // with the reinvested leg subtracted from household cash — both ledgers
+    // stay reconciled via the `reinvested` cash-equation term.
+    let meltdownReinvestedThisMonth = 0;
+    let meltdownGrossThisMonth = 0;
+    let meltdownCeilingThisMonth = 0;
+    if (
+      scenario.strategy.withdrawalPolicy === "TAX_TARGETED" &&
+      remainingNeed <= 0.005 &&
+      stage !== "ESTATE" &&
+      date.getUTCMonth() === 11
+    ) {
+      const inflationRate = Math.max(0, scenario.assumptions.inflationRate) / 100;
+      const yearIndexFactor = Math.pow(1 + inflationRate, Math.max(0, calendarYear - 2026));
+      const nominalCeiling =
+        CANADA_2026_PARAMETERS.oasRecovery.startIncome * yearIndexFactor +
+        (scenario.strategy.clawbackTolerance ?? 0) * yearIndexFactor;
+      const realReturn =
+        (1 + effectiveReturn / 100) / (1 + inflationRate) - 1;
+      const deflator = Math.pow(1 + inflationRate, Math.max(0, calendarYear - startYear));
+      const pensionSplitPercent = scenario.strategy.pensionSplitPercent ?? 0;
+      const province = scenario.household.province;
+      const hasSpouse = alivePeople.some((p) => p.role === "PARTNER");
+
+      for (const person of alivePeople) {
+        const role = person.role;
+        const age = ages[role] ?? 0;
+        // The meltdown is a retirement drawdown tactic — only for retired people.
+        if (age < person.retirementAge) continue;
+
+        // Year-to-date taxable income (Jan–Dec). monthlyTaxInputs already
+        // includes this month's need-based withdrawals (added just above).
+        const ytd = mergeTaxInputs(yearTaxInputs[role] ?? {}, monthlyTaxInputs[role] ?? {});
+        const headroom = nominalCeiling - clawbackIncomeOf(ytd);
+        if (headroom < 1000) continue;
+
+        const registeredAccounts = accounts.filter(
+          (a) =>
+            a.owner === role &&
+            a.balance > 0 &&
+            (a.type === "RRSP" || a.type === "RRIF" || a.type === "LIRA" || a.type === "LIF"),
+        );
+        const registeredBalance = registeredAccounts.reduce((s, a) => s + a.balance, 0);
+        if (registeredBalance < 100) continue;
+
+        // Forward-looking gate: melt only if doing nothing would breach the
+        // clawback threshold in a future year. Re-evaluated yearly; melting
+        // stops by itself once balances are drawn down enough.
+        const oasAnnual =
+          CANADA_2026_PARAMETERS.oas.maxMonthly65To74 * 12 *
+          Math.min(1, (person.oasResidenceYears ?? 0) / 40);
+        const cppAnnual = (person.cppAt65 ?? 0) * 12;
+        const fixedIncomeAt72 = oasAnnual + cppAnnual + (person.otherIncome ?? 0);
+        const breach = projectFutureClawbackBreach({
+          currentAge: age,
+          registeredBalance: registeredBalance / deflator,
+          realReturn,
+          fixedIncomeAt72,
+          threshold: nominalCeiling / deflator,
+          planningAge: scenario.goals.planningAge,
+        });
+        if (!breach) continue;
+
+        // Gross meltdown capped at headroom: income never melts INTO the
+        // clawback zone the strategy is trying to avoid.
+        const grossToMelt = Math.min(headroom, registeredBalance);
+        if (grossToMelt < 100) continue;
+
+        // Incremental tax on the meltdown, through the household tax engine
+        // (includes OAS recovery tax and pension splitting).
+        const basePayer = mergeTaxInputs(yearTaxInputs.MAIN_USER ?? {}, monthlyTaxInputs.MAIN_USER ?? {});
+        const baseSpouse = mergeTaxInputs(yearTaxInputs.PARTNER ?? {}, monthlyTaxInputs.PARTNER ?? {});
+        const taxArgs = {
+          province,
+          payerAge: ages.MAIN_USER ?? 65,
+          spouseAge: ages.PARTNER ?? 65,
+          pensionSplitPercent,
+          taxYear: calendarYear,
+          inflationRate: scenario.assumptions.inflationRate,
+        };
+        const baseTax = calculateHouseholdTax({
+          ...taxArgs,
+          payer: basePayer.age ? basePayer : { age: 65 },
+          spouse: hasSpouse ? baseSpouse : undefined,
+        }).householdTax;
+        const meltPayer: TaxIncomeComponents = { ...basePayer };
+        const meltSpouse: TaxIncomeComponents = { ...baseSpouse };
+        const meltTarget = role === "MAIN_USER" ? meltPayer : meltSpouse;
+        meltTarget.rrspRrif = (meltTarget.rrspRrif ?? 0) + grossToMelt;
+        if (age >= 65) {
+          meltTarget.eligiblePensionIncome = (meltTarget.eligiblePensionIncome ?? 0) + grossToMelt;
+        }
+        const meltTax = calculateHouseholdTax({
+          ...taxArgs,
+          payer: meltPayer.age ? meltPayer : { age: 65 },
+          spouse: hasSpouse ? meltSpouse : undefined,
+        }).householdTax;
+        const incrementalTax = Math.max(0, meltTax - baseTax);
+        const netSurplus = Math.max(0, grossToMelt - incrementalTax);
+        if (netSurplus < 10) continue;
+
+        // Execute: debit registered accounts (RRSP/RRIF before LIRA/LIF).
+        let toDebit = grossToMelt;
+        const ordered = [
+          ...registeredAccounts.filter((a) => a.type === "RRSP" || a.type === "RRIF"),
+          ...registeredAccounts.filter((a) => a.type === "LIRA" || a.type === "LIF"),
+        ];
+        for (const account of ordered) {
+          if (toDebit <= 0) break;
+          toDebit -= withdraw(account, toDebit);
+        }
+        const actuallyWithdrawn = grossToMelt - Math.max(0, toDebit);
+        if (actuallyWithdrawn < 10) continue;
+
+        // Park the after-tax surplus in non-registered (create the account if
+        // needed). ACB increases by the full parked amount — the surplus is
+        // after-tax principal, so it carries no embedded gain.
+        let nonreg = accounts.find((a) => a.owner === role && a.type === "NON_REGISTERED");
+        if (!nonreg) {
+          nonreg = createAccountState({
+            id: `${role}-nonreg-meltdown`,
+            owner: role,
+            type: "NON_REGISTERED",
+            valuation: { mode: "SNAPSHOT", linkedValue: 0 },
+          });
+          accounts.push(nonreg);
+        }
+        const parked = (netSurplus * actuallyWithdrawn) / grossToMelt;
+        nonreg.balance += parked;
+        nonreg.nonRegisteredAcb = Math.max(0, (nonreg.nonRegisteredAcb ?? 0) + parked);
+
+        // Book the tax ledger (the year's tax calculation below picks it up).
+        monthlyTaxInputs[role].rrspRrif = (monthlyTaxInputs[role].rrspRrif ?? 0) + actuallyWithdrawn;
+        if (age >= 65) {
+          monthlyTaxInputs[role].eligiblePensionIncome =
+            (monthlyTaxInputs[role].eligiblePensionIncome ?? 0) + actuallyWithdrawn;
+        }
+
+        // Reporting + ledger accounting.
+        withdrawalSources.registered += actuallyWithdrawn;
+        withdrawalsByPerson[role].registered += actuallyWithdrawn;
+        taxableWithdrawals += actuallyWithdrawn;
+        withdrawals += actuallyWithdrawn;
+        contributionsThisMonth += parked;
+        meltdownReinvestedThisMonth += parked;
+        meltdownGrossThisMonth += actuallyWithdrawn;
+        meltdownCeilingThisMonth = nominalCeiling;
+      }
+    }
+
     const monthlyTaxableIncome = taxableBenefits + otherIncome + taxableWithdrawals + nonRegisteredCapitalGains * 0.5;
     yearTaxableIncome += monthlyTaxableIncome;
 
@@ -746,6 +906,19 @@ export function runRetirementSimulation(
       priorYearIncomeByRole.PARTNER = yearTaxInputs.PARTNER.age ? calculatePersonBenefitIncome(yearTaxInputs.PARTNER) : 0;
       priorYearEmploymentIncomeByRole.MAIN_USER = yearTaxInputs.MAIN_USER.age ? calculatePersonEmploymentIncome(yearTaxInputs.MAIN_USER) : 0;
       priorYearEmploymentIncomeByRole.PARTNER = yearTaxInputs.PARTNER.age ? calculatePersonEmploymentIncome(yearTaxInputs.PARTNER) : 0;
+      // Capture the year's per-person tax ledgers for the projection-derived
+      // withdrawal marginal rate (computed from the Projection, no re-sim).
+      annualTaxCaptures.push({
+        year: calendarYear,
+        ages: { ...ages },
+        pensionSplitPercent: scenario.strategy.pensionSplitPercent ?? 0,
+        province: scenario.household.province,
+        inflationRate: scenario.assumptions.inflationRate,
+        taxInputs: {
+          MAIN_USER: { ...yearTaxInputs.MAIN_USER },
+          PARTNER: { ...yearTaxInputs.PARTNER },
+        },
+      });
       yearTaxableIncome = 0;
       yearTaxInputs.MAIN_USER = {};
       yearTaxInputs.PARTNER = {};
@@ -812,7 +985,8 @@ export function runRetirementSimulation(
       withdrawals -
       (currentTax + deathTax) -
       targetSpending -
-      debtPayments;
+      debtPayments -
+      meltdownReinvestedThisMonth;
     householdCash = Math.max(0, householdCashBeforeSettlement);
     const cashDeficit = Math.max(0, -householdCashBeforeSettlement);
     const shortfall = Math.max(shortfallBeforeCash, cashDeficit);
@@ -820,7 +994,7 @@ export function runRetirementSimulation(
 
     lifetimeSpending += targetSpending;
     lifetimeAfterTaxCash +=
-      benefits + otherIncome + withdrawals - currentTax - deathTax;
+      benefits + otherIncome + withdrawals - currentTax - deathTax - meltdownReinvestedThisMonth;
     lifetimeTax += currentTax + deathTax;
     totalBenefits += benefits;
     maxShortfall = Math.max(maxShortfall, shortfall);
@@ -836,6 +1010,7 @@ export function runRetirementSimulation(
       oasRecovery: currentOasRecovery,
       spending: targetSpending,
       debtPayments,
+      reinvested: meltdownReinvestedThisMonth,
       endingPortfolio: portfolio,
       endingHouseholdCash: householdCash,
     });
@@ -851,6 +1026,7 @@ export function runRetirementSimulation(
       debtPayments,
       debtPrincipal,
       debtInterest,
+      reinvested: meltdownReinvestedThisMonth,
       endingPortfolio: portfolio,
       endingHouseholdCash: householdCash,
       beginningHouseholdCash,
@@ -888,6 +1064,8 @@ export function runRetirementSimulation(
       debtInterest,
       debtPrincipal,
       shortfall,
+      meltdownWithdrawals: meltdownGrossThisMonth > 0 ? meltdownGrossThisMonth : undefined,
+      meltdownCeiling: meltdownCeilingThisMonth > 0 ? meltdownCeilingThisMonth : undefined,
       cashFlow: {
         beginningPortfolio,
         beginningHouseholdCash,
@@ -968,6 +1146,7 @@ export function runRetirementSimulation(
     engineVersion: RETIREMENT_ENGINE_VERSION,
     rulesVersion: RETIREMENT_RULES_VERSION,
     scenarioHash,
+    annualTaxInputs: annualTaxCaptures,
   };
 }
 
