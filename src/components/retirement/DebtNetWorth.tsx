@@ -21,6 +21,7 @@ import type {
 import { computeNetWorth } from "@/lib/retirement/optimization/NetWorth";
 import {
   comparePayoffVsInvest,
+  MISSING_PAYMENT_PROMPT,
   type PayoffVsInvestResult,
 } from "@/lib/retirement/optimization/DebtComparator";
 import {
@@ -323,8 +324,33 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
             This is your partner's debt — the comparison uses the full balance.
           </p>
         ) : null}
+        {debt && debt.payment <= 0 ? (
+          <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1">
+            No regular payment recorded for this debt — enter it in the Debts tab first, or the comparison can't run.
+          </p>
+        ) : null}
       </div>
       {result && debt ? (
+        result.ok === false ? (
+          <div className="rounded-lg border p-4 space-y-2">
+            {result.reason === "missing-payment" ? (
+              <>
+                <p className="text-sm font-medium">Enter the regular monthly payment to run this comparison.</p>
+                <p className="text-sm text-muted-foreground">{MISSING_PAYMENT_PROMPT}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium">This debt never amortizes at these payments.</p>
+                <p className="text-sm text-muted-foreground">
+                  Even with the extra, {formatCad(result.fullPayment)}/mo doesn't cover{" "}
+                  {formatCad(result.monthlyInterest)}/mo in interest — the balance would keep growing.
+                  Raise the extra amount or the regular payment.
+                </p>
+              </>
+            )}
+            <p className="text-xs text-muted-foreground">{result.disclaimer}</p>
+          </div>
+        ) : (
         <div className="space-y-3">
           <div className="rounded-lg border p-4">
             <div className="text-xs text-muted-foreground">
@@ -334,7 +360,7 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
               {formatCad(Math.abs(result.netAdvantageInvesting))}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              over {result.baseMonths > 0 ? `${result.baseMonths} months` : "the horizon"}
+              over {result.baseMonths != null ? `${result.baseMonths} months` : "the horizon"}
             </p>
           </div>
           <dl className="grid gap-2 sm:grid-cols-3 text-sm">
@@ -342,7 +368,7 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
               <dt className="text-xs text-muted-foreground">Interest saved</dt>
               <dd className="font-medium">{formatCad(result.interestSavedAfterTax)}</dd>
               <dd className="text-[11px] text-muted-foreground">
-                {debt.deductible ? "after-tax" : "no deduction"} · {result.monthsSaved} months shaved
+                {debt.deductible ? "after-tax" : "no deduction"} · {result.monthsSaved != null ? `${result.monthsSaved} months shaved` : "—"}
               </dd>
             </div>
             <div className="rounded-lg border p-3">
@@ -350,7 +376,7 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
               <dd className="font-medium">
                 {result.acceleratedMonths > 0 ? `${result.acceleratedMonths} mo` : "—"}
               </dd>
-              <dd className="text-[11px] text-muted-foreground">vs {result.baseMonths > 0 ? `${result.baseMonths} mo` : "—"} minimums only</dd>
+              <dd className="text-[11px] text-muted-foreground">vs {result.baseMonths != null ? `${result.baseMonths} mo` : "—"} minimums only</dd>
             </div>
             <div className="rounded-lg border p-3">
               <dt className="text-xs text-muted-foreground">If invested instead</dt>
@@ -367,6 +393,7 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
           ) : null}
           <p className="text-xs text-muted-foreground">{result.disclaimer}</p>
         </div>
+        )
       ) : null}
     </div>
   );
