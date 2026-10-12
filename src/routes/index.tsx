@@ -193,7 +193,7 @@ function Landing() {
 
           <div className="flex items-center gap-2">
             <Button asChild size="sm" className="honey-fill">
-              <Link to="/retirement">Retirement planner</Link>
+              <Link to="/retirement" search={{ tab: "planner" }}>Retirement planner</Link>
             </Button>
             <Button asChild size="sm" className="honey-fill">
               <Link to="/auth">Sign in</Link>
@@ -258,7 +258,7 @@ function Landing() {
                 <Link to="/auth">Get started free</Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-accent/50">
-                <Link to="/retirement">Try the free retirement planner</Link>
+                <Link to="/retirement" search={{ tab: "planner" }}>Try the free retirement planner</Link>
               </Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
