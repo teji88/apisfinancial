@@ -391,6 +391,7 @@ function newSmithTranche(): SmithTranche {
     s201Deemed: 0,
     holdingId: null,
     distributions: [],
+    ledgerTransactionIds: [],
     documents: "",
   };
 }
@@ -400,12 +401,16 @@ type Distribution = { date: string; amount: number; destination: "mortgage" | "r
 function DistributionEditor({
   distributions,
   onChange,
+  onRecordRepayment,
 }: {
   distributions: Distribution[];
   onChange: (d: Distribution[]) => void;
+  /** Called when the user confirms a distribution also paid down the HELOC. */
+  onRecordRepayment?: (amount: number) => void;
 }) {
   const [amount, setAmount] = useState(0);
   const [dest, setDest] = useState<Distribution["destination"]>("mortgage");
+  const [repaymentPrompt, setRepaymentPrompt] = useState<number | null>(null);
   const total = distributions.reduce((s, d) => s + Math.max(0, d.amount), 0);
   return (
     <div className="space-y-2 rounded-lg border p-2">
@@ -457,12 +462,40 @@ function DistributionEditor({
               ...distributions,
               { date: new Date().toISOString().slice(0, 10), amount, destination: dest },
             ]);
+            // Money that left the investments for the mortgage didn't necessarily
+            // reduce the HELOC — offer to record the matching tranche repayment.
+            if (dest === "mortgage" && onRecordRepayment) {
+              setRepaymentPrompt(amount);
+            }
             setAmount(0);
           }}
         >
           Add
         </Button>
       </div>
+      {repaymentPrompt != null && onRecordRepayment ? (
+        <div className="rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950 p-2.5 space-y-2">
+          <p className="text-xs">
+            {formatCad(repaymentPrompt)} left your investments for the mortgage. If it also
+            paid down the HELOC itself, record it as a repayment on this tranche so your
+            drawn total stays accurate — otherwise the HELOC balance is unchanged.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                onRecordRepayment(repaymentPrompt);
+                setRepaymentPrompt(null);
+              }}
+            >
+              Record {formatCad(repaymentPrompt)} as tranche repayment
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setRepaymentPrompt(null)}>
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {total > 0 ? (
         <p className="text-xs text-muted-foreground">Total: {formatCad(total)}</p>
       ) : null}
@@ -512,7 +545,7 @@ export function SmithTrackerCard({
         </p>
       </div>
 
-      <div className="space-y-2">
+      <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
         {tranches.map((t) => {
           const a = assessmentFor(t.id);
           const isOpen = expanded === t.id;
@@ -656,6 +689,14 @@ export function SmithTrackerCard({
                     <DistributionEditor
                       distributions={t.distributions ?? []}
                       onChange={(dists) => update(t.id, { distributions: dists })}
+                      onRecordRepayment={(amount) =>
+                        update(t.id, {
+                          repayments: [
+                            ...t.repayments,
+                            { date: new Date().toISOString().slice(0, 10), amount },
+                          ],
+                        })
+                      }
                     />
                   </div>
                 </div>
@@ -720,7 +761,7 @@ export function SmithSummaryCard({ profile }: { profile: Profile }) {
     <div className="rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-base font-semibold">HELOC Investing</h3>
-        <a href="/debts?tab=heloc" className="text-xs underline text-muted-foreground">
+        <a href="/plan-ahead?tab=heloc" className="text-xs underline text-muted-foreground">
           Open tracker →
         </a>
       </div>

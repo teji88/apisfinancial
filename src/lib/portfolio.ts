@@ -331,6 +331,8 @@ export function useAddTransaction() {
 export type BulkAddResult = {
   saved: number;
   failed: Array<{ chunkIndex: number; rowCount: number; message: string }>;
+  /** IDs of the created transactions, in input order (empty for failed chunks). */
+  ids: string[];
 };
 
 /**
@@ -378,6 +380,7 @@ export function useAddTransactions() {
 
       const CHUNK = 500;
       const failed: BulkAddResult["failed"] = [];
+      const ids: string[] = [];
       let saved = 0;
       for (let i = 0; i < inputs.length; i += CHUNK) {
         const chunk = inputs.slice(i, i + CHUNK);
@@ -398,7 +401,7 @@ export function useAddTransactions() {
             transaction_date: input.date,
           };
         });
-        const { error } = await supabase.from("transactions").insert(payload);
+        const { data, error } = await supabase.from("transactions").insert(payload).select("id");
         if (error) {
           failed.push({
             chunkIndex,
@@ -407,10 +410,13 @@ export function useAddTransactions() {
           });
         } else {
           saved += chunk.length;
+          for (const row of data ?? []) {
+            if (row && typeof row.id === "string") ids.push(row.id);
+          }
         }
         onProgress?.(saved, inputs.length);
       }
-      return { saved, failed };
+      return { saved, failed, ids };
     },
     onSuccess: (result) => {
       invalidate();
