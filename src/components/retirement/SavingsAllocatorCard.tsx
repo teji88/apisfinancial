@@ -9,6 +9,7 @@ import type { Profile } from "@/lib/profile";
 import type { ProvinceCode } from "@/lib/tax";
 import { marginalRateAt } from "@/lib/retirement/marginalRate";
 import { CANADA_2026_PARAMETERS } from "@/lib/retirement/rules/canada2026";
+import type { DerivedWithdrawalRate } from "@/lib/retirement/adapter/oldApiAdapter";
 import {
   suggestSavingsAllocation,
   SPOUSAL_GAP_THRESHOLD,
@@ -17,10 +18,13 @@ import {
 
 export function SavingsAllocatorCard({
   profile,
+  derivedRate,
   onApply,
   onSaveMatch,
 }: {
   profile: Profile;
+  /** Projection-derived withdrawal marginal rate (null = fall back to manual input). */
+  derivedRate?: DerivedWithdrawalRate | null;
   onApply: (rrspPct: number, tfsaPct: number, nonregPct: number) => void;
   onSaveMatch: (m: { offered: boolean; matchRatePct: number; maxPctOfSalary: number }) => void;
 }) {
@@ -38,8 +42,12 @@ export function SavingsAllocatorCard({
   const [fhsaRoom, setFhsaRoom] = useState("");
 
   const defaultCurrentRate = marginalRateAt(salary, province, currentAge) * 100;
-  const defaultRetireRate =
-    marginalRateAt(profile.desired_income ?? 60000, province, 65) * 100;
+  // The withdrawal rate is an emergent property of the plan: prefer the
+  // projection-derived rate; fall back to the old static estimate only when
+  // the projection can't provide one (planner-first gate: never silently guess).
+  const defaultRetireRate = derivedRate
+    ? derivedRate.rate * 100
+    : marginalRateAt(profile.desired_income ?? 60000, province, 65) * 100;
   const [currentRatePct, setCurrentRatePct] = useState<number | null>(null);
   const [retireRatePct, setRetireRatePct] = useState<number | null>(null);
 
@@ -168,7 +176,11 @@ export function SavingsAllocatorCard({
             value={retireRatePct ?? Math.round(defaultRetireRate * 10) / 10}
             onCommit={(n) => setRetireRatePct(Math.max(0, Math.min(100, n)))}
           />
-          <p className="text-[11px] text-muted-foreground">Estimated {defaultRetireRate.toFixed(1)}% from retirement spending</p>
+          <p className="text-[11px] text-muted-foreground">
+            {derivedRate
+              ? derivedRate.label
+              : `Estimated ${defaultRetireRate.toFixed(1)}% from retirement spending`}
+          </p>
         </div>
         <div className="space-y-2 rounded-lg border p-3">
           <div className="flex items-center justify-between gap-2">
