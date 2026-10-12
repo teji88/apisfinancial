@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getQuotes } from "./market.functions";
+import { warmPerformanceSnapshots } from "./performance-warm.functions";
 import type { Account, Holding, Quote, Transaction } from "./finance";
 
 // Module-level empty singletons. `data ?? []` in a hook body creates a
@@ -222,6 +223,19 @@ export function useInvalidatePortfolio() {
   };
 }
 
+/**
+ * Fire-and-forget Performance snapshot warming after ledger writes.
+ * Never blocks the UI and never throws — the server function itself returns
+ * `{ warmed: 0, error }` on any failure.
+ */
+function queueSnapshotWarmup() {
+  try {
+    void warmPerformanceSnapshots({ data: { scope: "all" } }).catch(() => {});
+  } catch {
+    /* warming is best-effort */
+  }
+}
+
 export type NewTransaction = {
   accountId: string;
   symbol: string;
@@ -307,7 +321,10 @@ export function useAddTransaction() {
       });
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      queueSnapshotWarmup();
+    },
   });
 }
 
@@ -395,7 +412,11 @@ export function useAddTransactions() {
       }
       return { saved, failed };
     },
-    onSuccess: invalidate,
+    onSuccess: (result) => {
+      invalidate();
+      // Only warm when something actually landed in the ledger.
+      if (result.saved > 0) queueSnapshotWarmup();
+    },
   });
 }
 
