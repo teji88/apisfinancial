@@ -64,3 +64,13 @@
 - [x] Slow nightly seed of the price library from that universe (small batch per run)
 - [x] Standard ticker search: .TO rule shown, auto-suffix, suggestions, Canadian fallback lookup
 - [x] Statement text condensed before AI reading to cut cost
+
+## Phase 10 — "Plan ahead" tab, FIRE calculator, performance warm-up (done, 2026-10-12)
+
+- [x] New "Plan ahead" nav tab (replaces "HELOC Investing") with Overview + HELOC Investing sub-tabs
+- [x] Net worth, Debt payoff vs invest, and Savings allocation moved out of Retirement into Plan ahead
+- [x] `/smith` redirects to `/plan-ahead?tab=heloc`; Retirement keeps CPP/OAS, DB pension, withdrawal engine
+- [x] FIRE calculator (Classic + Coast) with deterministic engine + 14 unit tests; reuses planner inputs
+- [x] Performance snapshot warm-up job runs after ledger writes; honest staged loading note
+- [x] HELOC import review: bulk-classify, kind/type filter + sort, scrollable list, record-a-draw syncs BUY to linked ledger
+- [x] Dark-mode contrast pass across smith, retirement, dashboard, properties
