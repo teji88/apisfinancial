@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessSmithLedger, SMITH_DISCLAIMER, type SmithTrancheInput } from "./SmithTracker";
+import { assessSmithLedger, SMITH_DISCLAIMER, totalReturnGain, withdrawnDistributionsTotal, type SmithTrancheInput } from "./SmithTracker";
 
 const baseTranche: SmithTrancheInput = {
   id: "t1",
@@ -124,5 +124,23 @@ describe("distributions", () => {
   it("defaults to zero distributions", () => {
     const result = assessSmithLedger([baseTranche]);
     expect(result.distributions.total).toBe(0);
+  });
+});
+
+describe("totalReturnGain", () => {
+  it("adds withdrawn cash back: Gurteg's $106,341.43 vs $116,737.10 case", () => {
+    // $10,395.68 withdrawn to the mortgage must not read as a loss.
+    const gain = totalReturnGain(106341.43, 10395.68, 116737.10);
+    expect(gain).toBeCloseTo(0.01, 2);
+  });
+  it("is plain investmentValue - drawn when nothing was withdrawn", () => {
+    expect(totalReturnGain(120_000, 0, 100_000)).toBe(20_000);
+  });
+  it("ignores reinvested distributions (already in the investment value)", () => {
+    // withdrawnDistributionsTotal excludes reinvested by construction.
+    expect(withdrawnDistributionsTotal({ mortgage: 600, reinvested: 300, personal: 200, total: 1100 })).toBe(800);
+  });
+  it("clamps negative inputs to zero", () => {
+    expect(totalReturnGain(-5, -5, -5)).toBe(0);
   });
 });
