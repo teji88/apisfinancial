@@ -130,15 +130,15 @@ function PropertiesPage() {
           <h2 className="text-lg font-semibold">How the properties tracker works</h2>
           <ol className="space-y-3 text-sm">
             <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-800">1</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 dark:bg-sky-900 text-xs font-bold text-sky-800 dark:text-sky-300">1</span>
               <span><strong>Add your first property</strong> below — name, value, rent.</span>
             </li>
             <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-800">2</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 dark:bg-sky-900 text-xs font-bold text-sky-800 dark:text-sky-300">2</span>
               <span><strong>Fill in expenses and mortgage</strong> — link the mortgage to your debts list or enter it manually, and set a big-ticket reserve.</span>
             </li>
             <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-xs font-bold text-sky-800">3</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-100 dark:bg-sky-900 text-xs font-bold text-sky-800 dark:text-sky-300">3</span>
               <span><strong>Read the numbers</strong> — monthly cash flow, cap rate, cash-on-cash, expense ratio, and equity feeding your net worth.</span>
             </li>
           </ol>
@@ -147,7 +147,7 @@ function PropertiesPage() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border p-4">
           <div className="text-xs text-muted-foreground">Cash flow / month</div>
-          <div className={`text-2xl font-bold ${rollup.totalCashFlowMonthly >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+          <div className={`text-2xl font-bold ${rollup.totalCashFlowMonthly >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
             {formatCad(rollup.totalCashFlowMonthly)}
           </div>
         </div>
@@ -159,9 +159,9 @@ function PropertiesPage() {
           <div className="text-xs text-muted-foreground">Total mortgages</div>
           <div className="text-2xl font-bold">{formatCad(rollup.totalMortgage)}</div>
         </div>
-        <div className="rounded-xl border bg-emerald-50 p-4">
+        <div className="rounded-xl border bg-emerald-50 dark:bg-emerald-950 p-4">
           <div className="text-xs text-muted-foreground">Total equity → net worth</div>
-          <div className="text-2xl font-bold text-emerald-800">{formatCad(rollup.totalEquity)}</div>
+          <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-300">{formatCad(rollup.totalEquity)}</div>
         </div>
       </div>
 
@@ -187,7 +187,7 @@ function PropertiesPage() {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <span className="text-base font-semibold">{prop.name || "Unnamed property"}</span>
-                  <span className={`ml-3 text-sm font-medium ${r.cashFlowMonthly >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                  <span className={`ml-3 text-sm font-medium ${r.cashFlowMonthly >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
                     {formatCad(r.cashFlowMonthly)}/mo
                   </span>
                 </div>
@@ -232,7 +232,7 @@ function PropertiesPage() {
                 </div>
               </dl>
               {isValueStale(prop.valueUpdated ?? null, new Date().toISOString().slice(0, 10)) ? (
-                <p className="text-xs text-amber-800">
+                <p className="text-xs text-amber-800 dark:text-amber-300">
                   ⚠ Value estimate {prop.valueUpdated ? `from ${prop.valueUpdated}` : "never recorded"} — cap rate and equity are only as good as this number. Update it when you review the property.
                 </p>
               ) : null}
@@ -426,7 +426,7 @@ function PropertyEditor({
               <dd>({formatCad(result.capexReserveAnnual)})</dd>
             </div>
           ) : null}
-          <div className={`flex justify-between border-t pt-1 font-bold ${result.cashFlowAnnual >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+          <div className={`flex justify-between border-t pt-1 font-bold ${result.cashFlowAnnual >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
             <dt>Cash flow / yr</dt>
             <dd>{formatCad(result.cashFlowAnnual)}</dd>
           </div>
@@ -481,7 +481,7 @@ function KeepOrSellLens({
           <dt className="text-muted-foreground">Equity invested at {assumedPct}% / yr</dt>
           <dd>{formatCad(altAnnual)}</dd>
         </div>
-        <div className={`flex justify-between border-t pt-1 font-medium ${diff >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+        <div className={`flex justify-between border-t pt-1 font-medium ${diff >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
           <dt>Difference</dt>
           <dd>{diff >= 0 ? "+" : ""}{formatCad(diff)}</dd>
         </div>

@@ -47,6 +47,8 @@ export type ProposedTranche = {
   amount: number;
   symbol: string | null;
   note: string;
+  /** Raw transaction type, for kind filtering/sorting in the review UI. */
+  rawType: string;
 };
 
 export type OutflowClassification =
@@ -62,6 +64,8 @@ export type ProposedOutflow = {
   amount: number;
   symbol: string | null;
   note: string;
+  /** Raw transaction type, for kind filtering/sorting in the review UI. */
+  rawType: string;
   /** Chosen by the user at review time; null until classified. */
   classification: OutflowClassification | null;
 };
@@ -255,6 +259,7 @@ export function inferProposals(rows: SmithCsvRow[]): ProposedItem[] {
         note: row.symbol
           ? `Buy ${row.symbol} — inferred draw from HELOC`
           : "Security purchase — inferred draw from HELOC",
+        rawType: t,
       });
     } else if (CASH_IN_RE.test(t) && !row.symbol) {
       items.push({
@@ -264,6 +269,7 @@ export function inferProposals(rows: SmithCsvRow[]): ProposedItem[] {
         amount: row.amount,
         symbol: null,
         note: "Cash in — assumed HELOC money for investment",
+        rawType: t,
       });
     } else if (SELL_RE.test(t)) {
       items.push({
@@ -273,6 +279,7 @@ export function inferProposals(rows: SmithCsvRow[]): ProposedItem[] {
         amount: row.amount,
         symbol: row.symbol,
         note: "Sale proceeds — confirm where the money went",
+        rawType: t,
         classification: null,
       });
     } else if (CASH_OUT_RE.test(t)) {
@@ -283,6 +290,7 @@ export function inferProposals(rows: SmithCsvRow[]): ProposedItem[] {
         amount: row.amount,
         symbol: null,
         note: "Cash out — classify before recording (do not assume mortgage prepayment)",
+        rawType: t,
         classification: null,
       });
     } else if (DIST_RE.test(t)) {
@@ -296,11 +304,25 @@ export function inferProposals(rows: SmithCsvRow[]): ProposedItem[] {
         amount: row.amount,
         symbol: row.symbol,
         note: `Unrecognized activity ("${t || "no type"}") — classify manually or ignore`,
+        rawType: t,
         classification: null,
       });
     }
   });
   return items;
+}
+
+/** Bucket a proposal's raw transaction type for filtering in the review UI. */
+export type ProposalCategory = "Buy" | "Sell" | "Deposit" | "Withdrawal" | "Distribution" | "Other";
+
+export function proposalCategory(rawType: string): ProposalCategory {
+  const t = rawType ?? "";
+  if (BUY_RE.test(t)) return "Buy";
+  if (SELL_RE.test(t)) return "Sell";
+  if (CASH_IN_RE.test(t)) return "Deposit";
+  if (CASH_OUT_RE.test(t)) return "Withdrawal";
+  if (DIST_RE.test(t)) return "Distribution";
+  return "Other";
 }
 
 /**

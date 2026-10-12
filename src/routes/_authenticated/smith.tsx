@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,15 +13,17 @@ import {
 import { NumInput } from "@/components/ui/num-input";
 import { Switch } from "@/components/ui/switch";
 import { formatCad, summariseAccount, type Account } from "@/lib/finance";
-import { usePortfolio } from "@/lib/portfolio";
+import { useAddTransactions, usePortfolio } from "@/lib/portfolio";
 import {
   inferProposals,
   parseSmithCsv,
   proposedTrancheNote,
+  proposalCategory,
   type OutflowClassification,
   type ProposedItem,
   type ProposedOutflow,
   type ProposedTranche,
+  type ProposalCategory,
   type SmithCsvRow,
 } from "@/lib/retirement/smithCsvImport";
 import { ledgerTransactionsToSmithRows, parsedStatementToSmithRows } from "@/lib/retirement/smithLedgerImport";
@@ -62,8 +64,13 @@ export const Route = createFileRoute("/_authenticated/smith")({
       },
     ],
   }),
-  component: SmithPage,
+  component: SmithRedirect,
 });
+
+// HELOC Investing now lives under the "Plan ahead" tab — keep the old URL working.
+function SmithRedirect() {
+  throw redirect({ to: "/plan-ahead", search: { tab: "heloc" } });
+}
 
 function LockedSection({
   locked,
@@ -96,7 +103,7 @@ function LockedSection({
   );
 }
 
-function SmithPage() {
+export function SmithPage() {
   const { data: profile, isLoading } = useProfile();
   const updateProfile = useUpdateProfile();
   const { entitlement } = useEntitlement();
@@ -301,24 +308,24 @@ function SmithPage() {
           <h2 className="text-lg font-semibold">How the Home Equity Investing tracker works</h2>
           <ol className="space-y-3 text-sm">
             <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-800">1</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900 text-xs font-bold text-emerald-800 dark:text-emerald-300">1</span>
               <span><strong>Add your HELOC</strong> below — it lands in your debts list automatically.</span>
             </li>
             <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-800">2</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900 text-xs font-bold text-emerald-800 dark:text-emerald-300">2</span>
               <span><strong>Record each month's draw</strong> in the check-in: principal paid → room created → amount drawn → what it bought.</span>
             </li>
             <li className="flex gap-3">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-800">3</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900 text-xs font-bold text-emerald-800 dark:text-emerald-300">3</span>
               <span><strong>Watch the dashboard</strong> — tax saved this year, all-time, and projected through payoff, plus a clean tracing ledger for tax time.</span>
             </li>
           </ol>
         </div>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border bg-emerald-50 p-4">
+        <div className="rounded-xl border bg-emerald-50 dark:bg-emerald-950 p-4">
           <div className="text-xs text-muted-foreground">Tax saved this year</div>
-          <div className="text-2xl font-bold text-emerald-800">{formatCad(savings.taxSavedYtd)}</div>
+          <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-300">{formatCad(savings.taxSavedYtd)}</div>
           <div className="text-[11px] text-muted-foreground">
             {formatCad(interestPaidYtd)} deductible interest × {(marginalRate * 100).toFixed(0)}%
           </div>
@@ -328,9 +335,9 @@ function SmithPage() {
           <div className="text-2xl font-bold">{formatCad(savings.taxSavedAllTime)}</div>
           <div className="text-[11px] text-muted-foreground">Realized, in your pocket</div>
         </div>
-        <div className="rounded-xl border bg-sky-50 p-4">
+        <div className="rounded-xl border bg-sky-50 dark:bg-sky-950 p-4">
           <div className="text-xs text-muted-foreground">Projected total by payoff</div>
-          <div className="text-2xl font-bold text-sky-800">{formatCad(savings.totalProjected)}</div>
+          <div className="text-2xl font-bold text-sky-800 dark:text-sky-300">{formatCad(savings.totalProjected)}</div>
           <div className="text-[11px] text-muted-foreground">
             {savings.yearsToConvert > 0 ? `over ~${savings.yearsToConvert} years` : "add a mortgage to project"}
           </div>
@@ -438,6 +445,9 @@ function SmithPage() {
           locked={!hasTrackerPro}
           onUnlock={() => setUpgradeOpen(true)}
           lastTranche={tranches.length > 0 ? tranches[tranches.length - 1] : null}
+          linkedAccountId={settings.investmentAccountId ?? null}
+          linkedAccountName={portfolioAccounts.find((a) => a.id === settings.investmentAccountId)?.account_name ?? null}
+          fxUsdCad={fxUsdCad}
           onDraw={(tranche, drawnAmount) => {
             const next = [...tranches, tranche];
             save({
@@ -565,7 +575,7 @@ function SmithPage() {
         </dl>
         <p className="text-xs text-muted-foreground">{ledger.disclaimer}</p>
         <p className="text-xs text-muted-foreground">{savings.disclaimer}</p>
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs font-medium text-amber-900">
+        <p className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-3 text-xs font-medium text-amber-900 dark:text-amber-100">
           {CRA_FILING_DISCLAIMER}
         </p>
       </div>
@@ -593,7 +603,7 @@ function BocNudge({
   // BoC announces 8×/year (~every 6 weeks). Nudge if never checked or > 45 days.
   if (daysSince <= 45) return null;
   return (
-    <div className="rounded-xl border border-sky-300 bg-sky-50 p-4 space-y-2">
+    <div className="rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950 p-4 space-y-2">
       <h3 className="text-sm font-semibold">Has your HELOC rate changed?</h3>
       <p className="text-sm text-muted-foreground">
         The Bank of Canada sets rates 8 times a year, and banks usually follow within
@@ -693,7 +703,7 @@ function SmithPerformanceCard({
         <>
           <div className="text-2xl font-bold">{formatCad(linkedAccountValue)}</div>
           <div className="text-[11px] text-muted-foreground">{linkedAccountName}</div>
-          <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+          <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
             {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn
           </div>
           <div className="text-[11px] text-muted-foreground">
@@ -704,7 +714,7 @@ function SmithPerformanceCard({
       ) : linkedHoldings.length > 0 ? (
         <>
           <div className="text-2xl font-bold">{formatCad(linkedHoldingsValue)}</div>
-          <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+          <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
             {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn
           </div>
           <div className="text-[11px] text-muted-foreground">
@@ -717,47 +727,60 @@ function SmithPerformanceCard({
           Link the account holding the investments bought with the borrowed money.
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">
-        Add investments normally in the{" "}
-        <Link to="/accounts" className="text-primary underline">
-          Accounts tab
-        </Link>{" "}
-        — they appear here once this account is linked.
-      </p>
-      {/* Link / unlink are entry actions — Pro only. Linked data stays visible read-only. */}
-      <LockedSection locked={locked} onUnlock={onUnlock} label="Investment holdings">
-      <div className="flex flex-wrap gap-1.5 pt-1">
-        {linkedHoldings.map((h) => (
-          <span key={h.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
-            {h.name || "Holding"} — {formatCad(h.value)}
-            {investmentHoldingIds.includes(h.id) ? (
-              <button
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => onUnlinkHolding(h.id)}
-                aria-label={`Unlink ${h.name}`}
-              >
-                ×
-              </button>
-            ) : null}
-          </span>
-        ))}
-      </div>
-      {unlinkedHoldings.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <Select value={linkId} onValueChange={setLinkId}>
-            <SelectTrigger className="w-44"><SelectValue placeholder="Link existing holding" /></SelectTrigger>
-            <SelectContent>
-              {unlinkedHoldings.map((h) => (
-                <SelectItem key={h.id} value={h.id}>{h.name || "Holding"}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button size="sm" variant="outline" disabled={!linkId} onClick={() => { onLinkHolding(linkId); setLinkId(""); }}>
-            Link
-          </Button>
-        </div>
-      ) : null}
-      </LockedSection>
+      {investmentAccountId ? (
+        <p className="text-[11px] text-muted-foreground">
+          Using every holding in {linkedAccountName ?? "the linked account"} — add or edit
+          investments normally in the{" "}
+          <Link to="/accounts" className="text-primary underline">
+            Accounts tab
+          </Link>
+          .
+        </p>
+      ) : (
+        <>
+          <p className="text-[11px] text-muted-foreground">
+            Add investments normally in the{" "}
+            <Link to="/accounts" className="text-primary underline">
+              Accounts tab
+            </Link>{" "}
+            — they appear here once this account is linked. Or link individual holdings below.
+          </p>
+          {/* Link / unlink are entry actions — Pro only. Linked data stays visible read-only. */}
+          <LockedSection locked={locked} onUnlock={onUnlock} label="Investment holdings">
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {linkedHoldings.map((h) => (
+              <span key={h.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
+                {h.name || "Holding"} — {formatCad(h.value)}
+                {investmentHoldingIds.includes(h.id) ? (
+                  <button
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => onUnlinkHolding(h.id)}
+                    aria-label={`Unlink ${h.name}`}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </span>
+            ))}
+          </div>
+          {unlinkedHoldings.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Select value={linkId} onValueChange={setLinkId}>
+                <SelectTrigger className="w-44"><SelectValue placeholder="Link existing holding" /></SelectTrigger>
+                <SelectContent>
+                  {unlinkedHoldings.map((h) => (
+                    <SelectItem key={h.id} value={h.id}>{h.name || "Holding"}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="outline" disabled={!linkId} onClick={() => { onLinkHolding(linkId); setLinkId(""); }}>
+                Link
+              </Button>
+            </div>
+          ) : null}
+          </LockedSection>
+        </>
+      )}
     </div>
   );
 }
@@ -807,6 +830,10 @@ function SmithCsvImportCard({
   const [presorting, setPresorting] = useState(false);
   const [presortNotes, setPresortNotes] = useState<Record<string, string>>({});
   const [aiPresorted, setAiPresorted] = useState(false);
+  const [kindFilter, setKindFilter] = useState<"all" | "tranche" | "outflow">("all");
+  const [catFilter, setCatFilter] = useState<"all" | ProposalCategory>("all");
+  const [sortBy, setSortBy] = useState<"date" | "amount">("date");
+  const [bulkClass, setBulkClass] = useState<OutflowClassification | "">("");
   const learnMapping = useServerFn(learnCsvMapping);
   const parseStatementFn = useServerFn(parseStatement);
   const presortFn = useServerFn(presortSmithProposals);
@@ -823,6 +850,10 @@ function SmithCsvImportCard({
     setClassifications({});
     setPresortNotes({});
     setAiPresorted(false);
+    setKindFilter("all");
+    setCatFilter("all");
+    setSortBy("date");
+    setBulkClass("");
   };
 
   const handleFile = async (f: File | undefined) => {
@@ -976,6 +1007,25 @@ function SmithCsvImportCard({
   );
   const canConfirm = confirmedTranches.length + confirmedOutflows.length > 0 && outflowsMissingClass.length === 0;
 
+  /** Filtered + sorted view of the proposals (review only — confirm uses the full list). */
+  const visibleProposals = (proposals ?? [])
+    .filter((i) => kindFilter === "all" || i.kind === kindFilter)
+    .filter((i) => catFilter === "all" || proposalCategory(i.rawType) === catFilter)
+    .sort((a, b) =>
+      sortBy === "amount" ? b.amount - a.amount : a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
+    );
+
+  /** Apply one classification to every checked outflow missing one. */
+  const applyBulkClassify = () => {
+    if (!bulkClass) return;
+    setClassifications((prev) => {
+      const next = { ...prev };
+      for (const o of outflowsMissingClass) next[o.key] = bulkClass;
+      return next;
+    });
+    setBulkClass("");
+  };
+
   const handleConfirm = () => {
     const today = new Date().toISOString().slice(0, 10);
     const newTranches: SmithTranche[] = confirmedTranches.map((item, n) => ({
@@ -1063,6 +1113,10 @@ function SmithCsvImportCard({
     setPresorting(false);
     setPresortNotes({});
     setAiPresorted(false);
+    setKindFilter("all");
+    setCatFilter("all");
+    setSortBy("date");
+    setBulkClass("");
   };
 
   return (
@@ -1077,52 +1131,57 @@ function SmithCsvImportCard({
       </div>
       <LockedSection locked={locked} onUnlock={onUnlock} label="CSV import">
         {doneMsg ? (
-          <p className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+          <p className="rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950 p-3 text-sm text-emerald-900 dark:text-emerald-100">
             {doneMsg}
           </p>
         ) : null}
         {proposals === null ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {linkedAccountName && linkedRows.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" onClick={handleLedgerReconstruct}>
-                  Reconstruct from {linkedAccountName}
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  {linkedRows.length} transaction{linkedRows.length === 1 ? "" : "s"} already
-                  in your ledger — no upload needed.
-                </span>
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium">1 · From your ledger (recommended)</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" onClick={handleLedgerReconstruct}>
+                    Reconstruct from {linkedAccountName}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {linkedRows.length} transaction{linkedRows.length === 1 ? "" : "s"} already
+                    in your ledger — no upload needed.
+                  </span>
+                </div>
               </div>
             ) : null}
-            <div className="flex flex-wrap items-center gap-2">
-              {linkedAccountName && linkedRows.length > 0 ? (
-                <span className="text-xs text-muted-foreground">Or upload a file:</span>
-              ) : null}
-              <Input
-                type="file"
-                accept=".csv,text/csv,.pdf,application/pdf,image/png,image/jpeg"
-                className="max-w-xs"
-                onChange={(e) => void handleFile(e.target.files?.[0])}
-              />
-              {reading ? <span className="text-xs text-muted-foreground">Reading statement with AI…</span> : null}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium">
+                {linkedAccountName && linkedRows.length > 0 ? "2 · From a file" : "From a file"}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  type="file"
+                  accept=".csv,text/csv,.pdf,application/pdf,image/png,image/jpeg"
+                  className="max-w-xs"
+                  onChange={(e) => void handleFile(e.target.files?.[0])}
+                />
+                {reading ? <span className="text-xs text-muted-foreground">Reading statement with AI…</span> : null}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                CSVs parse instantly on your device. PDF or image statements are read with AI
+                (Pro) — draws become proposed tranches, payments become outflows for review.
+              </p>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              CSVs parse instantly on your device. PDF or image statements are read with AI
-              (Pro) — draws become proposed tranches, payments become outflows for review.
-            </p>
             {proposals === null && warnings.length > 0 && !unreadable
               ? warnings.map((w, i) => (
-                  <p key={i} className="text-xs text-amber-800">{w}</p>
+                  <p key={i} className="text-xs text-amber-800 dark:text-amber-300">{w}</p>
                 ))
               : null}
             {unreadable ? (
-              <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/50 p-3">
+              <div className="space-y-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3">
                 <p className="text-sm">
                   We couldn't read <span className="font-medium">{unreadable.fileName}</span> —
                   the column layout wasn't recognized.
                 </p>
                 {warnings.map((w, i) => (
-                  <p key={i} className="text-xs text-amber-800">{w}</p>
+                  <p key={i} className="text-xs text-amber-800 dark:text-amber-300">{w}</p>
                 ))}
                 <div className="flex flex-wrap items-center gap-2">
                   <Button size="sm" onClick={() => void handleLearnLayout()} disabled={learning}>
@@ -1137,7 +1196,7 @@ function SmithCsvImportCard({
                   mapping — never your full file. The layout is saved on this device, so
                   future files with the same layout parse instantly with no AI involved.
                 </p>
-                {learnError ? <p className="text-xs text-red-700">{learnError}</p> : null}
+                {learnError ? <p className="text-xs text-red-700 dark:text-red-400">{learnError}</p> : null}
               </div>
             ) : null}
           </div>
@@ -1150,7 +1209,7 @@ function SmithCsvImportCard({
                   {source === "ledger" ? "From your ledger" : source === "statement" ? "From statement" : "From CSV"}
                 </span>
                 {source === "statement" || aiPresorted ? (
-                  <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] text-violet-900">
+                  <span className="ml-1 rounded-full bg-violet-100 dark:bg-violet-900 px-2 py-0.5 text-[11px] text-violet-900 dark:text-violet-100">
                     AI-assisted
                   </span>
                 ) : null}
@@ -1177,18 +1236,65 @@ function SmithCsvImportCard({
               </p>
             ) : null}
             {warnings.map((w, i) => (
-              <p key={i} className="text-xs text-amber-800">
+              <p key={i} className="text-xs text-amber-800 dark:text-amber-300">
                 {w}
               </p>
             ))}
-            <div className="space-y-2">
-              {proposals.map((item) => {
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Select value={kindFilter} onValueChange={(v) => setKindFilter(v as typeof kindFilter)}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All kinds</SelectItem>
+                  <SelectItem value="tranche">Tranches</SelectItem>
+                  <SelectItem value="outflow">Outflows</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={catFilter} onValueChange={(v) => setCatFilter(v as typeof catFilter)}>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All types</SelectItem>
+                  {(["Buy", "Sell", "Deposit", "Withdrawal", "Distribution", "Other"] as const).map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date">Sort: date</SelectItem>
+                  <SelectItem value="amount">Sort: amount</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-muted-foreground">
+                Showing {visibleProposals.length} of {proposals.length}
+              </span>
+            </div>
+            {outflowsMissingClass.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border p-2 text-xs">
+                <span className="text-muted-foreground">
+                  {outflowsMissingClass.length} checked outflow{outflowsMissingClass.length === 1 ? "" : "s"} need{outflowsMissingClass.length === 1 ? "s" : ""} tagging:
+                </span>
+                <Select value={bulkClass} onValueChange={(v) => setBulkClass(v as OutflowClassification)}>
+                  <SelectTrigger className="w-44"><SelectValue placeholder="Classify all as…" /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(OUTFLOW_LABELS) as OutflowClassification[]).map((c) => (
+                      <SelectItem key={c} value={c}>{OUTFLOW_LABELS[c]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" disabled={!bulkClass} onClick={applyBulkClassify}>
+                  Apply to all
+                </Button>
+              </div>
+            ) : null}
+            <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
+              {visibleProposals.map((item) => {
                 const isOutflow = item.kind === "outflow";
                 return (
                   <div
                     key={item.key}
                     className={`flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm ${
-                      isOutflow ? "border-amber-300 bg-amber-50/50" : ""
+                      isOutflow ? "border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50" : ""
                     }`}
                   >
                     <input
@@ -1202,15 +1308,15 @@ function SmithCsvImportCard({
                     <span
                       className={`rounded-full px-2 py-0.5 text-[11px] ${
                         isOutflow
-                          ? "bg-amber-100 text-amber-900"
-                          : "bg-sky-100 text-sky-900"
+                          ? "bg-amber-100 dark:bg-amber-900 text-amber-900 dark:text-amber-100"
+                          : "bg-sky-100 dark:bg-sky-900 text-sky-900 dark:text-sky-100"
                       }`}
                     >
-                      {isOutflow ? "Outflow — review" : "Inferred tranche"}
+                      {isOutflow ? "Outflow" : "Tranche"} · {proposalCategory(item.rawType)}
                     </span>
                     <span className="text-xs text-muted-foreground">{item.note}</span>
                     {presortNotes[item.key] ? (
-                      <span className="w-full text-[11px] text-violet-800">
+                      <span className="w-full text-[11px] text-violet-800 dark:text-violet-300">
                         AI: {presortNotes[item.key]}
                       </span>
                     ) : null}
@@ -1241,7 +1347,7 @@ function SmithCsvImportCard({
               })}
             </div>
             {outflowsMissingClass.length > 0 ? (
-              <p className="text-xs text-amber-800">
+              <p className="text-xs text-amber-800 dark:text-amber-300">
                 Classify each checked outflow before adding.
               </p>
             ) : null}
@@ -1525,12 +1631,12 @@ function ReconciliationLine({
       <span className="font-medium">HELOC check:</span>{" "}
       {formatCad(helocBalance)} balance
       {matches ? (
-        <span className="text-emerald-700">
+        <span className="text-emerald-700 dark:text-emerald-400">
           {" "}= {formatCad(Math.max(0, openingDrawn))} opening + {formatCad(trancheTotal)} draws
           {repayments > 0 ? ` − ${formatCad(repayments)} repaid` : ""} ✓
         </span>
       ) : (
-        <span className="text-amber-700">
+        <span className="text-amber-700 dark:text-amber-400">
           {" "}doesn&apos;t match the ledger ({formatCad(Math.max(0, openingDrawn))} opening +{" "}
           {formatCad(trancheTotal)} draws{repayments > 0 ? ` − ${formatCad(repayments)} repaid` : ""}{" "}
           = {formatCad(expected)}). Check the balance on the Debts tab.
@@ -1551,6 +1657,9 @@ function RoomDrawCard({
   locked,
   onUnlock,
   lastTranche,
+  linkedAccountId,
+  linkedAccountName,
+  fxUsdCad,
   onDraw,
   onRefinance,
   onUnlink,
@@ -1565,6 +1674,9 @@ function RoomDrawCard({
   locked: boolean;
   onUnlock: () => void;
   lastTranche: SmithTranche | null;
+  linkedAccountId: string | null;
+  linkedAccountName: string | null;
+  fxUsdCad: number;
   onDraw: (tranche: SmithTranche, drawnAmount: number) => void;
   onRefinance: (
     snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number; paymentFrequency?: "weekly" | "biweekly" | "monthly" },
@@ -1575,21 +1687,77 @@ function RoomDrawCard({
   const [drawn, setDrawn] = useState(0);
   const [bought, setBought] = useState("");
   const [showRefinance, setShowRefinance] = useState(false);
+  // Purchase capture — mirrors the ledger's add-transaction fields so the draw
+  // and the investment stay in sync in one step.
+  const [recordPurchase, setRecordPurchase] = useState(true);
+  const [buySymbol, setBuySymbol] = useState("");
+  const [buyUnits, setBuyUnits] = useState("");
+  const [buyPrice, setBuyPrice] = useState("");
+  const [buyFee, setBuyFee] = useState("");
+  const [buyCurrency, setBuyCurrency] = useState("CAD");
+  const [drawError, setDrawError] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const addTransactions = useAddTransactions();
+
+  const purchaseReady =
+    linkedAccountId != null &&
+    recordPurchase &&
+    buySymbol.trim() !== "" &&
+    Number(buyUnits) > 0 &&
+    Number(buyPrice) > 0;
 
   const repeatLast = () => {
     if (!lastTranche) return;
     setBought(lastTranche.useOfFunds);
   };
 
-  const record = () => {
-    if (drawn <= 0 || drawn > room.roomAvailable) return;
+  const record = async () => {
+    if (drawn <= 0 || drawn > room.roomAvailable || recording) return;
+    setDrawError(null);
+    const today = new Date().toISOString().slice(0, 10);
+    // Record the purchase in the linked ledger first — if it fails, nothing is
+    // recorded, so the tracker and ledger can never drift apart.
+    if (purchaseReady) {
+      setRecording(true);
+      try {
+        await addTransactions.mutateAsync({
+          inputs: [
+            {
+              accountId: linkedAccountId!,
+              symbol: buySymbol.trim().toUpperCase(),
+              name: null,
+              assetType: "ETF",
+              transactionType: "BUY",
+              units: Number(buyUnits),
+              pricePerUnit: Number(buyPrice),
+              amount: null,
+              currency: buyCurrency,
+              fxRate: buyCurrency === "USD" ? fxUsdCad : 1,
+              fee: Number(buyFee) || 0,
+              date: today,
+            },
+          ],
+        });
+      } catch (e) {
+        setDrawError(e instanceof Error ? e.message : "Could not record the purchase in the ledger.");
+        setRecording(false);
+        return;
+      }
+      setRecording(false);
+    }
+    const useOfFunds =
+      bought.trim() !== ""
+        ? bought
+        : purchaseReady
+          ? `${buyUnits.trim()} ${buySymbol.trim().toUpperCase()} @ $${buyPrice.trim()}`
+          : "";
     const tranche: SmithTranche = {
       id: `s-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
       facility: heloc.name || "HELOC",
-      drawDate: new Date().toISOString().slice(0, 10),
+      drawDate: today,
       principal: drawn,
       rate: heloc.rate,
-      useOfFunds: bought,
+      useOfFunds,
       eligible: true,
       purposeEvidence: "",
       interestPaidYtd: 0,
@@ -1606,6 +1774,11 @@ function RoomDrawCard({
     onDraw(tranche, drawn);
     setDrawn(0);
     setBought("");
+    setBuySymbol("");
+    setBuyUnits("");
+    setBuyPrice("");
+    setBuyFee("");
+    setBuyCurrency("CAD");
   };
 
   const pct = room.roomCreated > 0 ? (room.roomAvailable / room.roomCreated) * 100 : 0;
@@ -1671,9 +1844,9 @@ function RoomDrawCard({
           <div className="text-xl font-bold">{formatCad(room.roomCreated - room.roomAvailable)}</div>
           <div className="text-[11px] text-muted-foreground">{tranches.length} draw(s)</div>
         </div>
-        <div className="rounded-lg border bg-emerald-50 p-3">
+        <div className="rounded-lg border bg-emerald-50 dark:bg-emerald-950 p-3">
           <div className="text-xs text-muted-foreground">Available to draw</div>
-          <div className="text-xl font-bold text-emerald-800">{formatCad(room.roomAvailable)}</div>
+          <div className="text-xl font-bold text-emerald-800 dark:text-emerald-300">{formatCad(room.roomAvailable)}</div>
           <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-emerald-600 transition-all"
@@ -1709,7 +1882,7 @@ function RoomDrawCard({
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Rate (%/yr)</Label>
-            <NumInput value={Math.round(heloc.rate * 10000) / 100} onCommit={() => {}} />
+            <p className="text-sm font-medium">{Math.round(heloc.rate * 10000) / 100}%</p>
             <p className="text-[11px] text-muted-foreground">From HELOC — update it on the Debts tab</p>
           </div>
           <div className="space-y-1">
@@ -1722,15 +1895,96 @@ function RoomDrawCard({
           </div>
         </div>
         {drawn > room.roomAvailable ? (
-          <p className="text-xs text-red-700">
+          <p className="text-xs text-red-700 dark:text-red-400">
             More than the available room — lower the amount or wait for more principal payments.
           </p>
         ) : null}
-        <Button size="sm" onClick={record} disabled={drawn <= 0 || drawn > room.roomAvailable}>
-          Record draw
+        {linkedAccountId ? (
+          <div className="space-y-2 rounded-lg border p-2.5">
+            <label className="flex items-center gap-2 text-xs font-medium">
+              <input
+                type="checkbox"
+                checked={recordPurchase}
+                onChange={(e) => setRecordPurchase(e.target.checked)}
+              />
+              Record the purchase in {linkedAccountName ?? "the linked account"}
+            </label>
+            {recordPurchase ? (
+              <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="space-y-1">
+                  <Label className="text-xs">Symbol</Label>
+                  <Input
+                    value={buySymbol}
+                    onChange={(e) => setBuySymbol(e.target.value.toUpperCase())}
+                    placeholder="XIU"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Units</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={buyUnits}
+                    onChange={(e) => setBuyUnits(e.target.value)}
+                    placeholder="100"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Price per unit</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={buyPrice}
+                    onChange={(e) => setBuyPrice(e.target.value)}
+                    placeholder="32.50"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Currency</Label>
+                  <Select value={buyCurrency} onValueChange={setBuyCurrency}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CAD">CAD</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {buyCurrency === "USD" ? (
+                    <p className="text-[11px] text-muted-foreground">FX {fxUsdCad.toFixed(4)}</p>
+                  ) : null}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Fee ($)</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={buyFee}
+                    onChange={(e) => setBuyFee(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Cost</Label>
+                  <p className="text-sm font-medium">
+                    {Number(buyUnits) > 0 && Number(buyPrice) > 0
+                      ? formatCad(Number(buyUnits) * Number(buyPrice) + (Number(buyFee) || 0))
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            <p className="text-[11px] text-muted-foreground">
+              Saved as a BUY dated today. Leave the purchase empty to record the draw only —
+              you can add the investment later from the Accounts tab.
+            </p>
+          </div>
+        ) : null}
+        {drawError ? <p className="text-xs text-red-700 dark:text-red-400">{drawError}</p> : null}
+        <Button size="sm" onClick={() => void record()} disabled={drawn <= 0 || drawn > room.roomAvailable || recording}>
+          {recording ? "Recording…" : "Record draw"}
         </Button>
         <p className="text-[11px] text-muted-foreground">
           The HELOC balance on your Debts tab updates automatically.
+          {purchaseReady ? ` The BUY appears in ${linkedAccountName ?? "the linked account"}'s ledger.` : ""}
         </p>
         </div>
       </LockedSection>
