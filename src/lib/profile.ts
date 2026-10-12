@@ -135,6 +135,9 @@ export type SmithTranche = {
     amount: number;
     destination: "mortgage" | "reinvested" | "personal";
   }>;
+  /** Ledger transaction IDs created when this draw's purchases were recorded.
+   * Links the tranche back to the Accounts-tab ledger for CRA tracing. */
+  ledgerTransactionIds: string[];
   /** Source-document pointers (free text). */
   documents: string;
 };
