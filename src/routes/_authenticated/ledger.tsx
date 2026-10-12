@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Pencil, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -57,25 +57,13 @@ import {
 
 export const Route = createFileRoute("/_authenticated/ledger")({
   staticData: { sitemap: false },
-  head: () => ({
-    meta: [
-      { title: "Ledger — Apis Financial" },
-      {
-        name: "description",
-        content:
-          "Record buys, sells, dividends, DRIPs, deposits, withdrawals and fees in CAD or USD with exact FX rates.",
-      },
-      { property: "og:title", content: "Ledger — Apis Financial" },
-      {
-        property: "og:description",
-        content: "A complete Canadian transaction ledger feeding your ACB and return calculations.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-  component: LedgerPage,
+  component: LedgerRedirect,
 });
+
+// Ledger now lives under the Investments hub — keep the old URL working.
+function LedgerRedirect() {
+  throw redirect({ to: "/investments", search: { tab: "ledger" } });
+}
 
 const CASH_TYPES = ["DEPOSIT", "WITHDRAWAL", "FEE"];
 
@@ -83,7 +71,7 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function LedgerPage() {
+export function LedgerPage() {
   const { accounts, holdings, transactions, fxUsdCad } = usePortfolio();
   const { entitlement } = useEntitlement();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
