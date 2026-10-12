@@ -88,6 +88,8 @@ import {
   importHoldingsFromAccounts,
 } from "@/lib/retirement/optimization/AssetLocation";
 import { computeNetWorth } from "@/lib/retirement/optimization/NetWorth";
+import { FireCalculatorCard } from "@/components/retirement/FireCalculatorCard";
+import { SavingsAllocatorCard } from "@/components/retirement/SavingsAllocatorCard";
 import { expandSimplifiedToDetailed } from "@/lib/retirement/cppExpand";
 import {
   comparePayoffVsInvest,
@@ -102,6 +104,11 @@ import type { PersonScenario, DbPension } from "@/lib/retirement/domain/types";
 
 export const Route = createFileRoute("/retirement")({
   staticData: { sitemap: true },
+  validateSearch: (search: Record<string, unknown>): {
+    tab: "planner" | "fire" | "savings";
+  } => ({
+    tab: search["tab"] === "fire" || search["tab"] === "savings" ? search["tab"] : "planner",
+  }),
   head: () => ({
     links: [{ rel: "canonical", href: "https://www.apisfinancial.app/retirement" }],
     meta: [
@@ -278,9 +285,26 @@ function RetirementPage() {
   const { session, loading: authLoading } = useAuth();
   const isGuest = !authLoading && !session;
   const navigate = useNavigate();
+  const { tab } = Route.useSearch();
   const { accounts, holdings, transactions, quotes, fxUsdCad, loading } = usePortfolio();
   const profileQuery = useProfile();
   const updateProfile = useUpdateProfile();
+
+  // Total invested across accounts — feeds the FIRE calculator.
+  const investedTotal = useMemo(() => {
+    let total = 0;
+    for (const a of accounts) {
+      const s = summariseAccount(
+        a,
+        transactions.filter((t) => t.account_id === a.id),
+        holdings.filter((h) => h.account_id === a.id),
+        quotes,
+        fxUsdCad,
+      );
+      total += s.marketValue + Math.max(0, s.cash);
+    }
+    return total;
+  }, [accounts, holdings, transactions, quotes, fxUsdCad]);
 
   const { entitlement } = useEntitlement();
   // Every planning control is free now — nothing on this page is locked.
@@ -842,6 +866,30 @@ function RetirementPage() {
     <div className={isGuest ? "mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-6" : "min-h-screen bg-surface"}>
       {!isGuest && <AppHeader />}
       <main className={isGuest ? undefined : "mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8"}>
+      <div className="flex gap-1 rounded-lg border p-1">
+        {(
+          [
+            { key: "planner", label: "Planner" },
+            { key: "fire", label: "FIRE" },
+            { key: "savings", label: "Savings allocation" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => navigate({ to: "/retirement", search: { tab: t.key } })}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+              tab === t.key
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "planner" ? (
+        <>
       {isGuest && <div className="flex items-center justify-between border-b border-border/60 pb-4">
         <Link to="/">
           <ApisLogo variant="full" size="sm" />
@@ -1506,7 +1554,7 @@ function RetirementPage() {
             <DbPensionForm value={p.db_pension ?? null} onChange={(v) => set({ db_pension: v })} />
             <div className="sm:col-span-2 rounded-xl border p-4">
               <p className="text-sm">
-                Manage debts on the <Link to="/debts" className="underline font-medium">Debts tab</Link>
+                Manage debts on the <Link to="/debts" search={{ tab: "debts" }} className="underline font-medium">Debts tab</Link>
                 {p.debts && p.debts.length > 0 ? (
                   <span className="text-muted-foreground"> — {p.debts.length} debt{p.debts.length === 1 ? "" : "s"} tracked</span>
                 ) : null}.
@@ -1859,6 +1907,34 @@ function RetirementPage() {
           )}
         </TabsContent>
       </Tabs>
+        </>
+      ) : tab === "fire" ? (
+        <div className="space-y-4">
+          <div>
+            <h1 className="font-display text-2xl font-semibold tracking-tight">FIRE calculator</h1>
+            <p className="text-sm text-muted-foreground">
+              Classic and Coast FIRE, computed from your planner inputs.
+            </p>
+          </div>
+          <FireCalculatorCard profile={p} investedTotal={investedTotal} />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <h1 className="font-display text-2xl font-semibold tracking-tight">Savings allocation</h1>
+            <p className="text-sm text-muted-foreground">
+              Where each new dollar should go, in waterfall order.
+            </p>
+          </div>
+          <SavingsAllocatorCard
+            profile={p}
+            onApply={(rrspPct, tfsaPct, nonregPct) =>
+              set({ save_pct_rrsp: rrspPct, save_pct_tfsa: tfsaPct, save_pct_nonreg: nonregPct })
+            }
+            onSaveMatch={(m) => set({ employer_match: m })}
+          />
+        </div>
+      )}
       </main>
 
       <UpgradeDialog
