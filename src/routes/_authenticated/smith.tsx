@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { NumInput } from "@/components/ui/num-input";
 import { Switch } from "@/components/ui/switch";
-import { formatCad, summariseAccount, type Account } from "@/lib/finance";
+import { formatCad, summariseAccount, type Account, type Holding, type Transaction } from "@/lib/finance";
 import { useAddTransactions, usePortfolio } from "@/lib/portfolio";
 import {
   inferProposals,
@@ -46,7 +46,7 @@ import {
 } from "@/lib/profile";
 import { marginalRateAt } from "@/lib/retirement/marginalRate";
 import { computeSmithSavings } from "@/lib/retirement/optimization/SmithSavings";
-import { assessSmithLedger, CRA_FILING_DISCLAIMER } from "@/lib/retirement/optimization/SmithTracker";
+import { assessSmithLedger, CRA_FILING_DISCLAIMER, totalReturnGain, withdrawnDistributionsTotal } from "@/lib/retirement/optimization/SmithTracker";
 import { computeRoomSegmented, type TermSegment } from "@/lib/retirement/optimization/SmithRoom";
 import { SmithTrackerCard } from "@/components/retirement/DebtNetWorth";
 import { useEntitlement } from "@/lib/entitlement";
@@ -56,7 +56,7 @@ export const Route = createFileRoute("/_authenticated/smith")({
   staticData: { sitemap: false },
   head: () => ({
     meta: [
-      { title: "Home Equity Investing Tracker — Apis Financial" },
+      { title: "Home Equity Investing Tracker â Apis Financial" },
       {
         name: "description",
         content:
@@ -67,7 +67,7 @@ export const Route = createFileRoute("/_authenticated/smith")({
   component: SmithRedirect,
 });
 
-// HELOC Investing now lives under the "Debts" tab — keep the old URL working.
+// HELOC Investing now lives under the "Debts" tab â keep the old URL working.
 function SmithRedirect() {
   throw redirect({ to: "/debts", search: { tab: "heloc" } });
 }
@@ -93,10 +93,10 @@ function LockedSection({
         type="button"
         onClick={onUnlock}
         className="absolute inset-0 flex items-center justify-center rounded-xl bg-background/40 backdrop-blur-[1px]"
-        aria-label={`${label} — Pro feature, click to upgrade`}
+        aria-label={`${label} â Pro feature, click to upgrade`}
       >
         <span className="rounded-full border bg-card px-4 py-2 text-sm font-medium shadow-sm">
-          🔒 {label} — Pro feature
+          ð {label} â Pro feature
         </span>
       </button>
     </div>
@@ -111,7 +111,7 @@ export function SmithPage() {
   // HELOC investing tracker is a Pro feature; free users see data read-only.
   const hasTrackerPro = entitlement.tier !== "free";
 
-  // Real portfolio accounts (Accounts tab) — the primary source for linked investments.
+  // Real portfolio accounts (Accounts tab) â the primary source for linked investments.
   const {
     accounts: portfolioAccounts,
     holdings: portfolioHoldings,
@@ -141,7 +141,7 @@ export function SmithPage() {
   const save = (patch: Parameters<typeof updateProfile.mutate>[0]) =>
     updateProfile.mutate(patch);
 
-  // Linked portfolio account (Accounts tab) — computed live from the real ledger.
+  // Linked portfolio account (Accounts tab) â computed live from the real ledger.
   const linkedAccount = useMemo(
     () =>
       settings.investmentAccountId
@@ -150,7 +150,7 @@ export function SmithPage() {
     [portfolioAccounts, settings.investmentAccountId],
   );
   // Ledger rows of the linked account, shaped for tranche reconstruction
-  // (reuses the CSV inference rules — no upload needed).
+  // (reuses the CSV inference rules â no upload needed).
   const linkedSmithRows = useMemo(() => {
     if (!linkedAccount) return [];
     const symbolByHoldingId = new Map(portfolioHoldings.map((h) => [h.id, h.symbol]));
@@ -266,7 +266,7 @@ export function SmithPage() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loadingâ¦</p>
       </div>
     );
   }
@@ -309,15 +309,15 @@ export function SmithPage() {
           <ol className="space-y-3 text-sm">
             <li className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900 text-xs font-bold text-emerald-800 dark:text-emerald-300">1</span>
-              <span><strong>Add your HELOC</strong> below — it lands in your debts list automatically.</span>
+              <span><strong>Add your HELOC</strong> below â it lands in your debts list automatically.</span>
             </li>
             <li className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900 text-xs font-bold text-emerald-800 dark:text-emerald-300">2</span>
-              <span><strong>Record each month's draw</strong> in the check-in: principal paid → room created → amount drawn → what it bought.</span>
+              <span><strong>Record each month's draw</strong> in the check-in: principal paid â room created â amount drawn â what it bought.</span>
             </li>
             <li className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900 text-xs font-bold text-emerald-800 dark:text-emerald-300">3</span>
-              <span><strong>Watch the dashboard</strong> — tax saved this year, all-time, and projected through payoff, plus a clean tracing ledger for tax time.</span>
+              <span><strong>Watch the dashboard</strong> â tax saved this year, all-time, and projected through payoff, plus a clean tracing ledger for tax time.</span>
             </li>
           </ol>
         </div>
@@ -327,7 +327,7 @@ export function SmithPage() {
           <div className="text-xs text-muted-foreground">Tax saved this year</div>
           <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-300">{formatCad(savings.taxSavedYtd)}</div>
           <div className="text-[11px] text-muted-foreground">
-            {formatCad(interestPaidYtd)} deductible interest × {(marginalRate * 100).toFixed(0)}%
+            {formatCad(interestPaidYtd)} deductible interest Ã {(marginalRate * 100).toFixed(0)}%
           </div>
         </div>
         <div className="rounded-xl border p-4">
@@ -359,8 +359,8 @@ export function SmithPage() {
           <div className="text-xs text-muted-foreground">Distributions received YTD</div>
           <div className="text-2xl font-bold">{formatCad(ledger.distributions.total)}</div>
           <div className="text-[11px] text-muted-foreground">
-            {formatCad(ledger.distributions.mortgage)} to mortgage ·{" "}
-            {formatCad(ledger.distributions.reinvested)} reinvested ·{" "}
+            {formatCad(ledger.distributions.mortgage)} to mortgage Â·{" "}
+            {formatCad(ledger.distributions.reinvested)} reinvested Â·{" "}
             {formatCad(ledger.distributions.personal)} spent
           </div>
         </div>
@@ -369,6 +369,7 @@ export function SmithPage() {
           holdings={p?.asset_holdings ?? []}
           drawn={deductibleOutstanding}
           distributionsYtd={ledger.distributions.total}
+          withdrawnDistributions={withdrawnDistributionsTotal(ledger.distributions)}
           investmentHoldingIds={settings.investmentHoldingIds ?? []}
           onLinkHolding={(id) =>
             save({
@@ -400,7 +401,7 @@ export function SmithPage() {
 
       {/* What-if toggles */}
       <div className="rounded-xl border p-4 space-y-2">
-        <h3 className="text-sm font-semibold">What if…</h3>
+        <h3 className="text-sm font-semibold">What ifâ¦</h3>
         <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
           <label className="flex items-center gap-2 cursor-pointer">
             <Switch checked={stopRedraw} onCheckedChange={setStopRedraw} />
@@ -417,7 +418,7 @@ export function SmithPage() {
             <span className="font-bold">{formatCad(savings.totalProjected)}</span>
             <span className="text-muted-foreground text-xs ml-2">
               {stopRedraw ? "no new draws; " : ""}
-              {rateBump ? `rate ${(helocRate * 100).toFixed(2)}% → ${((helocRate + 0.02) * 100).toFixed(2)}%` : ""}
+              {rateBump ? `rate ${(helocRate * 100).toFixed(2)}% â ${((helocRate + 0.02) * 100).toFixed(2)}%` : ""}
             </span>
           </p>
         ) : (
@@ -427,7 +428,7 @@ export function SmithPage() {
         )}
       </div>
 
-      {/* Smith flow: pair setup → room → draws */}
+      {/* Smith flow: pair setup â room â draws */}
       {pairReady && pairMortgage && pairHeloc && room ? (
         <RoomDrawCard
           mortgage={pairMortgage}
@@ -448,6 +449,8 @@ export function SmithPage() {
           linkedAccountId={settings.investmentAccountId ?? null}
           linkedAccountName={portfolioAccounts.find((a) => a.id === settings.investmentAccountId)?.account_name ?? null}
           fxUsdCad={fxUsdCad}
+          transactions={portfolioTransactions}
+          holdings={portfolioHoldings}
           onDraw={(tranche, drawnAmount) => {
             const next = [...tranches, tranche];
             save({
@@ -507,7 +510,7 @@ export function SmithPage() {
         </LockedSection>
       )}
 
-      {/* Prior interest — entry action, Pro only */}
+      {/* Prior interest â entry action, Pro only */}
       <LockedSection locked={!hasTrackerPro} onUnlock={() => setUpgradeOpen(true)} label="Prior interest">
       <div className="rounded-xl border p-4">
         <div className="flex flex-wrap items-end gap-3">
@@ -527,7 +530,7 @@ export function SmithPage() {
       </div>
       </LockedSection>
 
-      {/* Tranche timeline — tranche data stays visible read-only; edits are Pro only */}
+      {/* Tranche timeline â tranche data stays visible read-only; edits are Pro only */}
       {p && pairHeloc ? (
         <SmithCsvImportCard
           heloc={pairHeloc}
@@ -600,7 +603,7 @@ function BocNudge({
   const daysSince = lastChecked
     ? Math.floor((new Date(today).getTime() - new Date(lastChecked + "T00:00:00").getTime()) / 86_400_000)
     : 999;
-  // BoC announces 8×/year (~every 6 weeks). Nudge if never checked or > 45 days.
+  // BoC announces 8Ã/year (~every 6 weeks). Nudge if never checked or > 45 days.
   if (daysSince <= 45) return null;
   return (
     <div className="rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950 p-4 space-y-2">
@@ -610,7 +613,7 @@ function BocNudge({
         days. Your HELOC is at {(heloc.rate * 100).toFixed(2)}%
         {lastChecked ? ` (last confirmed ${lastChecked})` : ""}. If your bank moved
         it, update the rate on the{" "}
-        <Link to="/debts" search={{ tab: "debts" }} className="underline">Debts tab</Link> — future
+        <Link to="/debts" search={{ tab: "debts" }} className="underline">Debts tab</Link> â future
         projections and the room math will use the new rate.
       </p>
       <Button size="sm" variant="outline" onClick={onChecked}>
@@ -625,6 +628,7 @@ function SmithPerformanceCard({
   holdings,
   drawn,
   distributionsYtd,
+  withdrawnDistributions,
   investmentHoldingIds,
   onLinkHolding,
   onUnlinkHolding,
@@ -640,6 +644,8 @@ function SmithPerformanceCard({
   holdings: Array<{ id: string; name: string; value: number }>;
   drawn: number;
   distributionsYtd: number;
+  /** Cash withdrawn from the investments (to mortgage / spent) — counts toward total return. */
+  withdrawnDistributions: number;
   investmentHoldingIds: string[];
   onLinkHolding: (id: string) => void;
   onUnlinkHolding: (id: string) => void;
@@ -662,14 +668,18 @@ function SmithPerformanceCard({
   const linkedHoldingsValue = linkedHoldings.reduce((s, h) => s + Math.max(0, h.value), 0);
   // Account link is primary; per-holding links are optional detail as a fallback.
   const investmentValue = linkedAccountValue ?? linkedHoldingsValue;
-  const gain = investmentValue - drawn;
+  // Total return: current value + cash already withdrawn from the account, vs drawn.
+  // Withdrawing dividends/sale proceeds no longer makes performance look worse.
+  const gain = totalReturnGain(investmentValue, withdrawnDistributions, drawn);
   const gainPct = drawn > 0 ? (gain / drawn) * 100 : 0;
   const yieldPct = investmentValue > 0 ? (distributionsYtd / investmentValue) * 100 : 0;
+  const withdrawnNote =
+    withdrawnDistributions > 0 ? ` · incl. ${formatCad(withdrawnDistributions)} withdrawn` : "";
 
   return (
     <div className="rounded-xl border p-4 space-y-2">
       <div className="text-xs text-muted-foreground">Investment account</div>
-      {/* Portfolio account linking is an entry action — Pro only. Linked data stays visible read-only. */}
+      {/* Portfolio account linking is an entry action â Pro only. Linked data stays visible read-only. */}
       <LockedSection locked={locked} onUnlock={onUnlock} label="Investment account">
         <div className="flex flex-wrap items-center gap-2">
           <Select
@@ -692,7 +702,7 @@ function SmithPerformanceCard({
               size="sm"
               variant="ghost"
               onClick={() => onSelectAccount(null)}
-              title={locked ? "Pro feature — click to upgrade" : undefined}
+              title={locked ? "Pro feature â click to upgrade" : undefined}
             >
               Unlink
             </Button>
@@ -704,22 +714,22 @@ function SmithPerformanceCard({
           <div className="text-2xl font-bold">{formatCad(linkedAccountValue)}</div>
           <div className="text-[11px] text-muted-foreground">{linkedAccountName}</div>
           <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
-            {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn
+            {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn{withdrawnNote}
           </div>
           <div className="text-[11px] text-muted-foreground">
             {formatCad(distributionsYtd)} distributions YTD
-            {yieldPct > 0 ? ` · ${yieldPct.toFixed(1)}% yield` : ""}
+            {yieldPct > 0 ? ` Â· ${yieldPct.toFixed(1)}% yield` : ""}
           </div>
         </>
       ) : linkedHoldings.length > 0 ? (
         <>
           <div className="text-2xl font-bold">{formatCad(linkedHoldingsValue)}</div>
           <div className={`text-xs font-medium ${gain >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
-            {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn
+            {gain >= 0 ? "+" : ""}{formatCad(gain)} ({gainPct.toFixed(1)}%) vs {formatCad(drawn)} drawn{withdrawnNote}
           </div>
           <div className="text-[11px] text-muted-foreground">
             {formatCad(distributionsYtd)} distributions YTD
-            {yieldPct > 0 ? ` · ${yieldPct.toFixed(1)}% yield` : ""}
+            {yieldPct > 0 ? ` Â· ${yieldPct.toFixed(1)}% yield` : ""}
           </div>
         </>
       ) : (
@@ -729,7 +739,7 @@ function SmithPerformanceCard({
       )}
       {investmentAccountId ? (
         <p className="text-[11px] text-muted-foreground">
-          Using every holding in {linkedAccountName ?? "the linked account"} — add or edit
+          Using every holding in {linkedAccountName ?? "the linked account"} â add or edit
           investments normally in the{" "}
           <Link to="/accounts" className="text-primary underline">
             Accounts tab
@@ -743,21 +753,21 @@ function SmithPerformanceCard({
             <Link to="/accounts" className="text-primary underline">
               Accounts tab
             </Link>{" "}
-            — they appear here once this account is linked. Or link individual holdings below.
+            â they appear here once this account is linked. Or link individual holdings below.
           </p>
-          {/* Link / unlink are entry actions — Pro only. Linked data stays visible read-only. */}
+          {/* Link / unlink are entry actions â Pro only. Linked data stays visible read-only. */}
           <LockedSection locked={locked} onUnlock={onUnlock} label="Investment holdings">
           <div className="flex flex-wrap gap-1.5 pt-1">
             {linkedHoldings.map((h) => (
               <span key={h.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
-                {h.name || "Holding"} — {formatCad(h.value)}
+                {h.name || "Holding"} â {formatCad(h.value)}
                 {investmentHoldingIds.includes(h.id) ? (
                   <button
                     className="text-muted-foreground hover:text-foreground"
                     onClick={() => onUnlinkHolding(h.id)}
                     aria-label={`Unlink ${h.name}`}
                   >
-                    ×
+                    Ã
                   </button>
                 ) : null}
               </span>
@@ -794,7 +804,7 @@ const OUTFLOW_LABELS: Record<OutflowClassification, string> = {
 
 /**
  * Import past Smith activity from a brokerage CSV. Every inferred item must
- * be reviewed and confirmed — nothing is recorded silently. Pro-gated.
+ * be reviewed and confirmed â nothing is recorded silently. Pro-gated.
  */
 function SmithCsvImportCard({
   heloc,
@@ -938,7 +948,7 @@ function SmithCsvImportCard({
       setPresorting(false);
     }
   };
-  /** Reconstruct proposals from the already-imported linked account — no CSV needed. */
+  /** Reconstruct proposals from the already-imported linked account â no CSV needed. */
   const handleLedgerReconstruct = () => {
     if (linkedRows.length === 0) return;
     setDoneMsg(null);
@@ -1007,7 +1017,7 @@ function SmithCsvImportCard({
   );
   const canConfirm = confirmedTranches.length + confirmedOutflows.length > 0 && outflowsMissingClass.length === 0;
 
-  /** Filtered + sorted view of the proposals (review only — confirm uses the full list). */
+  /** Filtered + sorted view of the proposals (review only â confirm uses the full list). */
   const visibleProposals = (proposals ?? [])
     .filter((i) => kindFilter === "all" || i.kind === kindFilter)
     .filter((i) => catFilter === "all" || proposalCategory(i.rawType) === catFilter)
@@ -1046,6 +1056,7 @@ function SmithCsvImportCard({
       s201Deemed: 0,
       holdingId: null,
       distributions: [],
+      ledgerTransactionIds: [],
       documents: proposedTrancheNote(
         item,
         today,
@@ -1090,7 +1101,7 @@ function SmithCsvImportCard({
         (other.length > 0
           ? `. ${other.length} outflow(s) classified (${other
               .map((o) => OUTFLOW_LABELS[classifications[o.key]!])
-              .join(", ")}) — update the related balances manually.`
+              .join(", ")}) â update the related balances manually.`
           : "."),
     );
     setProposals(null);
@@ -1125,7 +1136,7 @@ function SmithCsvImportCard({
         <h3 className="text-base font-semibold">Import past activity</h3>
         <p className="text-sm text-muted-foreground">
           Been running this strategy for years? Reconstruct tranches from your linked
-          investment account — or upload that account's CSV and we'll propose tranches
+          investment account â or upload that account's CSV and we'll propose tranches
           from it. You review and confirm each one.
         </p>
       </div>
@@ -1139,21 +1150,21 @@ function SmithCsvImportCard({
           <div className="space-y-4">
             {linkedAccountName && linkedRows.length > 0 ? (
               <div className="space-y-1.5">
-                <p className="text-xs font-medium">1 · From your ledger (recommended)</p>
+                <p className="text-xs font-medium">1 Â· From your ledger (recommended)</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button size="sm" onClick={handleLedgerReconstruct}>
                     Reconstruct from {linkedAccountName}
                   </Button>
                   <span className="text-xs text-muted-foreground">
                     {linkedRows.length} transaction{linkedRows.length === 1 ? "" : "s"} already
-                    in your ledger — no upload needed.
+                    in your ledger â no upload needed.
                   </span>
                 </div>
               </div>
             ) : null}
             <div className="space-y-1.5">
               <p className="text-xs font-medium">
-                {linkedAccountName && linkedRows.length > 0 ? "2 · From a file" : "From a file"}
+                {linkedAccountName && linkedRows.length > 0 ? "2 Â· From a file" : "From a file"}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Input
@@ -1162,11 +1173,11 @@ function SmithCsvImportCard({
                   className="max-w-xs"
                   onChange={(e) => void handleFile(e.target.files?.[0])}
                 />
-                {reading ? <span className="text-xs text-muted-foreground">Reading statement with AI…</span> : null}
+                {reading ? <span className="text-xs text-muted-foreground">Reading statement with AIâ¦</span> : null}
               </div>
               <p className="text-[11px] text-muted-foreground">
                 CSVs parse instantly on your device. PDF or image statements are read with AI
-                (Pro) — draws become proposed tranches, payments become outflows for review.
+                (Pro) â draws become proposed tranches, payments become outflows for review.
               </p>
             </div>
             {proposals === null && warnings.length > 0 && !unreadable
@@ -1177,7 +1188,7 @@ function SmithCsvImportCard({
             {unreadable ? (
               <div className="space-y-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3">
                 <p className="text-sm">
-                  We couldn't read <span className="font-medium">{unreadable.fileName}</span> —
+                  We couldn't read <span className="font-medium">{unreadable.fileName}</span> â
                   the column layout wasn't recognized.
                 </p>
                 {warnings.map((w, i) => (
@@ -1185,7 +1196,7 @@ function SmithCsvImportCard({
                 ))}
                 <div className="flex flex-wrap items-center gap-2">
                   <Button size="sm" onClick={() => void handleLearnLayout()} disabled={learning}>
-                    {learning ? "Learning…" : "Learn this layout with AI"}
+                    {learning ? "Learningâ¦" : "Learn this layout with AI"}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={reset}>
                     Dismiss
@@ -1193,7 +1204,7 @@ function SmithCsvImportCard({
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   AI reads only the header row and a few sample lines to learn the column
-                  mapping — never your full file. The layout is saved on this device, so
+                  mapping â never your full file. The layout is saved on this device, so
                   future files with the same layout parse instantly with no AI involved.
                 </p>
                 {learnError ? <p className="text-xs text-red-700 dark:text-red-400">{learnError}</p> : null}
@@ -1204,7 +1215,7 @@ function SmithCsvImportCard({
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">
-                Review proposals from {fileName} — {proposals.length} item(s)
+                Review proposals from {fileName} â {proposals.length} item(s)
                 <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                   {source === "ledger" ? "From your ledger" : source === "statement" ? "From statement" : "From CSV"}
                 </span>
@@ -1222,7 +1233,7 @@ function SmithCsvImportCard({
                   disabled={presorting}
                   title="Let AI suggest which tranches look like Smith-manoeuvre money. You still confirm each one."
                 >
-                  {presorting ? "Pre-sorting…" : "AI pre-sort"}
+                  {presorting ? "Pre-sortingâ¦" : "AI pre-sort"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={reset}>
                   Cancel
@@ -1231,7 +1242,7 @@ function SmithCsvImportCard({
             </div>
             {aiPresorted ? (
               <p className="text-[11px] text-muted-foreground">
-                AI suggested the initial checks from draw amounts and timing — outflows are
+                AI suggested the initial checks from draw amounts and timing â outflows are
                 never pre-checked. You still confirm each item.
               </p>
             ) : null}
@@ -1275,7 +1286,7 @@ function SmithCsvImportCard({
                   {outflowsMissingClass.length} checked outflow{outflowsMissingClass.length === 1 ? "" : "s"} need{outflowsMissingClass.length === 1 ? "s" : ""} tagging:
                 </span>
                 <Select value={bulkClass} onValueChange={(v) => setBulkClass(v as OutflowClassification)}>
-                  <SelectTrigger className="w-44"><SelectValue placeholder="Classify all as…" /></SelectTrigger>
+                  <SelectTrigger className="w-44"><SelectValue placeholder="Classify all asâ¦" /></SelectTrigger>
                   <SelectContent>
                     {(Object.keys(OUTFLOW_LABELS) as OutflowClassification[]).map((c) => (
                       <SelectItem key={c} value={c}>{OUTFLOW_LABELS[c]}</SelectItem>
@@ -1312,7 +1323,7 @@ function SmithCsvImportCard({
                           : "bg-sky-100 dark:bg-sky-900 text-sky-900 dark:text-sky-100"
                       }`}
                     >
-                      {isOutflow ? "Outflow" : "Tranche"} · {proposalCategory(item.rawType)}
+                      {isOutflow ? "Outflow" : "Tranche"} Â· {proposalCategory(item.rawType)}
                     </span>
                     <span className="text-xs text-muted-foreground">{item.note}</span>
                     {presortNotes[item.key] ? (
@@ -1331,7 +1342,7 @@ function SmithCsvImportCard({
                         }
                       >
                         <SelectTrigger className="w-44">
-                          <SelectValue placeholder="Classify outflow…" />
+                          <SelectValue placeholder="Classify outflowâ¦" />
                         </SelectTrigger>
                         <SelectContent>
                           {(Object.keys(OUTFLOW_LABELS) as OutflowClassification[]).map((c) => (
@@ -1352,7 +1363,7 @@ function SmithCsvImportCard({
               </p>
             ) : null}
             <p className="text-[11px] text-muted-foreground">
-              Inferred items are proposals only — nothing is recorded until you confirm.
+              Inferred items are proposals only â nothing is recorded until you confirm.
               This import reconstructs your records; it is not tax advice. Check each item
               against your statements.
             </p>
@@ -1408,7 +1419,7 @@ function PairSetupCard({
         <h3 className="text-base font-semibold">Set up your HELOC investing flow</h3>
         <p className="text-sm text-muted-foreground">
           Link your readvanceable mortgage and HELOC. Every principal payment creates
-          room you can draw — the debts stay in sync automatically.
+          room you can draw â the debts stay in sync automatically.
         </p>
       </div>
       <div className="space-y-1 max-w-xs rounded-lg border border-primary/30 bg-primary/5 p-3">
@@ -1425,7 +1436,7 @@ function PairSetupCard({
               <SelectContent>
                 {mortgages.map((d) => (
                   <SelectItem key={d.id} value={d.id}>
-                    {d.name || "Mortgage"} — {formatCad(d.balance)}
+                    {d.name || "Mortgage"} â {formatCad(d.balance)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1455,7 +1466,7 @@ function PairSetupCard({
               <SelectContent>
                 {helocs.map((d) => (
                   <SelectItem key={d.id} value={d.id}>
-                    {d.name || "HELOC"} — {formatCad(d.balance)}
+                    {d.name || "HELOC"} â {formatCad(d.balance)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1486,7 +1497,7 @@ function PairSetupCard({
       <div className="rounded-lg border p-3 space-y-2">
         <div className="flex items-center gap-2">
           <Switch checked={alreadyStarted} onCheckedChange={setAlreadyStarted} />
-          <Label className="text-xs">Already doing this — I have draws from before</Label>
+          <Label className="text-xs">Already doing this â I have draws from before</Label>
         </div>
         {alreadyStarted ? (
           <div className="space-y-1 max-w-xs">
@@ -1494,7 +1505,7 @@ function PairSetupCard({
             <NumInput value={openingDrawn === "" ? null : Number(openingDrawn)} onCommit={(n) => setOpeningDrawn(String(Math.max(0, n)))} />
             <p className="text-[11px] text-muted-foreground">
               How much have you already drawn on this HELOC for investing? This becomes your
-              opening position — new draws are tracked on top, not re-entered.
+              opening position â new draws are tracked on top, not re-entered.
             </p>
           </div>
         ) : null}
@@ -1633,18 +1644,46 @@ function ReconciliationLine({
       {matches ? (
         <span className="text-emerald-700 dark:text-emerald-400">
           {" "}= {formatCad(Math.max(0, openingDrawn))} opening + {formatCad(trancheTotal)} draws
-          {repayments > 0 ? ` − ${formatCad(repayments)} repaid` : ""} ✓
+          {repayments > 0 ? ` â ${formatCad(repayments)} repaid` : ""} â
         </span>
       ) : (
         <span className="text-amber-700 dark:text-amber-400">
           {" "}doesn&apos;t match the ledger ({formatCad(Math.max(0, openingDrawn))} opening +{" "}
-          {formatCad(trancheTotal)} draws{repayments > 0 ? ` − ${formatCad(repayments)} repaid` : ""}{" "}
+          {formatCad(trancheTotal)} draws{repayments > 0 ? ` â ${formatCad(repayments)} repaid` : ""}{" "}
           = {formatCad(expected)}). Check the balance on the Debts tab.
         </span>
       )}
     </div>
   );
 }
+
+/** One purchase row in the record-a-draw form — mirrors the ledger's BUY fields. */
+type PurchaseRow = {
+  key: string;
+  symbol: string;
+  units: string;
+  price: string;
+  currency: string;
+  fee: string;
+  date: string;
+  assetType: string;
+  fxRate: string;
+};
+
+const emptyPurchaseRow = (): PurchaseRow => ({
+  key: `p-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+  symbol: "",
+  units: "",
+  price: "",
+  currency: "CAD",
+  fee: "",
+  date: new Date().toISOString().slice(0, 10),
+  assetType: "ETF",
+  fxRate: "1",
+});
+
+const isValidPurchaseRow = (r: PurchaseRow) =>
+  r.symbol.trim() !== "" && Number(r.units) > 0 && Number(r.price) > 0;
 
 function RoomDrawCard({
   mortgage,
@@ -1660,6 +1699,8 @@ function RoomDrawCard({
   linkedAccountId,
   linkedAccountName,
   fxUsdCad,
+  transactions,
+  holdings,
   onDraw,
   onRefinance,
   onUnlink,
@@ -1677,6 +1718,10 @@ function RoomDrawCard({
   linkedAccountId: string | null;
   linkedAccountName: string | null;
   fxUsdCad: number;
+  /** Ledger transactions (for reconstructing the last purchase set). */
+  transactions: Transaction[];
+  /** Ledger holdings (to resolve symbols for the repeat-last lookup). */
+  holdings: Holding[];
   onDraw: (tranche: SmithTranche, drawnAmount: number) => void;
   onRefinance: (
     snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number; paymentFrequency?: "weekly" | "biweekly" | "monthly" },
@@ -1685,71 +1730,116 @@ function RoomDrawCard({
   onUnlink: () => void;
 }) {
   const [drawn, setDrawn] = useState(0);
-  const [bought, setBought] = useState("");
+  const [memo, setMemo] = useState("");
   const [showRefinance, setShowRefinance] = useState(false);
-  // Purchase capture — mirrors the ledger's add-transaction fields so the draw
-  // and the investment stay in sync in one step.
+  // Purchase capture: mirrors the ledger's add-transaction fields so the draw
+  // and the investment stay in sync in one step. One draw can fund several buys.
   const [recordPurchase, setRecordPurchase] = useState(true);
-  const [buySymbol, setBuySymbol] = useState("");
-  const [buyUnits, setBuyUnits] = useState("");
-  const [buyPrice, setBuyPrice] = useState("");
-  const [buyFee, setBuyFee] = useState("");
-  const [buyCurrency, setBuyCurrency] = useState("CAD");
+  const [purchases, setPurchases] = useState<PurchaseRow[]>([emptyPurchaseRow()]);
   const [drawError, setDrawError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const addTransactions = useAddTransactions();
 
-  const purchaseReady =
-    linkedAccountId != null &&
-    recordPurchase &&
-    buySymbol.trim() !== "" &&
-    Number(buyUnits) > 0 &&
-    Number(buyPrice) > 0;
+  // "What it bought" is redundant once the ledger holds the purchases: the
+  // free-text memo only appears in draw-only mode (no linked account, or the
+  // purchase capture is unchecked).
+  const showPurchaseCapture = linkedAccountId != null && recordPurchase;
+  const drawOnlyMode = !showPurchaseCapture;
+
+  const validPurchases = showPurchaseCapture ? purchases.filter(isValidPurchaseRow) : [];
+  const purchaseTotalCad = validPurchases.reduce(
+    (sum, r) =>
+      sum + (Number(r.units) * Number(r.price) + (Number(r.fee) || 0)) * (Number(r.fxRate) || 1),
+    0,
+  );
+  // Soft warning only: untraced cash is a CRA question, not a blocker.
+  const purchaseMismatch =
+    validPurchases.length > 0 &&
+    drawn > 0 &&
+    Math.abs(purchaseTotalCad - drawn) > Math.max(1, drawn * 0.01);
+
+  const updateRow = (key: string, patch: Partial<PurchaseRow>) =>
+    setPurchases(purchases.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
   const repeatLast = () => {
     if (!lastTranche) return;
-    setBought(lastTranche.useOfFunds);
+    const ids = lastTranche.ledgerTransactionIds ?? [];
+    if (ids.length > 0 && showPurchaseCapture) {
+      // Rebuild the full purchase set from the linked ledger transactions.
+      const holdingById = new Map(holdings.map((h) => [h.id, h]));
+      const rows: PurchaseRow[] = [];
+      for (const id of ids) {
+        const t = transactions.find((x) => x.id === id);
+        if (!t || t.transaction_type !== "BUY") continue;
+        const h = t.holding_id ? holdingById.get(t.holding_id) : undefined;
+        rows.push({
+          key: `p-${Date.now()}-${Math.floor(Math.random() * 1e6)}-${rows.length}`,
+          symbol: h?.symbol ?? "",
+          units: String(t.units),
+          price: String(t.price_per_unit),
+          currency: t.currency,
+          fee: String(t.fee ?? 0),
+          date: t.transaction_date,
+          assetType: h?.asset_type ?? "ETF",
+          fxRate: String(t.fx_rate ?? 1),
+        });
+      }
+      if (rows.length > 0) {
+        setPurchases(rows);
+        return;
+      }
+    }
+    // Fallback for older tranches (or draw-only mode): restore the memo text.
+    if (drawOnlyMode) setMemo(lastTranche.useOfFunds);
   };
 
   const record = async () => {
     if (drawn <= 0 || drawn > room.roomAvailable || recording) return;
     setDrawError(null);
     const today = new Date().toISOString().slice(0, 10);
-    // Record the purchase in the linked ledger first — if it fails, nothing is
-    // recorded, so the tracker and ledger can never drift apart.
-    if (purchaseReady) {
+    // Record the purchases in the linked ledger first: all BUYs in a single
+    // call so they succeed or fail together. If anything fails, nothing is
+    // recorded and the tracker and ledger can never drift apart.
+    let ledgerTransactionIds: string[] = [];
+    if (validPurchases.length > 0) {
       setRecording(true);
       try {
-        await addTransactions.mutateAsync({
-          inputs: [
-            {
-              accountId: linkedAccountId!,
-              symbol: buySymbol.trim().toUpperCase(),
-              name: null,
-              assetType: "ETF",
-              transactionType: "BUY",
-              units: Number(buyUnits),
-              pricePerUnit: Number(buyPrice),
-              amount: null,
-              currency: buyCurrency,
-              fxRate: buyCurrency === "USD" ? fxUsdCad : 1,
-              fee: Number(buyFee) || 0,
-              date: today,
-            },
-          ],
+        const result = await addTransactions.mutateAsync({
+          inputs: validPurchases.map((r) => ({
+            accountId: linkedAccountId!,
+            symbol: r.symbol.trim().toUpperCase(),
+            name: null,
+            assetType: r.assetType,
+            transactionType: "BUY",
+            units: Number(r.units),
+            pricePerUnit: Number(r.price),
+            amount: null,
+            currency: r.currency,
+            fxRate: Number(r.fxRate) || 1,
+            fee: Number(r.fee) || 0,
+            date: r.date || today,
+          })),
         });
+        if (result.failed.length > 0 || result.saved !== validPurchases.length) {
+          throw new Error(
+            result.failed[0]?.message ?? "Could not record all purchases in the ledger.",
+          );
+        }
+        ledgerTransactionIds = result.ids;
       } catch (e) {
-        setDrawError(e instanceof Error ? e.message : "Could not record the purchase in the ledger.");
+        setDrawError(e instanceof Error ? e.message : "Could not record the purchases in the ledger.");
         setRecording(false);
         return;
       }
       setRecording(false);
     }
     const useOfFunds =
-      bought.trim() !== ""
-        ? bought
-        : purchaseReady
-          ? `${buyUnits.trim()} ${buySymbol.trim().toUpperCase()} @ $${buyPrice.trim()}`
+      memo.trim() !== ""
+        ? memo
+        : validPurchases.length > 0
+          ? validPurchases
+              .map((r) => `${r.units.trim()} ${r.symbol.trim().toUpperCase()} @ $${r.price.trim()}`)
+              .join(" + ")
           : "";
     const tranche: SmithTranche = {
       id: `s-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
@@ -1769,16 +1859,13 @@ function RoomDrawCard({
       s201Deemed: 0,
       holdingId: null,
       distributions: [],
+      ledgerTransactionIds,
       documents: "",
     };
     onDraw(tranche, drawn);
     setDrawn(0);
-    setBought("");
-    setBuySymbol("");
-    setBuyUnits("");
-    setBuyPrice("");
-    setBuyFee("");
-    setBuyCurrency("CAD");
+    setMemo("");
+    setPurchases([emptyPurchaseRow()]);
   };
 
   const pct = room.roomCreated > 0 ? (room.roomAvailable / room.roomCreated) * 100 : 0;
@@ -1789,7 +1876,7 @@ function RoomDrawCard({
         <div>
           <h3 className="text-base font-semibold">HELOC room</h3>
           <p className="text-sm text-muted-foreground">
-            {mortgage.name || "Mortgage"} → {heloc.name || "HELOC"} ·{" "}
+            {mortgage.name || "Mortgage"} â {heloc.name || "HELOC"} Â·{" "}
             {room.paymentsCounted} payments counted
           </p>
         </div>
@@ -1801,9 +1888,9 @@ function RoomDrawCard({
             size="sm"
             variant="ghost"
             onClick={() => (locked ? onUnlock() : onUnlink())}
-            title={locked ? "Pro feature — click to upgrade" : undefined}
+            title={locked ? "Pro feature â click to upgrade" : undefined}
           >
-            {locked ? "🔒 Unlink" : "Unlink"}
+            {locked ? "ð Unlink" : "Unlink"}
           </Button>
         </div>
       </div>
@@ -1823,7 +1910,7 @@ function RoomDrawCard({
       <div className="grid gap-3 sm:grid-cols-4">
         <div className="rounded-lg border p-3">
           <div className="text-xs text-muted-foreground">Home value</div>
-          <div className="text-xl font-bold">{homeValue ? formatCad(homeValue) : "—"}</div>
+          <div className="text-xl font-bold">{homeValue ? formatCad(homeValue) : "â"}</div>
           <div className="mt-1">
             <LockedSection locked={locked} onUnlock={onUnlock} label="Edit home value">
               <NumInput
@@ -1885,14 +1972,16 @@ function RoomDrawCard({
             <p className="text-sm font-medium">{Math.round(heloc.rate * 10000) / 100}%</p>
             <p className="text-[11px] text-muted-foreground">From HELOC — update it on the Debts tab</p>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">What it bought</Label>
-            <Input
-              value={bought}
-              onChange={(e) => setBought(e.target.value)}
-              placeholder="e.g. 100 XIU, non-reg"
-            />
-          </div>
+          {drawOnlyMode ? (
+            <div className="space-y-1">
+              <Label className="text-xs">Memo</Label>
+              <Input
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                placeholder="e.g. bridging until the next buy"
+              />
+            </div>
+          ) : null}
         </div>
         {drawn > room.roomAvailable ? (
           <p className="text-xs text-red-700 dark:text-red-400">
@@ -1907,84 +1996,169 @@ function RoomDrawCard({
                 checked={recordPurchase}
                 onChange={(e) => setRecordPurchase(e.target.checked)}
               />
-              Record the purchase in {linkedAccountName ?? "the linked account"}
+              Record the purchase(s) in {linkedAccountName ?? "the linked account"}
             </label>
-            {recordPurchase ? (
-              <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                <div className="space-y-1">
-                  <Label className="text-xs">Symbol</Label>
-                  <Input
-                    value={buySymbol}
-                    onChange={(e) => setBuySymbol(e.target.value.toUpperCase())}
-                    placeholder="XIU"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Units</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={buyUnits}
-                    onChange={(e) => setBuyUnits(e.target.value)}
-                    placeholder="100"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Price per unit</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={buyPrice}
-                    onChange={(e) => setBuyPrice(e.target.value)}
-                    placeholder="32.50"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Currency</Label>
-                  <Select value={buyCurrency} onValueChange={setBuyCurrency}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="CAD">CAD</SelectItem>
-                      <SelectItem value="USD">USD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {buyCurrency === "USD" ? (
-                    <p className="text-[11px] text-muted-foreground">FX {fxUsdCad.toFixed(4)}</p>
+            {showPurchaseCapture ? (
+              <div className="space-y-2">
+                {purchases.map((row, idx) => (
+                  <div key={row.key} className="rounded-lg border p-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Purchase {idx + 1}
+                      </span>
+                      {purchases.length > 1 ? (
+                        <button
+                          type="button"
+                          className="text-xs underline text-muted-foreground"
+                          onClick={() =>
+                            setPurchases(purchases.filter((r) => r.key !== row.key))
+                          }
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-5">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Symbol</Label>
+                        <Input
+                          value={row.symbol}
+                          onChange={(e) => updateRow(row.key, { symbol: e.target.value.toUpperCase() })}
+                          placeholder="XIU"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Units</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={row.units}
+                          onChange={(e) => updateRow(row.key, { units: e.target.value })}
+                          placeholder="100"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Price per unit</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={row.price}
+                          onChange={(e) => updateRow(row.key, { price: e.target.value })}
+                          placeholder="32.50"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Currency</Label>
+                        <Select
+                          value={row.currency}
+                          onValueChange={(v) =>
+                            updateRow(row.key, {
+                              currency: v,
+                              fxRate: v === "USD" ? String(fxUsdCad) : "1",
+                            })
+                          }
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="CAD">CAD</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Asset type</Label>
+                        <Select
+                          value={row.assetType}
+                          onValueChange={(v) => updateRow(row.key, { assetType: v })}
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Stock">Stock</SelectItem>
+                            <SelectItem value="ETF">ETF</SelectItem>
+                            <SelectItem value="Cash">Cash</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">FX rate</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={row.fxRate}
+                          onChange={(e) => updateRow(row.key, { fxRate: e.target.value })}
+                          placeholder="1"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Fee ($)</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={row.fee}
+                          onChange={(e) => updateRow(row.key, { fee: e.target.value })}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Date</Label>
+                        <Input
+                          type="date"
+                          value={row.date}
+                          onChange={(e) => updateRow(row.key, { date: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Cost</Label>
+                        <p className="text-sm font-medium">
+                          {Number(row.units) > 0 && Number(row.price) > 0
+                            ? formatCad(
+                                (Number(row.units) * Number(row.price) + (Number(row.fee) || 0)) *
+                                  (Number(row.fxRate) || 1),
+                              )
+                            : "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPurchases([...purchases, emptyPurchaseRow()])}
+                  >
+                    Add another purchase
+                  </Button>
+                  {validPurchases.length > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Purchases total {formatCad(purchaseTotalCad)} vs {formatCad(drawn)} drawn
+                    </p>
                   ) : null}
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Fee ($)</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={buyFee}
-                    onChange={(e) => setBuyFee(e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Cost</Label>
-                  <p className="text-sm font-medium">
-                    {Number(buyUnits) > 0 && Number(buyPrice) > 0
-                      ? formatCad(Number(buyUnits) * Number(buyPrice) + (Number(buyFee) || 0))
-                      : "—"}
+                {purchaseMismatch ? (
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    ⚠ Purchases total {formatCad(purchaseTotalCad)} but the draw is{" "}
+                    {formatCad(drawn)} — untraced cash is a CRA question. You can still
+                    record; the difference stays visible on the tranche.
                   </p>
-                </div>
+                ) : null}
               </div>
             ) : null}
             <p className="text-[11px] text-muted-foreground">
-              Saved as a BUY dated today. Leave the purchase empty to record the draw only —
+              Saved as BUY(s) with the dates above. Uncheck to record the draw only —
               you can add the investment later from the Accounts tab.
             </p>
           </div>
         ) : null}
         {drawError ? <p className="text-xs text-red-700 dark:text-red-400">{drawError}</p> : null}
         <Button size="sm" onClick={() => void record()} disabled={drawn <= 0 || drawn > room.roomAvailable || recording}>
-          {recording ? "Recording…" : "Record draw"}
+          {recording ? "Recordingâ¦" : "Record draw"}
         </Button>
         <p className="text-[11px] text-muted-foreground">
           The HELOC balance on your Debts tab updates automatically.
-          {purchaseReady ? ` The BUY appears in ${linkedAccountName ?? "the linked account"}'s ledger.` : ""}
+          {validPurchases.length > 0
+            ? ` The BUY${validPurchases.length === 1 ? "" : "s"} appear${validPurchases.length === 1 ? "s" : ""} in ${linkedAccountName ?? "the linked account"}'s ledger.`
+            : ""}
         </p>
         </div>
       </LockedSection>
@@ -2012,7 +2186,7 @@ function RefinanceForm({
 
   return (
     <div className="rounded-lg border p-3 space-y-3">
-      <h4 className="text-sm font-medium">Refinance — update mortgage terms</h4>
+      <h4 className="text-sm font-medium">Refinance â update mortgage terms</h4>
       <p className="text-[11px] text-muted-foreground">
         Today's terms are snapshotted to history before the new ones take effect.
       </p>
