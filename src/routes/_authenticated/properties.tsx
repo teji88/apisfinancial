@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,18 +26,13 @@ import {
 
 export const Route = createFileRoute("/_authenticated/properties")({
   staticData: { sitemap: false },
-  head: () => ({
-    meta: [
-      { title: "Investment Properties — Apis Financial" },
-      {
-        name: "description",
-        content:
-          "Track investment properties: rental income, operating expenses, cash flow, cap rate, and equity feeding your net worth.",
-      },
-    ],
-  }),
-  component: PropertiesPage,
+  component: PropertiesRedirect,
 });
+
+// Properties now lives under the Investments hub — keep the old URL working.
+function PropertiesRedirect() {
+  throw redirect({ to: "/investments", search: { tab: "properties" } });
+}
 
 function newProperty(): PropertyInput {
   return {
@@ -71,7 +66,7 @@ function mortgageFor(p: PropertyInput, debts: DebtInput[]): { balance: number; p
   return { balance: p.mortgageBalance, payment: p.mortgagePayment };
 }
 
-function PropertiesPage() {
+export function PropertiesPage() {
   const { data: profile, isLoading } = useProfile();
   const updateProfile = useUpdateProfile();
 
@@ -262,7 +257,7 @@ function PropertiesPage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Equity flows into the <Link to="/retirement" className="underline">retirement planner's</Link> net
+        Equity flows into the <Link to="/retirement" search={{ tab: "planner" }} className="underline">retirement planner's</Link> net
         worth as illiquid assets. Rental income and CCA modeling for the planner are separate modules.
       </p>
     </div>

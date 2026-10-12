@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -68,26 +68,13 @@ import {
 
 export const Route = createFileRoute("/_authenticated/performance")({
   staticData: { sitemap: false },
-  head: () => ({
-    meta: [
-      { title: "Performance & Benchmarking — Apis Financial" },
-      {
-        name: "description",
-        content:
-          "Compare your portfolio against the S&P 500, S&P/TSX Composite and an all-equity global ETF using a cash-flow-matched simulation that buys the index on your exact deposit dates.",
-      },
-      { property: "og:title", content: "Performance & Benchmarking — Apis Financial" },
-      {
-        property: "og:description",
-        content:
-          "Cash-flow-matched benchmarking: see the real alpha of your portfolio versus the index.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-  component: PerformancePage,
+  component: PerformanceRedirect,
 });
+
+// Performance now lives under the Investments hub — keep the old URL working.
+function PerformanceRedirect() {
+  throw redirect({ to: "/investments", search: { tab: "performance" } });
+}
 
 const CHART_COLORS = ["var(--series-3)", "var(--series-4)", "var(--series-2)"];
 
@@ -102,7 +89,7 @@ const PERIODS: { id: string; label: string }[] = [
   { id: "ALL", label: "Since inception" },
 ];
 
-function PerformancePage() {
+export function PerformancePage() {
   const {
     accounts,
     holdings: allHoldings,

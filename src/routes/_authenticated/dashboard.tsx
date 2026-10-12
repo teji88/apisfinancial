@@ -8,7 +8,8 @@ import {
   type TaxLocationAssessment,
 } from "@/lib/taxLocation";
 import { usePortfolio } from "@/lib/portfolio";
-import { useProfile } from "@/lib/profile";
+import { useProfile, useUpdateProfile } from "@/lib/profile";
+import { NetWorthCard } from "@/components/retirement/DebtNetWorth";
 import {
   computeNetWorth,
   splitDebtsByOwner,
@@ -162,7 +163,7 @@ function NetWorthStrip({
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Net worth
         </h2>
-        <Link to="/retirement" className="text-xs text-primary underline">
+        <Link to="/retirement" search={{ tab: "planner" }} className="text-xs text-primary underline">
           Edit values
         </Link>
       </div>
@@ -337,6 +338,23 @@ function Dashboard() {
   const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
     usePortfolio();
   const { data: profile } = useProfile();
+  const updateProfile = useUpdateProfile();
+
+  // Total invested across accounts — feeds the NetWorthCard hero.
+  const investedTotal = useMemo(() => {
+    let total = 0;
+    for (const a of accounts) {
+      const s = summariseAccount(
+        a,
+        transactions.filter((t) => t.account_id === a.id),
+        holdings.filter((h) => h.account_id === a.id),
+        quotes,
+        fxUsdCad,
+      );
+      total += s.marketValue + Math.max(0, s.cash);
+    }
+    return total;
+  }, [accounts, holdings, transactions, quotes, fxUsdCad]);
 
   const [familyView, setFamilyViewState] = useState<FamilyView>(loadFamilyView);
   const setFamilyView = (v: FamilyView) => {
@@ -547,6 +565,14 @@ function Dashboard() {
           </Button>
         </div>
       </div>
+
+      {profile ? (
+        <NetWorthCard
+          profile={profile}
+          investments={investedTotal}
+          onSave={(v) => updateProfile.mutate({ net_worth: v })}
+        />
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard

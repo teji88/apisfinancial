@@ -67,9 +67,9 @@ export const Route = createFileRoute("/_authenticated/smith")({
   component: SmithRedirect,
 });
 
-// HELOC Investing now lives under the "Plan ahead" tab — keep the old URL working.
+// HELOC Investing now lives under the "Debts" tab — keep the old URL working.
 function SmithRedirect() {
-  throw redirect({ to: "/plan-ahead", search: { tab: "heloc" } });
+  throw redirect({ to: "/debts", search: { tab: "heloc" } });
 }
 
 function LockedSection({
@@ -581,7 +581,7 @@ export function SmithPage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        A summary also appears on the <Link to="/retirement" className="underline">retirement planner</Link>.
+        A summary also appears on the <Link to="/retirement" search={{ tab: "planner" }} className="underline">retirement planner</Link>.
       </p>
     </div>
   );
@@ -610,7 +610,7 @@ function BocNudge({
         days. Your HELOC is at {(heloc.rate * 100).toFixed(2)}%
         {lastChecked ? ` (last confirmed ${lastChecked})` : ""}. If your bank moved
         it, update the rate on the{" "}
-        <Link to="/debts" className="underline">Debts tab</Link> — future
+        <Link to="/debts" search={{ tab: "debts" }} className="underline">Debts tab</Link> — future
         projections and the room math will use the new rate.
       </p>
       <Button size="sm" variant="outline" onClick={onChecked}>

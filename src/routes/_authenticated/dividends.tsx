@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
@@ -50,25 +50,13 @@ import {
 
 export const Route = createFileRoute("/_authenticated/dividends")({
   staticData: { sitemap: false },
-  head: () => ({
-    meta: [
-      { title: "Dividends — Apis Financial" },
-      {
-        name: "description",
-        content:
-          "Forward annual dividend income, portfolio yield, yield on cost, trailing 12-month income and a ten-year compounder projection for your Canadian portfolio.",
-      },
-      { property: "og:title", content: "Dividends — Apis Financial" },
-      {
-        property: "og:description",
-        content: "Track dividend income, yield on cost and project ten years of compounding.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-  component: DividendsPage,
+  component: DividendsRedirect,
 });
+
+// Dividends now lives under the Investments hub — keep the old URL working.
+function DividendsRedirect() {
+  throw redirect({ to: "/investments", search: { tab: "dividends" } });
+}
 
 type ReviewDraft = {
   key: string;
@@ -100,7 +88,7 @@ function loadDismissed(): string[] {
   }
 }
 
-function DividendsPage() {
+export function DividendsPage() {
   const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
     usePortfolio();
   const addTransaction = useAddTransaction();
