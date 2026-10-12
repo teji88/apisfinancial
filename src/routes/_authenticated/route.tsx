@@ -1,9 +1,7 @@
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  BarChart3,
-  Coins,
-  Compass,
+  Briefcase,
   CreditCard,
   Gift,
   LayoutDashboard,
@@ -11,10 +9,8 @@ import {
   LogOut,
   Menu,
   Moon,
-  Receipt,
   Landmark,
   RefreshCw,
-  Building2,
   Settings,
   Sun,
   User,
@@ -70,12 +66,8 @@ export const Route = createFileRoute("/_authenticated")({
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/ledger", label: "Ledger", icon: Receipt },
-  { to: "/dividends", label: "Dividends", icon: Coins },
-  { to: "/plan-ahead", label: "Plan ahead", icon: Compass },
-  { to: "/properties", label: "Properties", icon: Building2 },
+  { to: "/investments", label: "Investments", icon: Briefcase },
   { to: "/debts", label: "Debts", icon: CreditCard },
-  { to: "/performance", label: "Performance", icon: BarChart3 },
   { to: "/retirement", label: "Retirement", icon: Landmark },
   { to: "/accounts", label: "Accounts", icon: Wallet },
   { to: "/import", label: "Import", icon: FileUp },
