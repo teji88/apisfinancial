@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   DEFAULT_GEMINI_MODEL,
   STATEMENT_SYSTEM_PROMPT,
+  BANK_STATEMENT_SYSTEM_PROMPT,
   parseGeminiResponse,
 } from "./gemini-parse";
 
@@ -21,6 +22,8 @@ const Input = z.object({
   dataUrl: z.string().nullable(),
   /** Plain text for CSV / pasted statements. */
   text: z.string().nullable(),
+  /** "brokerage" (default) or "bank" (HELOC/bank statements). */
+  statementKind: z.enum(["brokerage", "bank"]).optional().default("brokerage"),
 });
 
 /**
@@ -76,11 +79,16 @@ export const parseStatement = createServerFn({ method: "POST" })
     const model = genAI.getGenerativeModel({
       model: modelName,
       generationConfig: { responseMimeType: "application/json" },
-      systemInstruction: STATEMENT_SYSTEM_PROMPT,
+      systemInstruction:
+        data.statementKind === "bank" ? BANK_STATEMENT_SYSTEM_PROMPT : STATEMENT_SYSTEM_PROMPT,
     });
 
+    const what =
+      data.statementKind === "bank"
+        ? `Extract every HELOC/bank transaction from this statement (${data.fileName})`
+        : `Extract every transaction from this file (${data.fileName})`;
     const intro = {
-      text: `Extract every transaction from this file (${data.fileName}). Today is ${new Date()
+      text: `${what}. Today is ${new Date()
         .toISOString()
         .slice(0, 10)}.`,
     };
