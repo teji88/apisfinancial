@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { comparePayoffVsInvest, PAYOFF_DISCLAIMER } from "./DebtComparator";
+import {
+  comparePayoffVsInvest,
+  MISSING_PAYMENT_PROMPT,
+  PAYOFF_DISCLAIMER,
+  type PayoffVsInvestSuccess,
+} from "./DebtComparator";
+
+function expectSuccess(r: ReturnType<typeof comparePayoffVsInvest>): asserts r is PayoffVsInvestSuccess {
+  expect(r.ok).toBe(true);
+}
 
 describe("comparePayoffVsInvest", () => {
   it("extra payments save interest and time", () => {
@@ -12,9 +21,10 @@ describe("comparePayoffVsInvest", () => {
       marginalRate: 0.35,
       interestDeductible: false,
     });
+    expectSuccess(r);
     expect(r.monthsSaved).toBeGreaterThan(0);
     expect(r.interestSavedAfterTax).toBeGreaterThan(0);
-    expect(r.acceleratedMonths).toBeLessThan(r.baseMonths);
+    expect(r.acceleratedMonths).toBeLessThan(r.baseMonths!);
   });
 
   it("deductible interest is compared after-tax", () => {
@@ -26,6 +36,8 @@ describe("comparePayoffVsInvest", () => {
       balance: 50_000, annualRate: 0.05, monthlyPayment: 800, extraMonthly: 300,
       expectedReturn: 0.06, marginalRate: 0.4, interestDeductible: true,
     });
+    expectSuccess(nonDed);
+    expectSuccess(ded);
     // Deductible interest costs less after tax, so the payoff saving is smaller.
     expect(ded.interestSavedAfterTax).toBeLessThan(nonDed.interestSavedAfterTax);
     expect(ded.interestSavedAfterTax).toBeCloseTo(nonDed.interestSavedAfterTax * 0.6, 0);
@@ -41,6 +53,7 @@ describe("comparePayoffVsInvest", () => {
       marginalRate: 0.3,
       interestDeductible: false,
     });
+    expectSuccess(r);
     expect(r.netAdvantageInvesting).toBeGreaterThan(0);
   });
 
@@ -54,10 +67,40 @@ describe("comparePayoffVsInvest", () => {
       marginalRate: 0.3,
       interestDeductible: false,
     });
+    expectSuccess(r);
     expect(r.netAdvantageInvesting).toBeLessThan(0);
   });
 
-  it("warns when the payment does not cover interest", () => {
+  it("blocks with missing-payment when the regular payment is zero (not zeros)", () => {
+    // Gurteg's case: $395k mortgage, $200/mo extra, payment never entered.
+    const r = comparePayoffVsInvest({
+      balance: 395_000,
+      annualRate: 0.05,
+      monthlyPayment: 0,
+      extraMonthly: 200,
+      expectedReturn: 0.06,
+      marginalRate: 0.3,
+      interestDeductible: false,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe("missing-payment");
+      expect(r.monthlyInterest).toBeCloseTo(395_000 * 0.05 / 12, 2);
+      expect(r.disclaimer).toBe(PAYOFF_DISCLAIMER);
+    }
+    expect(MISSING_PAYMENT_PROMPT).toContain("Debts tab");
+  });
+
+  it("blocks with missing-payment for negative payments too", () => {
+    const r = comparePayoffVsInvest({
+      balance: 10_000, annualRate: 0.05, monthlyPayment: -50, extraMonthly: 100,
+      expectedReturn: 0.06, marginalRate: 0.3, interestDeductible: false,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("missing-payment");
+  });
+
+  it("blocks with never-amortizes and explicit figures when payment + extra can't cover interest", () => {
     const r = comparePayoffVsInvest({
       balance: 100_000,
       annualRate: 0.12,
@@ -67,8 +110,44 @@ describe("comparePayoffVsInvest", () => {
       marginalRate: 0.3,
       interestDeductible: false,
     });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe("never-amortizes");
+      expect(r.monthlyPayment).toBe(500);
+      expect(r.fullPayment).toBe(600);
+      expect(r.monthlyInterest).toBeCloseTo(1000, 2);
+    }
+  });
+
+  it("treats a genuine interest-only payment (extra = 0) as never-amortizes", () => {
+    const r = comparePayoffVsInvest({
+      balance: 100_000,
+      annualRate: 0.12,
+      monthlyPayment: 1000, // exactly the monthly interest
+      extraMonthly: 0,
+      expectedReturn: 0.06,
+      marginalRate: 0.3,
+      interestDeductible: false,
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("never-amortizes");
+  });
+
+  it("still compares when the extra rescues an underpaying base (baseMonths null + warning)", () => {
+    const r = comparePayoffVsInvest({
+      balance: 100_000,
+      annualRate: 0.12,
+      monthlyPayment: 500,
+      extraMonthly: 600, // 1100 > 1000 interest: accelerated amortizes
+      expectedReturn: 0.06,
+      marginalRate: 0.3,
+      interestDeductible: false,
+    });
+    expectSuccess(r);
+    expect(r.baseMonths).toBeNull();
+    expect(r.monthsSaved).toBeNull();
+    expect(r.acceleratedMonths).toBeGreaterThan(0);
     expect(r.warnings.length).toBeGreaterThan(0);
-    expect(r.baseMonths).toBe(-1);
   });
 
   it("is informational only", () => {
