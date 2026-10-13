@@ -818,10 +818,16 @@ function RetirementPage() {
   // an emergent property of the plan (not a user input). Null when the
   // projection has no registered withdrawals — the allocator falls back to
   // manual input (planner-first gate).
-  const derivedWithdrawalRate: DerivedWithdrawalRate | null = useMemo(
-    () => (projection ? deriveWithdrawalMarginalRate(projection) : null),
-    [projection],
-  );
+  // A derived display value must never crash the page: belt-and-braces
+  // try/catch around the (already hardened) derivation.
+  const derivedWithdrawalRate: DerivedWithdrawalRate | null = useMemo(() => {
+    if (!projection) return null;
+    try {
+      return deriveWithdrawalMarginalRate(projection);
+    } catch {
+      return null;
+    }
+  }, [projection]);
   const totalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
   const totalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
   const endingBalance = rows.length ? rows[rows.length - 1]!.balances.total : 0;
