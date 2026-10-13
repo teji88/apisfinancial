@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as BeatXeqtRouteImport } from './routes/beat-xeqt'
+import { Route as OgImageDotpngRouteImport } from './routes/og-image[.]png'
 import { Route as RetirementRouteImport } from './routes/retirement'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SmithManoeuvreGuideRouteImport } from './routes/smith-manoeuvre-guide'
@@ -52,6 +53,11 @@ const AuthRoute = AuthRouteImport.update({
 const BeatXeqtRoute = BeatXeqtRouteImport.update({
   id: '/beat-xeqt',
   path: '/beat-xeqt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OgImageDotpngRoute = OgImageDotpngRouteImport.update({
+  id: '/og-image.png',
+  path: '/og-image.png',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RetirementRoute = RetirementRouteImport.update({
@@ -168,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/beat-xeqt': typeof BeatXeqtRoute
+  '/og-image.png': typeof OgImageDotpngRoute
   '/retirement': typeof RetirementRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/smith-manoeuvre-guide': typeof SmithManoeuvreGuideRoute
@@ -194,6 +201,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/beat-xeqt': typeof BeatXeqtRoute
+  '/og-image.png': typeof OgImageDotpngRoute
   '/retirement': typeof RetirementRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/smith-manoeuvre-guide': typeof SmithManoeuvreGuideRoute
@@ -222,6 +230,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/beat-xeqt': typeof BeatXeqtRoute
+  '/og-image.png': typeof OgImageDotpngRoute
   '/retirement': typeof RetirementRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/smith-manoeuvre-guide': typeof SmithManoeuvreGuideRoute
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/beat-xeqt'
+    | '/og-image.png'
     | '/retirement'
     | '/sitemap.xml'
     | '/smith-manoeuvre-guide'
@@ -276,6 +286,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/beat-xeqt'
+    | '/og-image.png'
     | '/retirement'
     | '/sitemap.xml'
     | '/smith-manoeuvre-guide'
@@ -303,6 +314,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/beat-xeqt'
+    | '/og-image.png'
     | '/retirement'
     | '/sitemap.xml'
     | '/smith-manoeuvre-guide'
@@ -331,6 +343,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   BeatXeqtRoute: typeof BeatXeqtRoute
+  OgImageDotpngRoute: typeof OgImageDotpngRoute
   RetirementRoute: typeof RetirementRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   SmithManoeuvreGuideRoute: typeof SmithManoeuvreGuideRoute
@@ -369,6 +382,13 @@ declare module '@tanstack/react-router' {
       path: '/beat-xeqt'
       fullPath: '/beat-xeqt'
       preLoaderRoute: typeof BeatXeqtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/og-image.png': {
+      id: '/og-image.png'
+      path: '/og-image.png'
+      fullPath: '/og-image.png'
+      preLoaderRoute: typeof OgImageDotpngRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/retirement': {
@@ -561,6 +581,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   BeatXeqtRoute: BeatXeqtRoute,
+  OgImageDotpngRoute: OgImageDotpngRoute,
   RetirementRoute: RetirementRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   SmithManoeuvreGuideRoute: SmithManoeuvreGuideRoute,
