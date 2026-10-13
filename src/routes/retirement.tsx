@@ -700,6 +700,23 @@ function RetirementPage() {
     return () => clearTimeout(t);
   }, [inputs, runProject]);
 
+  // Projection-derived withdrawal marginal rate for the savings allocator:
+  // an emergent property of the plan (not a user input). Null when the
+  // projection has no registered withdrawals — the allocator falls back to
+  // manual input (planner-first gate).
+  // NOTE: this hook MUST stay above the early returns below — hooks must run
+  // unconditionally on every render (Rules of Hooks). It is null-safe when
+  // the projection hasn't arrived yet.
+  // A derived display value must never crash the page: belt-and-braces
+  // try/catch around the (already hardened) derivation.
+  const derivedWithdrawalRate: DerivedWithdrawalRate | null = useMemo(() => {
+    if (!projection) return null;
+    try {
+      return deriveWithdrawalMarginalRate(projection);
+    } catch {
+      return null;
+    }
+  }, [projection]);
 
   if (!authLoading && !isGuest && profileQuery.isError) {
     return (
@@ -814,20 +831,6 @@ function RetirementPage() {
   // The engine models everything in 2026 dollars, so rows need no deflation.
   const rows = projection?.rows ?? [];
 
-  // Projection-derived withdrawal marginal rate for the savings allocator:
-  // an emergent property of the plan (not a user input). Null when the
-  // projection has no registered withdrawals — the allocator falls back to
-  // manual input (planner-first gate).
-  // A derived display value must never crash the page: belt-and-braces
-  // try/catch around the (already hardened) derivation.
-  const derivedWithdrawalRate: DerivedWithdrawalRate | null = useMemo(() => {
-    if (!projection) return null;
-    try {
-      return deriveWithdrawalMarginalRate(projection);
-    } catch {
-      return null;
-    }
-  }, [projection]);
   const totalTaxes = rows.reduce((t, r) => t + r.taxes, 0);
   const totalClawback = rows.reduce((t, r) => t + r.oasClawback, 0);
   const endingBalance = rows.length ? rows[rows.length - 1]!.balances.total : 0;
