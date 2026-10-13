@@ -15,9 +15,11 @@ import type { ProvinceCode } from "@/lib/tax";
 import type {
   Profile,
   DebtInput,
+  DebtPaymentFrequency,
   NetWorthInput,
   SmithTranche,
 } from "@/lib/profile";
+import { monthlyEquivalentPayment } from "@/lib/profile";
 import { computeNetWorth } from "@/lib/retirement/optimization/NetWorth";
 import {
   comparePayoffVsInvest,
@@ -38,6 +40,15 @@ const DEBT_KIND_LABELS: Record<DebtInput["kind"], string> = {
   loan: "Loan",
   credit_card: "Credit card",
   other: "Other",
+};
+
+const DEBT_FREQUENCY_LABELS: Record<DebtPaymentFrequency, string> = {
+  weekly: "Weekly",
+  "accelerated-weekly": "Accelerated weekly",
+  biweekly: "Biweekly",
+  "accelerated-biweekly": "Accelerated biweekly",
+  "semi-monthly": "Semi-monthly",
+  monthly: "Monthly",
 };
 
 const DEBT_OWNER_LABELS: Record<NonNullable<DebtInput["owner"]>, string> = {
@@ -137,8 +148,27 @@ export function DebtsForm({
                   ) : null}
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[11px]">Payment ($/mo)</Label>
+                  <Label className="text-[11px]">Payment ($)</Label>
                   <NumInput value={d.payment} onCommit={(n) => update(d.id, { payment: Math.max(0, n) })} />
+                  {(d.paymentFrequency ?? "monthly") !== "monthly" && d.payment > 0 ? (
+                    <p className="text-[10px] text-muted-foreground">
+                      ≈ {formatCad(monthlyEquivalentPayment(d.payment, d.paymentFrequency))}/mo
+                    </p>
+                  ) : null}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px]">Frequency</Label>
+                  <Select
+                    value={d.paymentFrequency ?? "monthly"}
+                    onValueChange={(v) => update(d.id, { paymentFrequency: v as DebtPaymentFrequency })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(DEBT_FREQUENCY_LABELS) as DebtPaymentFrequency[]).map((f) => (
+                        <SelectItem key={f} value={f}>{DEBT_FREQUENCY_LABELS[f]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-end gap-2 pb-1">
                   <Switch checked={d.deductible} onCheckedChange={(v) => update(d.id, { deductible: v })} />
@@ -274,7 +304,7 @@ export function DebtComparatorCard({ profile }: { profile: Profile }) {
       comparePayoffVsInvest({
         balance: debt.balance * ownerShare,
         annualRate: debt.rate,
-        monthlyPayment: debt.payment * ownerShare,
+        monthlyPayment: monthlyEquivalentPayment(debt.payment, debt.paymentFrequency) * ownerShare,
         extraMonthly: extra,
         expectedReturn: expectedReturnPct / 100,
         marginalRate,
