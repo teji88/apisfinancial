@@ -1,3 +1,5 @@
+import type { DebtPaymentFrequency } from "@/lib/profile";
+
 /**
  * Smith Manoeuvre "room" engine.
  *
@@ -14,7 +16,7 @@ export interface RoomInputs {
   /** Regular payment amount ($). */
   payment: number;
   /** Payment frequency. */
-  frequency: "weekly" | "biweekly" | "monthly";
+  frequency: DebtPaymentFrequency;
   /** Date the manoeuvre started (YYYY-MM-DD) — room accrues from here. */
   startDate: string;
   /** Total drawn from the room so far ($). */
@@ -48,10 +50,17 @@ export interface TermSegment {
   /** Regular payment amount ($). */
   payment: number;
   /** Payment frequency. */
-  frequency: "weekly" | "biweekly" | "monthly";
+  frequency: DebtPaymentFrequency;
 }
 
-const PERIODS_PER_YEAR = { weekly: 52, biweekly: 26, monthly: 12 } as const;
+const PERIODS_PER_YEAR: Record<DebtPaymentFrequency, number> = {
+  weekly: 52,
+  "accelerated-weekly": 52,
+  biweekly: 26,
+  "accelerated-biweekly": 26,
+  "semi-monthly": 24,
+  monthly: 12,
+};
 
 function parseDay(s: string): Date | null {
   const d = new Date(s + "T00:00:00");
