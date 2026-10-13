@@ -794,68 +794,46 @@ export type DerivedWithdrawalRate = {
  * (planner-first gate: never silently guess).
  */
 export function deriveWithdrawalMarginalRate(projection: Projection): DerivedWithdrawalRate | null {
+  // Hardened: this is a derived display value computed during render. It must
+  // NEVER throw — any unexpected projection shape returns null so the caller
+  // falls back to manual input (planner-first gate).
+  try {
+    return deriveWithdrawalMarginalRateInner(projection);
+  } catch {
+    return null;
+  }
+}
+
+function deriveWithdrawalMarginalRateInner(projection: Projection): DerivedWithdrawalRate | null {
+  if (!projection || !Array.isArray(projection.rows)) return null;
   const captures = projection.annualTaxInputs;
   if (!captures || captures.length === 0) return null;
 
   const byYear = new Map<number, AnnualTaxCapture>();
-  for (const c of captures) byYear.set(c.year, c);
+  for (const c of captures) {
+    if (c && typeof c.year === "number") byYear.set(c.year, c);
+  }
 
   let weightedSum = 0;
   let weightTotal = 0;
   let years = 0;
   for (const row of projection.rows) {
-    const regWithdraw = row.rrifDraw + row.lifDraw;
-    if (regWithdraw < 100) continue;
-    const cap = byYear.get(row.year);
-    if (!cap) continue;
+    if (!row) continue;
+    const rrifDraw = typeof row.rrifDraw === "number" ? row.rrifDraw : NaN;
+    const lifDraw = typeof row.lifDraw === "number" ? row.lifDraw : NaN;
+    const regWithdraw = rrifDraw + lifDraw;
+    if (!Number.isFinite(regWithdraw) || regWithdraw < 100) continue;
+    const cap = typeof row.year === "number" ? byYear.get(row.year) : undefined;
+    // Skip captures with missing tax ledgers instead of throwing on dereference.
+    if (!cap || !cap.taxInputs || !cap.ages) continue;
 
-    const payerBase = cap.taxInputs.MAIN_USER ?? {};
-    const spouseBase = cap.taxInputs.PARTNER ?? {};
-    const hasSpouse = (spouseBase.age ?? 0) > 0 || clawbackIncomeOf(spouseBase) > 0 || (cap.ages.PARTNER ?? 0) > 0;
-    const taxArgs = {
-      province: cap.province as Parameters<typeof calculateHouseholdTax>[0]["province"],
-      payerAge: cap.ages.MAIN_USER ?? 65,
-      spouseAge: cap.ages.PARTNER ?? 65,
-      pensionSplitPercent: cap.pensionSplitPercent ?? 0,
-      taxYear: cap.year,
-      inflationRate: cap.inflationRate,
-    };
-    const baseTax = calculateHouseholdTax({
-      ...taxArgs,
-      payer: payerBase,
-      spouse: hasSpouse ? spouseBase : undefined,
-    }).householdTax;
-
-    // Allocate the $1,000 bump to the lower-income person (tax-efficient).
-    const payerIncome = clawbackIncomeOf(payerBase);
-    const spouseIncome = hasSpouse ? clawbackIncomeOf(spouseBase) : Infinity;
-    const bumpRole = spouseIncome < payerIncome ? "PARTNER" : "MAIN_USER";
-    const bumpAge = cap.ages[bumpRole] ?? 65;
-    const bumpedPayer = bumpRole === "MAIN_USER"
-      ? {
-          ...payerBase,
-          rrspRrif: (payerBase.rrspRrif ?? 0) + 1000,
-          ...(bumpAge >= 65
-            ? { eligiblePensionIncome: (payerBase.eligiblePensionIncome ?? 0) + 1000 }
-            : {}),
-        }
-      : payerBase;
-    const bumpedSpouse = bumpRole === "PARTNER"
-      ? {
-          ...spouseBase,
-          rrspRrif: (spouseBase.rrspRrif ?? 0) + 1000,
-          ...(bumpAge >= 65
-            ? { eligiblePensionIncome: (spouseBase.eligiblePensionIncome ?? 0) + 1000 }
-            : {}),
-        }
-      : spouseBase;
-    const bumpedTax = calculateHouseholdTax({
-      ...taxArgs,
-      payer: bumpedPayer,
-      spouse: hasSpouse ? bumpedSpouse : undefined,
-    }).householdTax;
-
-    const annualRate = Math.max(0, (bumpedTax - baseTax) / 1000);
+    let annualRate: number;
+    try {
+      annualRate = annualMarginalRateForCapture(cap);
+    } catch {
+      continue;
+    }
+    if (!Number.isFinite(annualRate)) continue;
     weightedSum += annualRate * regWithdraw;
     weightTotal += regWithdraw;
     years++;
@@ -863,11 +841,12 @@ export function deriveWithdrawalMarginalRate(projection: Projection): DerivedWit
 
   if (years === 0 || weightTotal <= 0) return null;
   const rate = weightedSum / weightTotal;
+  if (!Number.isFinite(rate)) return null;
 
   const clawbackAges = projection.rows
-    .filter((r) => r.oasClawback > 1)
+    .filter((r) => r && typeof r.oasClawback === "number" && r.oasClawback > 1)
     .map((r) => r.age);
-  const hasSpouse = projection.rows.some((r) => r.people.length > 1);
+  const hasSpouse = projection.rows.some((r) => (r?.people?.length ?? 0) > 1);
 
   const parts = [`~${Math.round(rate * 100)}% based on your projected withdrawals`];
   if (hasSpouse) parts.push("split-adjusted across both spouses");
@@ -887,6 +866,62 @@ export function deriveWithdrawalMarginalRate(projection: Projection): DerivedWit
   };
 }
 
+/**
+ * $1,000-bump household marginal rate for a single captured tax year.
+ * Throws on malformed capture input — the caller skips the year.
+ */
+function annualMarginalRateForCapture(cap: AnnualTaxCapture): number {
+  const payerBase = cap.taxInputs.MAIN_USER ?? {};
+  const spouseBase = cap.taxInputs.PARTNER ?? {};
+  const hasSpouse =
+    (spouseBase.age ?? 0) > 0 || clawbackIncomeOf(spouseBase) > 0 || (cap.ages.PARTNER ?? 0) > 0;
+  const taxArgs = {
+    province: cap.province as Parameters<typeof calculateHouseholdTax>[0]["province"],
+    payerAge: cap.ages.MAIN_USER ?? 65,
+    spouseAge: cap.ages.PARTNER ?? 65,
+    pensionSplitPercent: cap.pensionSplitPercent ?? 0,
+    taxYear: cap.year,
+    inflationRate: cap.inflationRate,
+  };
+  const baseTax = calculateHouseholdTax({
+    ...taxArgs,
+    payer: payerBase,
+    spouse: hasSpouse ? spouseBase : undefined,
+  }).householdTax;
+
+  // Allocate the $1,000 bump to the lower-income person (tax-efficient).
+  const payerIncome = clawbackIncomeOf(payerBase);
+  const spouseIncome = hasSpouse ? clawbackIncomeOf(spouseBase) : Infinity;
+  const bumpRole = spouseIncome < payerIncome ? "PARTNER" : "MAIN_USER";
+  const bumpAge = cap.ages[bumpRole] ?? 65;
+  const bumpedPayer =
+    bumpRole === "MAIN_USER"
+      ? {
+          ...payerBase,
+          rrspRrif: (payerBase.rrspRrif ?? 0) + 1000,
+          ...(bumpAge >= 65
+            ? { eligiblePensionIncome: (payerBase.eligiblePensionIncome ?? 0) + 1000 }
+            : {}),
+        }
+      : payerBase;
+  const bumpedSpouse =
+    bumpRole === "PARTNER"
+      ? {
+          ...spouseBase,
+          rrspRrif: (spouseBase.rrspRrif ?? 0) + 1000,
+          ...(bumpAge >= 65
+            ? { eligiblePensionIncome: (spouseBase.eligiblePensionIncome ?? 0) + 1000 }
+            : {}),
+        }
+      : spouseBase;
+  const bumpedTax = calculateHouseholdTax({
+    ...taxArgs,
+    payer: bumpedPayer,
+    spouse: hasSpouse ? bumpedSpouse : undefined,
+  }).householdTax;
+
+  return Math.max(0, (bumpedTax - baseTax) / 1000);
+}
 export type StressSeverity = "mild" | "moderate" | "severe";
 
 export interface StressScenario {
