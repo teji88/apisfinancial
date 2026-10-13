@@ -15,6 +15,7 @@ import { formatCad } from "@/lib/finance";
 import {
   useProfile,
   useUpdateProfile,
+  monthlyEquivalentPayment,
   type PropertyInput,
   type DebtInput,
 } from "@/lib/profile";
@@ -62,7 +63,11 @@ function newProperty(): PropertyInput {
 
 function mortgageFor(p: PropertyInput, debts: DebtInput[]): { balance: number; payment: number } {
   const linked = debts.find((d) => d.id === p.mortgageId);
-  if (linked) return { balance: linked.balance, payment: linked.payment };
+  if (linked)
+    return {
+      balance: linked.balance,
+      payment: monthlyEquivalentPayment(linked.payment, linked.paymentFrequency),
+    };
   return { balance: p.mortgageBalance, payment: p.mortgagePayment };
 }
 
