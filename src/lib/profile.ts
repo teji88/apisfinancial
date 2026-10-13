@@ -48,6 +48,39 @@ export type EmployerMatchInput = {
   maxPctOfSalary: number;
 };
 
+/** How often a debt's regular payment is made. */
+export type DebtPaymentFrequency =
+  | "weekly"
+  | "biweekly"
+  | "accelerated-weekly"
+  | "accelerated-biweekly"
+  | "semi-monthly"
+  | "monthly";
+
+/** Payments per year for each debt payment frequency. */
+export const DEBT_PERIODS_PER_YEAR: Record<DebtPaymentFrequency, number> = {
+  weekly: 52,
+  "accelerated-weekly": 52,
+  biweekly: 26,
+  "accelerated-biweekly": 26,
+  "semi-monthly": 24,
+  monthly: 12,
+};
+
+/**
+ * Convert a regular payment at the given frequency to its monthly equivalent.
+ * Regular vs accelerated only differ in how the amount was derived — given the
+ * entered amount, the monthly cash-flow equivalent is the same.
+ * Defaults to monthly for debts recorded before frequency existed.
+ */
+export function monthlyEquivalentPayment(
+  amount: number,
+  frequency?: DebtPaymentFrequency,
+): number {
+  const periods = DEBT_PERIODS_PER_YEAR[frequency ?? "monthly"] ?? 12;
+  return Math.max(0, amount) * (periods / 12);
+}
+
 /** One debt in the shared inventory (net worth, comparator, Smith facilities). */
 export type DebtInput = {
   id: string;
@@ -58,7 +91,7 @@ export type DebtInput = {
   balance: number;
   /** Annual interest rate as a decimal (e.g. 0.055). */
   rate: number;
-  /** Regular payment ($/mo). */
+  /** Regular payment, in the given paymentFrequency (monthly when unset). */
   payment: number;
   /** Whether interest is tax-deductible (e.g. investment loan). */
   deductible: boolean;
@@ -66,8 +99,8 @@ export type DebtInput = {
   owner?: "self" | "partner" | "joint";
   /** Date-stamped rate changes (for variable-rate facilities like HELOCs). */
   rateHistory?: Array<{ date: string; rate: number }>;
-  /** Payment frequency for amortizing debts (mortgages). */
-  paymentFrequency?: "weekly" | "biweekly" | "monthly";
+  /** Payment frequency for amortizing debts (mortgages). Defaults to monthly. */
+  paymentFrequency?: DebtPaymentFrequency;
   /** DebtInput id of the paired facility (HELOC <-> readvanceable mortgage). */
   linkedDebtId?: string;
   /** Snapshots of prior terms when refinanced (date, balance, rate, payment, property value). */
@@ -77,7 +110,7 @@ export type DebtInput = {
     rate: number;
     payment: number;
     propertyValue: number;
-    paymentFrequency?: "weekly" | "biweekly" | "monthly";
+    paymentFrequency?: DebtPaymentFrequency;
   }>;
 };
 
