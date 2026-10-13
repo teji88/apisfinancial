@@ -8,10 +8,15 @@ import {
   Coins,
   CreditCard,
   FileUp,
+  Flame,
   Landmark,
+  Layers,
   LayoutDashboard,
+  PieChart,
   Receipt,
   Repeat,
+  SlidersHorizontal,
+  Users,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -25,7 +30,7 @@ export const Route = createFileRoute("/")({
   head: () => ({
     links: [{ rel: "canonical", href: "https://www.apisfinancial.app/" }],
     meta: [
-      { title: "Apis Financial — Canadian portfolio tracker & retirement planner" },
+      { title: "Apis Financial — Free Canadian portfolio tracker & retirement planner" },
       {
         name: "description",
         content:
@@ -33,7 +38,7 @@ export const Route = createFileRoute("/")({
       },
       {
         property: "og:title",
-        content: "Apis Financial — Canadian portfolio tracker & retirement planner",
+        content: "Apis Financial — Free Canadian portfolio tracker & retirement planner",
       },
       {
         property: "og:description",
@@ -41,7 +46,21 @@ export const Route = createFileRoute("/")({
           "One place for Canadian accounts, adjusted cost base, dividends, benchmarking and a retirement plan in today's dollars.",
       },
       { property: "og:type", content: "website" },
+      {
+        property: "og:image",
+        content: "https://www.apisfinancial.app/og-image.png",
+      },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      {
+        property: "og:image:alt",
+        content: "Apis Financial — free Canadian portfolio tracker and retirement planner",
+      },
       { name: "twitter:card", content: "summary_large_image" },
+      {
+        name: "twitter:image",
+        content: "https://www.apisfinancial.app/og-image.png",
+      },
     ],
     scripts: [
       {
@@ -108,6 +127,31 @@ const FEATURES = [
     icon: Building2,
     title: "Investment properties",
     body: "Rental income, expenses and capital reserves per property, with a keep-or-sell comparison against your equity.",
+  },
+  {
+    icon: Flame,
+    title: "FIRE calculator",
+    body: "Classic and Coast FIRE: find your financial-independence date and what your portfolio needs to cover spending without work.",
+  },
+  {
+    icon: Layers,
+    title: "Savings allocation waterfall",
+    body: "A year-by-year waterfall that fills your TFSA, RRSP and non-registered accounts in the right order, using the withdrawal tax rate derived from your own retirement projection.",
+  },
+  {
+    icon: SlidersHorizontal,
+    title: "Withdrawal strategy optimizer",
+    body: "Compare withdrawal sequences — registered-first, tax-targeted meltdown and more — to keep lifetime tax and OAS clawback as low as possible.",
+  },
+  {
+    icon: Users,
+    title: "Family and household tracking",
+    body: "Track accounts for the whole household, split pension income between spouses, and plan retirement together.",
+  },
+  {
+    icon: PieChart,
+    title: "Asset location",
+    body: "See which investments sit in which account type, so the right assets land in the right tax home.",
   },
 ];
 
@@ -262,8 +306,8 @@ function Landing() {
               </Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              No card needed. Everything is free except Pro — the HELOC investing tracker plus
-              PDF and screenshot reading, $10 a year.
+              No card needed. Everything is free. Pro ($10 a year) covers AI statement
+              reading — the one thing that costs us to run.
             </p>
           </div>
         </section>
@@ -336,8 +380,8 @@ function Landing() {
         <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
           <h2 className="text-center font-display text-3xl font-semibold">Simple pricing</h2>
           <p className="mx-auto mt-3 max-w-xl text-center text-sm text-muted-foreground">
-            Everything is free. Pro ($10 a year) adds the HELOC investing tracker, plus having
-            PDF statements and screenshots read for you.
+            Everything in Apis Financial is free. Pro ($10 a year) covers AI statement
+            reading — the one thing that costs us to run.
           </p>
           <div className="mx-auto mt-10 grid max-w-3xl gap-5 md:grid-cols-2">
             <div className="honey-card p-6">
@@ -349,6 +393,7 @@ function Landing() {
                   "Unlimited accounts, holdings and transactions",
                   "Ledger, dividends, performance and benchmarking",
                   "The full retirement planner",
+                  "HELOC investing tracker",
                   "CSV imports",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
@@ -370,9 +415,9 @@ function Landing() {
               <ul className="mt-5 space-y-2 text-sm">
                 {[
                   "Everything in Free",
-                  "HELOC investing tracker",
-                  "Upload PDF statements and screenshots",
+                  "AI reads PDF statements and screenshots",
                   "Transactions drafted for you to check",
+                  "50 AI pages a month, quota shown as you go",
                 ].map((p) => (
                   <li key={p} className="flex gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
