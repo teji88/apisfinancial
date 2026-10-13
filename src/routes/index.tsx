@@ -130,7 +130,7 @@ const FAQS = [
   },
   {
     q: "Is Apis Financial free?",
-    a: "Mostly — tracking, dividends, benchmarking, debts, properties and the retirement planner are all free. The HELOC investing tracker and AI reading of PDF statements and screenshots are Pro features, at $10 per year.",
+    a: "Yes — everything is free: tracking, dividends, benchmarking, debts, properties, the HELOC investing tracker and the retirement planner. Pro ($10 per year) covers AI reading of PDF statements and screenshots — the one thing that costs us to run — with a 50-page monthly fair-use cap.",
   },
   {
     q: "Is this financial advice?",

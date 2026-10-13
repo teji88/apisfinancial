@@ -7,6 +7,8 @@ import {
   BANK_STATEMENT_SYSTEM_PROMPT,
   parseGeminiResponse,
 } from "./gemini-parse";
+import { checkAndConsumeAiQuota } from "./ai-usage.functions";
+import { countPdfPages, nextResetLabel, quotaExhaustedMessage } from "./ai-usage";
 
 // The canonical schemas live in ./gemini-parse (pure, unit-tested). They are
 // re-exported here so existing imports from "@/lib/import.functions" — the
@@ -69,6 +71,12 @@ export const parseStatement = createServerFn({ method: "POST" })
     if (planState !== "pro") {
       throw new Error("Reading statements with AI is part of Pro. Upgrade to use file upload.");
     }
+
+    // Monthly fair-use cap (50 AI pages). Fail-open: allowed when the
+    // ai_usage table is missing/unreadable — quota never hard-blocks.
+    const pages = data.dataUrl ? countPdfPages(data.dataUrl) : 1;
+    const quota = await checkAndConsumeAiQuota(supabaseAdmin, context.userId, pages);
+    if (!quota.ok) throw new Error(quotaExhaustedMessage(nextResetLabel()));
 
     const apiKey = process.env["GEMINI_API_KEY"];
     if (!apiKey) throw new Error("AI is not configured for this app.");

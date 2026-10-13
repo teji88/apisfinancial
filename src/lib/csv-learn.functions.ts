@@ -3,6 +3,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { normalizeHeader } from "./institution-profiles";
 import type { LearnedColumnField } from "./csv-learn";
+import { checkAndConsumeAiQuota } from "./ai-usage.functions";
+import { nextResetLabel, quotaExhaustedMessage } from "./ai-usage";
 
 const Input = z.object({
   fileName: z.string(),
@@ -94,6 +96,10 @@ export const learnCsvMapping = createServerFn({ method: "POST" })
     if (planState !== "pro") {
       throw new Error("Learning a CSV layout with AI is part of Pro. Upgrade to use it.");
     }
+
+    // Monthly fair-use cap (counts as 1 AI page). Fail-open when unusable.
+    const quota = await checkAndConsumeAiQuota(supabaseAdmin, context.userId, 1);
+    if (!quota.ok) throw new Error(quotaExhaustedMessage(nextResetLabel()));
 
     const apiKey = process.env["GEMINI_API_KEY"];
     if (!apiKey) throw new Error("AI is not configured for this app.");

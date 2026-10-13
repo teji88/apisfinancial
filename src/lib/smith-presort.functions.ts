@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { DEFAULT_GEMINI_MODEL } from "./gemini-parse";
+import { checkAndConsumeAiQuota } from "./ai-usage.functions";
+import { nextResetLabel, quotaExhaustedMessage } from "./ai-usage";
 
 const PresortItem = z.object({
   key: z.string(),
@@ -73,6 +75,10 @@ export const presortSmithProposals = createServerFn({ method: "POST" })
     if (planState !== "pro") {
       throw new Error("AI pre-sort is part of Pro. Upgrade to use it.");
     }
+
+    // Monthly fair-use cap (counts as 1 AI page). Fail-open when unusable.
+    const quota = await checkAndConsumeAiQuota(supabaseAdmin, context.userId, 1);
+    if (!quota.ok) throw new Error(quotaExhaustedMessage(nextResetLabel()));
 
     const apiKey = process.env["GEMINI_API_KEY"];
     if (!apiKey) throw new Error("AI is not configured for this app.");

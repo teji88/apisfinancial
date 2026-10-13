@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getEntitlement, type Entitlement } from "./entitlement.functions";
+import { getAiUsage, type AiQuota } from "./ai-usage.functions";
 import { getStripeEnvironment } from "./stripe";
 
 export { FREE_ACCOUNT_LIMIT, FREE_HOLDING_LIMIT } from "./entitlement.functions";
 export type { Entitlement };
+export type { AiQuota };
 
 const FREE_FALLBACK: Entitlement = {
   tier: "free",
@@ -29,11 +31,29 @@ export function useEntitlement() {
   const entitlement = query.data ?? FREE_FALLBACK;
   return {
     entitlement,
-    /** Paid features ($10/yr Pro): AI reading of PDFs and screenshots, plus the HELOC investing tracker. */
+    /** Paid feature ($10/yr Pro): AI reading of PDFs and screenshots. Everything else is free. */
     hasStatementAi: entitlement.tier !== "free",
     /** Legacy helper: most of the app is free for everyone; the HELOC tracker and statement AI are tier-gated. */
     hasPro: true,
     hasProPlus: true,
+    loading: query.isLoading,
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * This month's AI fair-use quota. Returns null while loading; `quota.unknown`
+ * is true when the usage table is missing/unreadable (fail-open on the server).
+ */
+export function useAiQuota() {
+  const fetchQuota = useServerFn(getAiUsage);
+  const query = useQuery({
+    queryKey: ["ai-usage"],
+    staleTime: 30 * 1000,
+    queryFn: async () => fetchQuota(),
+  });
+  return {
+    quota: (query.data ?? null) as AiQuota | null,
     loading: query.isLoading,
     refetch: query.refetch,
   };

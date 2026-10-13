@@ -173,8 +173,8 @@ function SmithManoeuvreGuide() {
             HELOC as a linked pair, room created as principal is repaid,
             every draw as a separate traceable tranche, deductible interest
             totals for line 22100, and the investment performance behind the
-            borrowed money. Tracking your draws is a Pro feature ($10/year) — free accounts
-            see their tracker data read-only.
+            borrowed money. The tracker is free — every draw, tranche and tax record.
+            Only AI statement reading is Pro ($10/year).
           </p>
           <Button asChild size="lg" className="honey-fill mt-6">
             <Link to="/auth">Start free</Link>

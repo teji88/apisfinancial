@@ -114,13 +114,13 @@ export const Route = createFileRoute("/retirement")({
   head: () => ({
     links: [{ rel: "canonical", href: "https://www.apisfinancial.app/retirement" }],
     meta: [
-      { title: "Retirement Planner â Apis Financial" },
+      { title: "Retirement Planner — Apis Financial" },
       {
         name: "description",
         content:
           "Canadian retirement planning with 2026 federal and provincial tax brackets, CPP from your earnings history, OAS from your years in Canada, RRIF minimums and a tax-efficient household withdrawal plan.",
       },
-      { property: "og:title", content: "Retirement Planner â Apis Financial" },
+      { property: "og:title", content: "Retirement Planner — Apis Financial" },
       {
         property: "og:description",
         content:
@@ -292,7 +292,7 @@ function RetirementPage() {
   const profileQuery = useProfile();
   const updateProfile = useUpdateProfile();
 
-  // Total invested across accounts â feeds the FIRE calculator.
+  // Total invested across accounts — feeds the FIRE calculator.
   const investedTotal = useMemo(() => {
     let total = 0;
     for (const a of accounts) {
@@ -309,7 +309,7 @@ function RetirementPage() {
   }, [accounts, holdings, transactions, quotes, fxUsdCad]);
 
   const { entitlement } = useEntitlement();
-  // Every planning control is free now â nothing on this page is locked.
+  // Every planning control is free now — nothing on this page is locked.
   const isPro: boolean = true;
   const isProPlus: boolean = true;
   const [proPromptOpen, setProPromptOpen] = useState(false);
@@ -352,7 +352,7 @@ function RetirementPage() {
   const [objective, setObjective] = useState<StrategyObjective>("MIN_TAX");
   /** User override for non-registered gain ratio (0-1). Null = use portfolio ACB or estimate. */
   const [gainRatioOverride, setGainRatioOverride] = useState<number | null>(null);
-  /** True once the user scrolls â collapses the sticky summary to a compact bar. */
+  /** True once the user scrolls — collapses the sticky summary to a compact bar. */
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -401,7 +401,7 @@ function RetirementPage() {
     try {
       window.localStorage.setItem(CPP_DETAIL_KEY, JSON.stringify(detail));
     } catch {
-      // Storage full or unavailable â the in-memory values still work for this session.
+      // Storage full or unavailable — the in-memory values still work for this session.
     }
   }, [form]);
 
@@ -452,13 +452,18 @@ function RetirementPage() {
       cpp_start_age: 65,
       oas_start_age: 65,
       inflation_rate: 2.5,
-      growth_rate: 10,
+      growth_rate: 6,
       life_expectancy: 95,
       marital_status: "Single",
       manual_override: false,
       desired_income: form.desired_income ?? 60000,
     };
   }, [form, isPro]);
+
+  // Planner-first gate: no verdict built on guesses. The projection needs the
+  // user's real current age at minimum — without it, desired income (60k),
+  // retirement age (65) and every downstream number are silent defaults.
+  const coreInputsMissing = p?.current_age == null;
 
   const balances = useMemo(() => {
     // RESP and RDSP money belongs to the child or the beneficiary and is taxed
@@ -590,7 +595,7 @@ function RetirementPage() {
         }
       : null;
 
-    // Defined-benefit pension (main user, v1) â flows into SimulationCoordinator.
+    // Defined-benefit pension (main user, v1) — flows into SimulationCoordinator.
     const dpi = p.db_pension;
     const dbPensions: DbPension[] =
       dpi && dpi.enabled && dpi.monthlyAmountAtNRA > 0
@@ -636,7 +641,7 @@ function RetirementPage() {
     };
   }, [p, derived, balances, clawbackTolerance, policy, gainRatioOverride]);
 
-  /* All heavy engine work runs in a Web Worker â the UI thread never blocks.
+  /* All heavy engine work runs in a Web Worker — the UI thread never blocks.
      The projection updates live (debounced); earliest-age and strategy
      comparison only run when the user clicks their Calculate buttons. */
   const {
@@ -667,7 +672,7 @@ function RetirementPage() {
     longLife: "moderate",
   });
 
-  // Clear stress/comparison results when inputs change (they're stale) â but
+  // Clear stress/comparison results when inputs change (they're stale) — but
   // never mid-run, or results get wiped just as they arrive.
   // Keyed on the serialized inputs (not object identity) as belt-and-suspenders:
   // even if a memo above hands us a new-but-deeply-equal object, we don't
@@ -699,7 +704,7 @@ function RetirementPage() {
   if (!authLoading && !isGuest && profileQuery.isError) {
     return (
       <div className="p-6 text-sm text-destructive">
-        We couldnât load your retirement profile. Please refresh and try again.
+        We couldn’t load your retirement profile. Please refresh and try again.
       </div>
     );
   }
@@ -723,7 +728,7 @@ function RetirementPage() {
         </div>
       );
     }
-    return <p className="p-6 text-sm text-muted-foreground">Loading your planâ¦</p>;
+    return <p className="p-6 text-sm text-muted-foreground">Loading your plan…</p>;
   }
 
   const set = (patch: Partial<Profile>) => setForm({ ...(form ?? p), ...patch });
@@ -750,7 +755,7 @@ function RetirementPage() {
       selfBirthYear,
       p.target_retirement_age ?? 65,
     );
-    if (history.length === 0) return; // nothing to expand â stay in simplified mode
+    if (history.length === 0) return; // nothing to expand — stay in simplified mode
     set({
       cpp_detailed_history: history,
       cpp_avg_income: 0,
@@ -876,6 +881,14 @@ function RetirementPage() {
   return (
     <div className={isGuest ? "mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-6" : "min-h-screen bg-surface"}>
       {!isGuest && <AppHeader />}
+      {!isPro ? (
+        <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
+          <p className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3 text-xs text-amber-900 dark:text-amber-200">
+            Your free plan runs on standard assumptions — single filer, retire at 65, 6%
+            growth. Your saved values are kept and apply if you upgrade.
+          </p>
+        </div>
+      ) : null}
       <main className={isGuest ? undefined : "mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8"}>
       <div className="flex gap-1 rounded-lg border p-1">
         {(
@@ -924,7 +937,7 @@ function RetirementPage() {
       </div>}
       {isGuest && (
         <div className="rounded-lg border border-accent/40 bg-accent/10 p-3 text-sm">
-          Try it free â no account needed. Change any number under Inputs and the plan updates
+          Try it free — no account needed. Change any number under Inputs and the plan updates
           instantly. Create a free account only if you want to save it.
         </div>
       )}
@@ -939,7 +952,7 @@ function RetirementPage() {
         </div>
         <div className="flex items-center gap-4">
           <Button size="sm" onClick={save} disabled={updateProfile.isPending}>
-            {updateProfile.isPending ? "Savingâ¦" : "Save plan"}
+            {updateProfile.isPending ? "Saving…" : "Save plan"}
           </Button>
         </div>
       </div>
@@ -950,14 +963,21 @@ function RetirementPage() {
           {
             key: "outcome",
             label: "Outcome",
-            value: projection?.success
-              ? `Funded to age ${p?.life_expectancy ?? 95}`
-              : projection?.depletionAge != null
-                ? `Money runs out at ${projection.depletionAge}`
-                : "Tight years â tap for details",
-            tone: projection?.success ? "good" : "warn",
+            value: coreInputsMissing
+              ? "Add your details to see your outcome"
+              : projection?.success
+                ? `Funded to age ${p?.life_expectancy ?? 95}`
+                : projection?.depletionAge != null
+                  ? `Money runs out at ${projection.depletionAge}`
+                  : "Tight years — tap for details",
+            tone: coreInputsMissing ? "warn" : projection?.success ? "good" : "warn",
             dimmed: projecting,
-            detail: (
+            detail: coreInputsMissing ? (
+              <p className="text-sm text-muted-foreground">
+                Enter your current age and desired after-tax income under Inputs — your
+                outcome needs real numbers, and we won’t guess them.
+              </p>
+            ) : (
               <>
                 <div>Ending balance {formatCad(endingBalance)} {moneyNote}</div>
                 {!projection?.success && projection?.depletionAge != null && (
@@ -984,7 +1004,7 @@ function RetirementPage() {
                     </ul>
                     <p className="text-xs text-muted-foreground mt-1">
                       In these years the monthly cash didn't fully cover spending plus taxes.
-                      The portfolio recovers afterwards â this is a cash-flow squeeze, not
+                      The portfolio recovers afterwards — this is a cash-flow squeeze, not
                       running out of money.
                     </p>
                   </div>
@@ -995,14 +1015,14 @@ function RetirementPage() {
           {
             key: "earliest",
             label: "Retire",
-            value: earliestLoading ? "â¦" : earliest ? `at ${earliest}` : "â",
+            value: earliestLoading ? "…" : earliest ? `at ${earliest}` : "—",
             tone: earliest && earliest <= inputs.retirementAge ? "good" : "warn",
             detail: (
               <>
                 {earliestLoading ? (
                   earliestProgress
-                    ? `Testingâ¦ ${earliestProgress.completed}/${earliestProgress.total} checks`
-                    : "Testing retirement ages in the backgroundâ¦"
+                    ? `Testing… ${earliestProgress.completed}/${earliestProgress.total} checks`
+                    : "Testing retirement ages in the background…"
                 ) : earliest ? (
                   <>
                     {earliest <= inputs.retirementAge
@@ -1038,7 +1058,7 @@ function RetirementPage() {
             label: `At ${inputs.retirementAge}`,
             value: formatCad(startBalance),
             tone: "neutral",
-            detail: "All figures in todayâs purchasing power (adjusted for inflation).",
+            detail: "All figures in today’s purchasing power (adjusted for inflation).",
           },
           {
             key: "tax",
@@ -1075,7 +1095,7 @@ function RetirementPage() {
             </Button>
           ) : null}
           {comparing && !comparison ? (
-            <p className="text-sm text-muted-foreground">Testing withdrawal strategies in the backgroundâ¦</p>
+            <p className="text-sm text-muted-foreground">Testing withdrawal strategies in the background…</p>
           ) : null}
           {comparison ? (
             <div className="rounded-xl border bg-card p-4 space-y-4">
@@ -1181,7 +1201,7 @@ function RetirementPage() {
                       <TableRow key={r.policy} className={r.policy === policy ? "bg-muted/50" : ""}>
                         <TableCell className="font-medium">
                           {r.label}
-                          {r.policy === comparison.best ? " â" : ""}
+                          {r.policy === comparison.best ? " ★" : ""}
                         </TableCell>
                         <TableCell className="text-right">{formatCad(r.totalTaxes)}</TableCell>
                         <TableCell className="text-right">{formatCad(r.totalClawback)}</TableCell>
@@ -1203,7 +1223,7 @@ function RetirementPage() {
                   <span className="font-medium text-foreground">
                     {WITHDRAWAL_POLICIES.find((w) => w.key === policy)?.label}
                   </span>{" "}
-                  â the charts and year-by-year table below use this order.
+                  — the charts and year-by-year table below use this order.
                 </p>
                 {policy !== comparison.best ? (
                   <Button size="sm" variant="outline" onClick={() => setPolicy(comparison.best)}>
@@ -1257,7 +1277,7 @@ function RetirementPage() {
                   <Landmark className="h-4 w-4" /> Single plan
                 </div>
                 <p>
-                  Set your marital status to married or common-law under âYour detailsâ to plan both
+                  Set your marital status to married or common-law under “Your details” to plan both
                   CPP and OAS entitlements together and use pension splitting after 65.
                 </p>
               </div>
@@ -1273,7 +1293,7 @@ function RetirementPage() {
                   under the OAS clawback line, so forced withdrawals later stay small.
                 </li>
                 <li>3. Non-registered next, with only the gain portion taxed.</li>
-                <li>4. TFSA tops up the rest â tax-free and invisible to the clawback.</li>
+                <li>4. TFSA tops up the rest — tax-free and invisible to the clawback.</li>
               </ul>
             </div>
           </div>
@@ -1289,7 +1309,7 @@ function RetirementPage() {
               <p className="text-sm text-muted-foreground">
                 Each bar is a retirement year: benefits and withdrawals stacked against the spending
                 line. The black line is the pre-tax need (spending + taxes); the red line is
-                after-tax spending â the gap between them is the year's tax bill. Amounts {moneyNote}.
+                after-tax spending — the gap between them is the year's tax bill. Amounts {moneyNote}.
               </p>
             </div>
             <div className="h-80 w-full">
@@ -1393,7 +1413,7 @@ function RetirementPage() {
                 }}
                 disabled={stressing || !inputs}
               >
-                {stressing ? "Testingâ¦" : "Run stress tests"}
+                {stressing ? "Testing…" : "Run stress tests"}
               </Button>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
@@ -1407,14 +1427,14 @@ function RetirementPage() {
                       <span className="text-sm font-medium">{s.label}</span>
                       {result ? (
                         result.passed ? (
-                          <span className="text-xs font-medium text-green-600">â Holds up</span>
+                          <span className="text-xs font-medium text-green-600">✓ Holds up</span>
                         ) : (
                           <span className="text-xs font-medium text-amber-600">
                             Runs short at {result.depletionAge}
                           </span>
                         )
                       ) : stressing ? (
-                        <span className="text-xs text-muted-foreground">Testingâ¦</span>
+                        <span className="text-xs text-muted-foreground">Testing…</span>
                       ) : null}
                     </div>
                     <p className="text-xs text-muted-foreground">{s.description}</p>
@@ -1463,7 +1483,7 @@ function RetirementPage() {
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Retirement begins in your birthday month, so the first calendar year shows
-                partial spending and withdrawals â the year-by-year table normalises from
+                partial spending and withdrawals — the year-by-year table normalises from
                 the next year on. CPP and OAS also start in the birthday month of the start
                 age you pick (not January), matching how Service Canada pays them.
               </p>
@@ -1518,7 +1538,7 @@ function RetirementPage() {
           </Section>
 
           <Section
-            title="Your earnings history â this sets your CPP"
+            title="Your earnings history — this sets your CPP"
             subtitle={`We credit each year at your income divided by the yearly maximum, over the best 39 years. Estimated entitlement: ${derived.selfPct}% of the maximum.`}
           >
             <Field label="Typical income in past working years (today's $)">
@@ -1542,7 +1562,7 @@ function RetirementPage() {
                 disabled={selfDetailedActive}
               />
             </Field>
-            <Field label="CPP start age (60â70)" {...lockProps}>
+            <Field label="CPP start age (60–70)" {...lockProps}>
               <AgeSelect
                 value={p.cpp_start_age ?? 65}
                 options={CPP_AGE_OPTIONS}
@@ -1552,7 +1572,7 @@ function RetirementPage() {
             <Field label="Years living in Canada after age 18 (sets OAS)">
               <NumInput value={p.oas_years_in_canada} onCommit={(n) => set({ oas_years_in_canada: n })} />
             </Field>
-            <Field label="OAS start age (65â70)" {...lockProps}>
+            <Field label="OAS start age (65–70)" {...lockProps}>
               <AgeSelect
                 value={p.oas_start_age ?? 65}
                 options={OAS_AGE_OPTIONS}
@@ -1567,14 +1587,14 @@ function RetirementPage() {
               <p className="text-sm">
                 Manage debts on the <Link to="/debts" search={{ tab: "debts" }} className="underline font-medium">Debts tab</Link>
                 {p.debts && p.debts.length > 0 ? (
-                  <span className="text-muted-foreground"> â {p.debts.length} debt{p.debts.length === 1 ? "" : "s"} tracked</span>
+                  <span className="text-muted-foreground"> — {p.debts.length} debt{p.debts.length === 1 ? "" : "s"} tracked</span>
                 ) : null}.
               </p>
             </div>
             <div className="sm:col-span-2">
               {(p.cpp_detailed_history?.length ?? 0) > 0 && (
                 <p className="text-xs text-emerald-700 dark:text-emerald-400 mb-2">
-                  â Using your saved detailed earnings history ({p.cpp_detailed_history!.length} years) â
+                  ✓ Using your saved detailed earnings history ({p.cpp_detailed_history!.length} years) —
                   stored on this device and reloaded automatically when you log back in.
                   The simplified fields above are frozen while detailed history is active.
                 </p>
@@ -1671,7 +1691,7 @@ function RetirementPage() {
               <div className="sm:col-span-2">
                 {(p.spouse_cpp_detailed_history?.length ?? 0) > 0 && (
                   <p className="text-xs text-emerald-700 dark:text-emerald-400 mb-2">
-                    â Using the saved detailed earnings history ({p.spouse_cpp_detailed_history!.length} years) â
+                    ✓ Using the saved detailed earnings history ({p.spouse_cpp_detailed_history!.length} years) —
                     stored on this device and reloaded automatically when you log back in.
                     The simplified fields above are frozen while detailed history is active.
                   </p>
@@ -1789,7 +1809,7 @@ function RetirementPage() {
 
           <div className="flex justify-end">
             <Button onClick={save} disabled={updateProfile.isPending}>
-              {updateProfile.isPending ? "Savingâ¦" : "Save plan"}
+              {updateProfile.isPending ? "Saving…" : "Save plan"}
             </Button>
           </div>
         </TabsContent>
@@ -1854,7 +1874,7 @@ function RetirementPage() {
                       <TableCell className="num text-right">{formatCad(r.cpp)}</TableCell>
                       <TableCell className="num text-right">{formatCad(r.oas)}</TableCell>
                       <TableCell className="num text-right">
-                        {r.oasClawback > 1 ? formatCad(r.oasClawback) : "â"}
+                        {r.oasClawback > 1 ? formatCad(r.oasClawback) : "—"}
                       </TableCell>
                       <TableCell className="num text-right">{formatCad(r.taxes)}</TableCell>
                       <TableCell className="num text-right">{formatCad(r.spending)}</TableCell>
@@ -1954,7 +1974,7 @@ function RetirementPage() {
         onOpenChange={setProPromptOpen}
         reason={promptReason || PRO_REASON}
       />
-      {/* Floating calculate button â always reachable while scrolling the planner */}
+      {/* Floating calculate button — always reachable while scrolling the planner */}
       {inputs ? (
         <button
           type="button"
@@ -2004,7 +2024,7 @@ function Section({
  *
  * How it works: keeps local text state while editing. Commits to the profile
  * on every parseable keystroke (so the plan stays live), but an empty or
- * invalid field doesn't commit â and on blur the display reverts to the last
+ * invalid field doesn't commit — and on blur the display reverts to the last
  * committed value instead of getting stuck on "".
  */
 export function NumInput({
@@ -2237,7 +2257,7 @@ function newHolding(): AssetHoldingInput {
 
 /**
  * One-time snapshot import of live portfolio positions into the planner's
- * manual holdings list. Free for everyone â the planner is not Pro-gated.
+ * manual holdings list. Free for everyone — the planner is not Pro-gated.
  */
 function ImportHoldingsButton({
   portfolio,
@@ -2296,7 +2316,7 @@ function ImportHoldingsButton({
         Import from my accounts
       </Button>
       <p className="text-[11px] text-muted-foreground">
-        Snapshot from your accounts â updates won&apos;t sync automatically. After
+        Snapshot from your accounts — updates won&apos;t sync automatically. After
         importing, classify each holding&apos;s type for the location analysis.
       </p>
       {message ? <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">{message}</p> : null}
@@ -2359,7 +2379,7 @@ function PullSpouseButton({
         Pull spouse accounts
       </Button>
       <p className="text-[11px] text-muted-foreground">
-        One-time import from partner-tagged accounts â not auto-synced. Review the
+        One-time import from partner-tagged accounts — not auto-synced. Review the
         values below after pulling.
       </p>
       {message ? <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">{message}</p> : null}
@@ -2453,7 +2473,7 @@ function TimingOptimizerCard({
         <div>
           <h3 className="text-base font-semibold">CPP/OAS timing</h3>
           <p className="text-sm text-muted-foreground">
-            Compares all 66 CPP (60â70) Ã OAS (65â70) claiming combinations by expected
+            Compares all 66 CPP (60–70) × OAS (65–70) claiming combinations by expected
             present value of after-tax lifetime benefits.
           </p>
         </div>
@@ -2471,7 +2491,7 @@ function TimingOptimizerCard({
             </Select>
           </div>
           <Button size="sm" onClick={run} disabled={running}>
-            {running ? "Calculatingâ¦" : result ? "Recalculate" : "Find best claiming ages"}
+            {running ? "Calculating…" : result ? "Recalculate" : "Find best claiming ages"}
           </Button>
         </div>
       </div>
@@ -2480,7 +2500,7 @@ function TimingOptimizerCard({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-lg font-semibold">
-              CPP at {rec.cppStartAge} Â· OAS at {rec.oasStartAge}
+              CPP at {rec.cppStartAge} · OAS at {rec.oasStartAge}
             </div>
             {alreadyOptimal ? (
               <Badge variant="secondary">Matches your current ages</Badge>
@@ -2504,7 +2524,7 @@ function TimingOptimizerCard({
             <div className="rounded-lg border p-3">
               <dt className="text-xs text-muted-foreground">Break-even vs 65/65</dt>
               <dd className="font-medium">
-                {rec.breakEvenVs65 != null ? `Age ${rec.breakEvenVs65}` : "â"}
+                {rec.breakEvenVs65 != null ? `Age ${rec.breakEvenVs65}` : "—"}
               </dd>
               <dd className="text-xs text-muted-foreground">For context only</dd>
             </div>
@@ -2518,7 +2538,7 @@ function TimingOptimizerCard({
           {result!.warnings.length > 0 ? (
             <ul className="space-y-1 text-xs text-amber-800 dark:text-amber-300">
               {result!.warnings.map((w, i) => (
-                <li key={i}>â  {w}</li>
+                <li key={i}>⚠ {w}</li>
               ))}
             </ul>
           ) : null}
@@ -2536,12 +2556,12 @@ function TimingOptimizerCard({
               projected year by year in today's dollars, weighted by survival
               probability and discounted at {(result!.realDiscountRate * 100).toFixed(1)}%
               real. The highest expected present value wins. Break-even ages are shown
-              for context only â they don't drive the recommendation.
+              for context only — they don't drive the recommendation.
             </p>
           ) : null}
 
           <p className="text-xs text-muted-foreground">
-            Informational only â not financial advice. Assumes average longevity for
+            Informational only — not financial advice. Assumes average longevity for
             the selected sex; your health and family history matter more than any table.
           </p>
         </div>
@@ -2622,7 +2642,7 @@ interface GlanceStat {
 
 /**
  * The Glance Bar: a single sticky strip showing the 5 key retirement numbers.
- * Same structure on every screen size â desktop shows all 5 in a row,
+ * Same structure on every screen size — desktop shows all 5 in a row,
  * phone gets a horizontal swipe strip. Tap any stat for its details.
  * Scrolling only tightens padding; the layout never morphs.
  */

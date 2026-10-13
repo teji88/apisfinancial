@@ -33,6 +33,7 @@ import { useAccounts, useHoldings, useAddTransactions, createAccount, useTransac
 import { filterNewRows } from "@/lib/importDedupe";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
+import { AiQuotaNote } from "@/components/AiQuotaNote";
 import { ACCOUNT_TYPES, OWNER_LABELS, TRANSACTION_TYPES } from "@/lib/finance";
 import { Label } from "@/components/ui/label";
 
@@ -696,6 +697,11 @@ function ImportPage() {
                 ? "CSV, PDF, PNG or JPEG · up to 20 MB · spreadsheets of any length"
                 : "CSV files are free and unlimited — PDFs and photos need the $10 / year plan"}
             </p>
+            {isPro ? (
+              <p className="text-xs text-muted-foreground">
+                <AiQuotaNote />
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center justify-center gap-2">
               <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
                 {isPro ? (
@@ -1180,7 +1186,7 @@ function ImportPage() {
             ? upgradeReason
             : entitlement.readOnly
               ? "Your plan has ended, so Apis Financial is view-only. Restart Pro to import again."
-              : "This import goes past the free plan's ten holdings. Pro removes the limit."
+              : "AI statement reading is the one paid feature ($10 a year)."
         }
       />
 
