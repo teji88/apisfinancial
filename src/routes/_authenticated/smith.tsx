@@ -41,8 +41,10 @@ import type { ProvinceCode } from "@/lib/tax";
 import {
   useProfile,
   useUpdateProfile,
+  monthlyEquivalentPayment,
   type SmithTranche,
   type DebtInput,
+  type DebtPaymentFrequency,
 } from "@/lib/profile";
 import { marginalRateAt } from "@/lib/retirement/marginalRate";
 import { computeSmithSavings } from "@/lib/retirement/optimization/SmithSavings";
@@ -252,7 +254,7 @@ export function SmithPage() {
       computeSmithSavings({
         mortgageBalance: mortgage?.balance ?? 0,
         mortgageRate: mortgage?.rate ?? 0,
-        mortgagePayment: mortgage?.payment ?? 0,
+        mortgagePayment: monthlyEquivalentPayment(mortgage?.payment ?? 0, mortgage?.paymentFrequency),
         helocRate,
         marginalRate,
         interestPaidYtd,
@@ -1542,7 +1544,7 @@ function NewDebtForm({
   const [balance, setBalance] = useState(0);
   const [ratePct, setRatePct] = useState(kind === "mortgage" ? 5 : 5.5);
   const [payment, setPayment] = useState(0);
-  const [frequency, setFrequency] = useState<"weekly" | "biweekly" | "monthly">("monthly");
+  const [frequency, setFrequency] = useState<DebtPaymentFrequency>("monthly");
 
   return (
     <div className="space-y-2">
@@ -1576,7 +1578,10 @@ function NewDebtForm({
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="weekly">Weekly</SelectItem>
+                <SelectItem value="accelerated-weekly">Accelerated weekly</SelectItem>
                 <SelectItem value="biweekly">Biweekly</SelectItem>
+                <SelectItem value="accelerated-biweekly">Accelerated biweekly</SelectItem>
+                <SelectItem value="semi-monthly">Semi-monthly</SelectItem>
                 <SelectItem value="monthly">Monthly</SelectItem>
               </SelectContent>
             </Select>
@@ -1717,8 +1722,8 @@ function RoomDrawCard({
   holdings: Holding[];
   onDraw: (tranche: SmithTranche, drawnAmount: number) => void;
   onRefinance: (
-    snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number; paymentFrequency?: "weekly" | "biweekly" | "monthly" },
-    newTerms: { balance: number; rate: number; payment: number; paymentFrequency: "weekly" | "biweekly" | "monthly" },
+    snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number; paymentFrequency?: DebtPaymentFrequency },
+    newTerms: { balance: number; rate: number; payment: number; paymentFrequency: DebtPaymentFrequency },
   ) => void;
   onUnlink: () => void;
 }) {
@@ -2158,14 +2163,14 @@ function RefinanceForm({
 }: {
   mortgage: DebtInput;
   onRefinance: (
-    snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number; paymentFrequency?: "weekly" | "biweekly" | "monthly" },
-    newTerms: { balance: number; rate: number; payment: number; paymentFrequency: "weekly" | "biweekly" | "monthly" },
+    snapshot: { date: string; balance: number; rate: number; payment: number; propertyValue: number; paymentFrequency?: DebtPaymentFrequency },
+    newTerms: { balance: number; rate: number; payment: number; paymentFrequency: DebtPaymentFrequency },
   ) => void;
 }) {
   const [balance, setBalance] = useState(mortgage.balance);
   const [ratePct, setRatePct] = useState(mortgage.rate * 100);
   const [payment, setPayment] = useState(mortgage.payment);
-  const [frequency, setFrequency] = useState<"weekly" | "biweekly" | "monthly">(
+  const [frequency, setFrequency] = useState<DebtPaymentFrequency>(
     mortgage.paymentFrequency ?? "monthly",
   );
   const [propertyValue, setPropertyValue] = useState(0);
@@ -2195,7 +2200,10 @@ function RefinanceForm({
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="weekly">Weekly</SelectItem>
+              <SelectItem value="accelerated-weekly">Accelerated weekly</SelectItem>
               <SelectItem value="biweekly">Biweekly</SelectItem>
+              <SelectItem value="accelerated-biweekly">Accelerated biweekly</SelectItem>
+              <SelectItem value="semi-monthly">Semi-monthly</SelectItem>
               <SelectItem value="monthly">Monthly</SelectItem>
             </SelectContent>
           </Select>
