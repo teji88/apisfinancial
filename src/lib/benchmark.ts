@@ -345,6 +345,12 @@ export function benchmarkValueSeries(
   fx: HistoryPoint[],
   fxNow: number,
   annualYield = 0,
+  /**
+   * Set true when `bench.points` are already dividend-adjusted. The yield is
+   * reinvested into the unit count only for unadjusted series — reinvesting
+   * on top of adjusted closes would count dividends twice.
+   */
+  priceSeriesAdjusted = false,
 ): number[] {
   const sorted = flows.slice().sort((a, b) => a.date.localeCompare(b.date));
   let idx = 0;
@@ -359,7 +365,7 @@ export function benchmarkValueSeries(
   };
 
   return grid.map((date) => {
-    if (lastDate && annualYield > 0) {
+    if (lastDate && annualYield > 0 && !priceSeriesAdjusted) {
       const days = Math.max(0, dayGap(lastDate, date));
       units *= Math.exp((annualYield * days) / 365);
     }
