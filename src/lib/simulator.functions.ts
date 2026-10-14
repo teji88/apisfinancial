@@ -5,6 +5,8 @@ import {
   SIM_MAX_HOLDINGS,
   SIM_PERIODS,
   SIM_START_AMOUNT,
+  benchmarkCoversStart,
+  totalReturnFactor,
   type SimLine,
   type SimResult,
 } from "./simulator";
@@ -27,7 +29,18 @@ const Input = z.object({
   period: z.enum(["1Y", "3Y", "5Y", "10Y", "MAX"]),
 });
 
-type Series = { currency: string; points: Array<{ date: string; close: number }> };
+type Series = {
+  currency: string;
+  points: Array<{ date: string; close: number }>;
+  /**
+   * True when the closes are already dividend-adjusted. The shared history
+   * library (TMX/Nasdaq official closes via fetchSymbolHistory) stores
+   * UNADJUSTED closes, so this is false for everything we serve today — the
+   * flag exists so a future adjusted feed can't silently double-count
+   * dividends in the total-return gross-up below.
+   */
+  priceSeriesAdjusted?: boolean;
+};
 
 function shiftYears(iso: string, years: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -91,7 +104,10 @@ export const simulateBenchmark = createServerFn({ method: "POST" })
     const missing: string[] = [];
     histories.forEach((h, i) => {
       const symbol = allSymbols[i]!;
-      if (h && h.points.length > 1) series.set(symbol, { currency: h.currency, points: h.points });
+      // fetchSymbolHistory serves unadjusted official closes from the shared
+      // library — never dividend-adjusted, so the yield gross-up applies.
+      if (h && h.points.length > 1)
+        series.set(symbol, { currency: h.currency, points: h.points, priceSeriesAdjusted: false });
       else missing.push(symbol);
     });
 
@@ -145,7 +161,7 @@ export const simulateBenchmark = createServerFn({ method: "POST" })
       .reduce((a, b) => (a > b ? a : b), requestedStart);
     const lastOf = (s: string) => series.get(s)!.points[series.get(s)!.points.length - 1]!.date;
     const usableBenchmarks = benchSymbols.filter(
-      (s) => series.has(s) && series.get(s)!.points[0]!.date <= start,
+      (s) => series.has(s) && benchmarkCoversStart(series.get(s)!.points[0]!.date, start),
     );
     const included = [...pickSymbols, ...usableBenchmarks];
     const lastDate = included.map(lastOf).reduce((a, b) => (a < b ? a : b), end);
@@ -176,7 +192,10 @@ export const simulateBenchmark = createServerFn({ method: "POST" })
       const total = price.map((v, i) => {
         if (v == null) return null;
         const t = daysBetween(grid[0]!, grid[i]!) / 365;
-        return v * Math.pow(1 + y, t);
+        // Gross up the yield only for unadjusted series — an adjusted close
+        // already contains its distributions, and grossing up would count
+        // dividends twice.
+        return v * totalReturnFactor(y, t, s.priceSeriesAdjusted === true);
       });
       return { price, total };
     }
