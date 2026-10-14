@@ -82,7 +82,14 @@ export const Route = createFileRoute("/api/public/refresh-prices")({
   server: {
     handlers: {
       POST: async ({ request }) => handleRefresh(request),
-      GET: async ({ request }) => handleRefresh(request),
+      // GET must never trigger this state-changing, expensive job:
+      // link prefetchers, crawlers, and CSRF-style requests can issue
+      // GETs, and a bearer token in a URL can be replayed from logs.
+      GET: async () =>
+        Response.json(
+          { ok: false, error: "Method not allowed — use POST." },
+          { status: 405 },
+        ),
     },
   },
 });
