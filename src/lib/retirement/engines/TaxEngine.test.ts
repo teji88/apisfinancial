@@ -39,10 +39,10 @@ describe("TaxEngine Canadian retirement ledgers", () => {
 
   it("applies the 2026 federal and Alberta basic personal credits", () => {
     const result = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 65);
-    // Federal tax includes the age credit: $8,790 - ($50,000 - $46,576) × 15% = $8,276.40 × 14% = $1,158.70
-    expect(result.federalTax).toBeCloseTo(3_538.02, 2);
+    // Federal tax includes the age credit: $9,208 - ($50,000 - $46,432) × 15% = $8,672.80 × 14% = $1,214.19
+    expect(result.federalTax).toBeCloseTo(3_482.53, 2);
     expect(result.provincialTax).toBeCloseTo(2_178.48, 2);
-    expect(result.totalTax).toBeCloseTo(5_716.50, 2);
+    expect(result.totalTax).toBeCloseTo(5_661.01, 2);
   });
 
   it("does not create tax from a zero-income return", () => {
@@ -99,8 +99,8 @@ describe("TaxEngine Canadian retirement ledgers", () => {
   it("applies the federal age credit at 65+", () => {
     const at64 = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 64, 2026, 2);
     const at65 = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 65, 2026, 2);
-    // Age credit at $50K: ($8,790 - ($50,000 - $46,576) × 15%) × 14% = $1,158.70
-    expect(at64.totalTax - at65.totalTax).toBeCloseTo(1158.70, 0);
+    // Age credit at $50K: ($9,208 - ($50,000 - $46,432) × 15%) × 14% = $1,214.19
+    expect(at64.totalTax - at65.totalTax).toBeCloseTo(1214.19, 0);
   });
 
   it("reduces the age credit above the income threshold", () => {
