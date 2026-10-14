@@ -338,6 +338,12 @@ export function externalFlows(transactions: Transaction[], cashAccounts?: Set<st
           case "FEE":
             cashDeltaForDay -= gross + fee;
             break;
+          case "DRIP":
+            // Intentional no-op: a DRIP moves no cash — the dividend never
+            // lands in the cash balance, new units just appear. The units are
+            // booked in buildValuationSeries, so the dividend shows up as
+            // return (not a contribution) in both TWRR and XIRR.
+            break;
           case "SELL":
             cashDeltaForDay += gross - fee;
             break;
@@ -347,6 +353,18 @@ export function externalFlows(transactions: Transaction[], cashAccounts?: Set<st
         }
       } else if (t.transaction_type === "BUY") {
         flows.push({ date, amount: -(grossCad(t) + feeCad(t)) });
+      } else if (t.transaction_type === "DRIP") {
+        // A DRIP is a distribution immediately reinvested. The dividend leg
+        // (+gross, value received) and the reinvestment leg (−gross, value put
+        // back in) net to zero external flow, but booking both legs keeps
+        // XIRR's flow ledger consistent with buildValuationSeries, which books
+        // the new units as value — so the dividend counts as return, never as
+        // a new contribution.
+        const drip = grossCad(t);
+        if (drip !== 0) {
+          flows.push({ date, amount: drip });
+          flows.push({ date, amount: -drip });
+        }
       } else if (t.transaction_type === "SELL") {
         flows.push({ date, amount: grossCad(t) - feeCad(t) });
       } else if (t.transaction_type === "DIVIDEND") {
@@ -407,7 +425,16 @@ export function xirr(flows: CashFlow[], guess = 0.1): number | null {
   let high = 10;
   let fLow = npv(low);
   let fHigh = npv(high);
-  if (!isFinite(fLow) || !isFinite(fHigh) || fLow * fHigh > 0) return null;
+  if (!isFinite(fLow) || !isFinite(fHigh)) return null;
+  if (fLow * fHigh > 0) {
+    // No bracket: the true rate lies outside [-99.99%, +1000%]. When the NPV
+    // is still negative at -99.99%, the investment lost essentially everything
+    // (e.g. a holding that went to zero) — report the floor instead of null
+    // so catastrophic losses display as -99.99% rather than "—". A positive
+    // NPV at +1000% (or no real root at all) still returns null.
+    if (fLow < 0 && fHigh < 0) return low * 100;
+    return null;
+  }
   for (let i = 0; i < 200; i++) {
     const mid = (low + high) / 2;
     const fMid = npv(mid);
@@ -491,10 +518,27 @@ export function buildValuationSeries(
         }
         break;
       case "BUY":
-      case "DRIP":
-        if (t.transaction_type === "BUY") {
-          if (withCash) cash -= gross + fee;
-          else flowOnDate += gross + fee;
+        if (withCash) cash -= gross + fee;
+        else flowOnDate += gross + fee;
+        if (t.holding_id) {
+          units.set(t.holding_id, (units.get(t.holding_id) ?? 0) + (t.units || 0));
+          if (t.price_per_unit) lastPrice.set(t.holding_id, t.price_per_unit);
+          lastFx.set(t.holding_id, rateFor(t, holdingById.get(t.holding_id)));
+        }
+        break;
+      case "DRIP": {
+        // Reinvested distribution, booked as two offsetting legs so the
+        // economics are explicit: the distribution leg is a TWRR outflow
+        // (added back as return) and the reinvestment leg is a TWRR inflow
+        // (excluded from return). Net flow is zero; the new units carry the
+        // dividend as return — matching externalFlows(), where the two legs
+        // likewise net to zero for XIRR.
+        if (withCash) {
+          cash += gross; // dividend leg lands as cash…
+          cash -= gross; // …and is immediately reinvested
+        } else {
+          flowOnDate -= gross; // distribution leg
+          flowOnDate += gross; // reinvestment leg
         }
         if (t.holding_id) {
           units.set(t.holding_id, (units.get(t.holding_id) ?? 0) + (t.units || 0));
@@ -502,6 +546,7 @@ export function buildValuationSeries(
           lastFx.set(t.holding_id, rateFor(t, holdingById.get(t.holding_id)));
         }
         break;
+      }
       case "SELL":
         if (withCash) cash += gross - fee;
         else flowOnDate -= gross - fee;
