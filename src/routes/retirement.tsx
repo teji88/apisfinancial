@@ -60,8 +60,6 @@ import {
 import { PROVINCES, PROVINCE_CODES, type ProvinceCode } from "@/lib/tax";
 import { Button } from "@/components/ui/button";
 import { Lock } from "lucide-react";
-import { useEntitlement } from "@/lib/entitlement";
-import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -309,20 +307,10 @@ function RetirementPage() {
     return total;
   }, [accounts, holdings, transactions, quotes, fxUsdCad]);
 
-  const { entitlement } = useEntitlement();
-  // Every planning control is free now — nothing on this page is locked.
-  const isPro: boolean = true;
-  const isProPlus: boolean = true;
-  const [proPromptOpen, setProPromptOpen] = useState(false);
-  const [promptReason] = useState<string>("");
-  const PRO_REASON = "Everything in the retirement planner is free.";
-  const PLUS_REASON = PRO_REASON;
-  const openPrompt = (_reason: string) => setProPromptOpen(true);
-  const lockProps = {};
-  const plusProps = {};
-  void entitlement;
-  void PLUS_REASON;
-  void openPrompt;
+  // Pro gating is intentionally disabled on this page: every planning control is
+  // free now, so nothing is locked. Flip to true and restore tier checks below
+  // to re-enable gating.
+  const PRO_GATING_ENABLED = false;
 
 
   const [form, setForm] = useState<Profile | null>(null);
@@ -442,11 +430,12 @@ function RetirementPage() {
     };
   }, [accounts, transactions, holdings, quotes, fxUsdCad]);
 
-  // Free plans run on the standard assumptions; saved values are kept untouched
-  // so they come back the moment the plan is upgraded.
+  // Gating disabled (PRO_GATING_ENABLED = false): everyone plans on their own
+  // values. If gating is re-enabled, non-Pro plans fall back to the standard
+  // assumptions here, with saved values kept untouched so they come back on upgrade.
   const p: Profile | null = useMemo(() => {
     if (!form) return null;
-    if (isPro) return form;
+    if (!PRO_GATING_ENABLED) return form;
     return {
       ...form,
       target_retirement_age: 65,
@@ -459,7 +448,7 @@ function RetirementPage() {
       manual_override: false,
       desired_income: form.desired_income ?? 60000,
     };
-  }, [form, isPro]);
+  }, [form]);
 
   // Planner-first gate: no verdict built on guesses. The projection needs the
   // user's real current age at minimum — without it, desired income (60k),
@@ -897,14 +886,6 @@ function RetirementPage() {
   return (
     <div className={isGuest ? "mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-6" : "min-h-screen bg-surface"}>
       {!isGuest && <AppHeader />}
-      {!isPro ? (
-        <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
-          <p className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3 text-xs text-amber-900 dark:text-amber-200">
-            Your free plan runs on standard assumptions — single filer, retire at 65, 6%
-            growth. Your saved values are kept and apply if you upgrade.
-          </p>
-        </div>
-      ) : null}
       <main className={isGuest ? undefined : "mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8"}>
       <div className="flex gap-1 rounded-lg border p-1">
         {(
@@ -1492,7 +1473,7 @@ function RetirementPage() {
             <Field label="Your age">
               <NumInput value={p.current_age} onCommit={(n) => set({ current_age: n })} />
             </Field>
-            <Field label="Target retirement age" {...lockProps}>
+            <Field label="Target retirement age">
               <RetirementAgeInput
                 value={p.target_retirement_age ?? 65}
                 onChange={(age) => set({ target_retirement_age: age })}
@@ -1525,19 +1506,19 @@ function RetirementPage() {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Inflation %" {...lockProps}>
+            <Field label="Inflation %">
               <NumInput value={p.inflation_rate} onCommit={(n) => set({ inflation_rate: n })} step="0.1" />
             </Field>
-            <Field label="Working years growth rate (%)" {...lockProps}>
+            <Field label="Working years growth rate (%)">
               <NumInput value={p.working_growth_rate} onCommit={(n) => set({ working_growth_rate: n })} step="0.1" />
             </Field>
-            <Field label="Retirement years growth rate (%)" {...lockProps}>
+            <Field label="Retirement years growth rate (%)">
               <NumInput value={p.retirement_growth_rate} onCommit={(n) => set({ retirement_growth_rate: n })} step="0.1" />
             </Field>
-            <Field label="Life expectancy" {...lockProps}>
+            <Field label="Life expectancy">
               <NumInput value={p.life_expectancy} onCommit={(n) => set({ life_expectancy: n })} />
             </Field>
-            <Field label="Marital status" {...plusProps}>
+            <Field label="Marital status">
               <Select
                 value={p.marital_status ?? "Single"}
                 onValueChange={(v) => set({ marital_status: v })}
@@ -1578,7 +1559,7 @@ function RetirementPage() {
                 disabled={selfDetailedActive}
               />
             </Field>
-            <Field label="CPP start age (60–70)" {...lockProps}>
+            <Field label="CPP start age (60–70)">
               <AgeSelect
                 value={p.cpp_start_age ?? 65}
                 options={CPP_AGE_OPTIONS}
@@ -1588,7 +1569,7 @@ function RetirementPage() {
             <Field label="Years living in Canada after age 18 (sets OAS)">
               <NumInput value={p.oas_years_in_canada} onCommit={(n) => set({ oas_years_in_canada: n })} />
             </Field>
-            <Field label="OAS start age (65–70)" {...lockProps}>
+            <Field label="OAS start age (65–70)">
               <AgeSelect
                 value={p.oas_start_age ?? 65}
                 options={OAS_AGE_OPTIONS}
@@ -1636,13 +1617,13 @@ function RetirementPage() {
             <Field label="Annual savings (today's $)">
               <NumInput value={p.annual_savings} onCommit={(n) => set({ annual_savings: n })} />
             </Field>
-            <Field label="% to TFSA" {...plusProps}>
+            <Field label="% to TFSA">
               <NumInput value={p.save_pct_tfsa} onCommit={(n) => set({ save_pct_tfsa: n })} />
             </Field>
-            <Field label="% to RRSP / FHSA" {...plusProps}>
+            <Field label="% to RRSP / FHSA">
               <NumInput value={p.save_pct_rrsp} onCommit={(n) => set({ save_pct_rrsp: n })} />
             </Field>
-            <Field label="% to non-registered" {...plusProps}>
+            <Field label="% to non-registered">
               <NumInput value={p.save_pct_nonreg} onCommit={(n) => set({ save_pct_nonreg: n })} />
             </Field>
 
@@ -1652,7 +1633,7 @@ function RetirementPage() {
             </p>
           </Section>
 
-          {married && isProPlus && (
+          {married && (
             <Section
               title="Your spouse"
               subtitle={`Their CPP and OAS count towards the household income. Estimated CPP entitlement: ${derived.spousePct}% of the maximum.`}
@@ -1767,19 +1748,9 @@ function RetirementPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {isProPlus ? null : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                    <Lock className="h-2.5 w-2.5" />
-                    Pro+
-                  </span>
-                )}
                 <Switch
                   checked={p.manual_override ?? false}
                   onCheckedChange={(v) => {
-                    if (!isProPlus) {
-                      openPrompt(PLUS_REASON);
-                      return;
-                    }
                     set({ manual_override: v });
                   }}
                 />
@@ -1985,11 +1956,6 @@ function RetirementPage() {
       )}
       </main>
 
-      <UpgradeDialog
-        open={proPromptOpen}
-        onOpenChange={setProPromptOpen}
-        reason={promptReason || PRO_REASON}
-      />
       {/* Floating calculate button — always reachable while scrolling the planner */}
       {inputs ? (
         <button
