@@ -1109,8 +1109,9 @@ function ImportPage() {
             </div>
           ) : null}
           <p className="border-t px-5 py-3 text-xs text-muted-foreground">
-            Rows highlighted in red were uncertain — check the date, amount and account before
-            approving. Account types recognised: {ACCOUNT_TYPES.join(", ")}.
+            Rows shaded amber are missing details, and rows with a tinted background had low
+            AI confidence — check the date, amount and account before approving. Account types
+            recognised: {ACCOUNT_TYPES.join(", ")}.
           </p>
         </div>
       ) : null}
