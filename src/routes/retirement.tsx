@@ -890,8 +890,9 @@ function RetirementPage() {
   }));
 
   // oasAt expects *years* of residence, not the already-computed fraction.
-  const selfOas = oasAt(p.oas_start_age ?? 65, p.oas_years_in_canada ?? 40);
-  const spouseOas = married ? oasAt(p.spouse_oas_start_age ?? 65, p.spouse_oas_years_in_canada ?? 40) : 0;
+  // Pass the person's current age so the 75+ 10% increase applies when relevant.
+  const selfOas = oasAt(p.oas_start_age ?? 65, p.oas_years_in_canada ?? 40, p.current_age ?? p.oas_start_age ?? 65);
+  const spouseOas = married ? oasAt(p.spouse_oas_start_age ?? 65, p.spouse_oas_years_in_canada ?? 40, p.spouse_age ?? p.spouse_oas_start_age ?? 65) : 0;
 
   return (
     <div className={isGuest ? "mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-6" : "min-h-screen bg-surface"}>
