@@ -30,7 +30,6 @@ import {
 import { findDuplicateRows } from "@/lib/duplicate-check";
 import { isValidFxDate, resolveFxRates } from "@/lib/fxCache";
 import { useAccounts, useHoldings, useAddTransactions, createAccount, useTransactions, type NewTransaction } from "@/lib/portfolio";
-import { filterNewRows } from "@/lib/importDedupe";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { AiQuotaNote } from "@/components/AiQuotaNote";
