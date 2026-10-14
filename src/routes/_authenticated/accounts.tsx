@@ -9,7 +9,6 @@ import {
   ownerLabel,
   summariseAccount,
 } from "@/lib/finance";
-import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { useAddAccount, useDeleteAccount, usePortfolio, useUpdateAccount } from "@/lib/portfolio";
 
@@ -17,6 +16,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -60,7 +69,6 @@ function AccountsPage() {
   const addAccount = useAddAccount();
   const updateAccount = useUpdateAccount();
   const deleteAccount = useDeleteAccount();
-  const { hasProPlus } = useEntitlement();
 
   const [accountType, setAccountType] = useState<string>("TFSA");
   const [accountName, setAccountName] = useState("");
@@ -70,9 +78,9 @@ function AccountsPage() {
   const [ownerType, setOwnerType] = useState("self");
   const [memberName, setMemberName] = useState("");
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [familyReason] = useState<string | null>(null);
-
-  void hasProPlus;
+  const [deletingAccount, setDeletingAccount] = useState<{ id: string; name: string } | null>(
+    null,
+  );
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -91,6 +99,7 @@ function AccountsPage() {
       setAccountName("");
       setInstitution("");
       setMemberName("");
+      setTrackCash(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add the account");
     }
@@ -108,10 +117,7 @@ function AccountsPage() {
       <UpgradeDialog
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
-        reason={
-          familyReason ??
-          "Accounts, holdings and family tracking are all free — no subscription needed."
-        }
+        reason="Accounts, holdings and family tracking are all free — no subscription needed."
       />
 
 
@@ -254,15 +260,7 @@ function AccountsPage() {
                       variant="ghost"
                       size="icon"
                       aria-label="Delete account"
-                      onClick={() => {
-                        if (
-                          confirm(
-                            `Delete ${a.account_name}? All its holdings and transactions are removed too.`,
-                          )
-                        ) {
-                          deleteAccount.mutate(a.id);
-                        }
-                      }}
+                      onClick={() => setDeletingAccount({ id: a.id, name: a.account_name })}
                     >
                       <Trash2 className="h-4 w-4 text-muted-foreground" />
                     </Button>
@@ -280,6 +278,34 @@ function AccountsPage() {
           </TableBody>
         </Table>
       </div>
+
+      <AlertDialog
+        open={deletingAccount !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingAccount(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deletingAccount?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the account along with all of its holdings and
+              transactions. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deletingAccount) deleteAccount.mutate(deletingAccount.id);
+                setDeletingAccount(null);
+              }}
+            >
+              Delete account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
