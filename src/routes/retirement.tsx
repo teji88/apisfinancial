@@ -721,8 +721,13 @@ function RetirementPage() {
 
   if (!authLoading && !isGuest && profileQuery.isError) {
     return (
-      <div className="p-6 text-sm text-destructive">
-        We couldn’t load your retirement profile. Please refresh and try again.
+      <div className="p-6 space-y-3">
+        <p className="text-sm text-destructive">
+          We couldn’t load your retirement profile. Please refresh and try again.
+        </p>
+        <Button type="button" onClick={() => void profileQuery.refetch()}>
+          Retry
+        </Button>
       </div>
     );
   }

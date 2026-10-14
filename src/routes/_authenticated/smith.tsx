@@ -107,7 +107,7 @@ function LockedSection({
 }
 
 export function SmithPage() {
-  const { data: profile, isLoading } = useProfile();
+  const { data: profile, isLoading, isError, refetch } = useProfile();
   const updateProfile = useUpdateProfile();
   const { hasStatementAi } = useEntitlement();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -272,6 +272,20 @@ export function SmithPage() {
     return (
       <div className="p-6">
         <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6 space-y-3">
+        <p className="text-sm font-medium text-destructive">Couldn&apos;t load your HELOC tracker</p>
+        <p className="text-sm text-muted-foreground">
+          The request timed out or failed. Your data is safe — try again.
+        </p>
+        <Button type="button" onClick={() => void refetch()}>
+          Retry
+        </Button>
       </div>
     );
   }

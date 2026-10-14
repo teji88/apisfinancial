@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useProfile, useUpdateProfile } from "@/lib/profile";
+import { Button } from "@/components/ui/button";
 import { DebtsForm, DebtComparatorCard } from "@/components/retirement/DebtNetWorth";
 import { SmithPage } from "./smith";
 
@@ -34,13 +35,27 @@ const TABS = [
 function DebtsPage() {
   const { tab } = Route.useSearch();
   const navigate = useNavigate();
-  const { data: profile, isLoading } = useProfile();
+  const { data: profile, isLoading, isError, refetch } = useProfile();
   const updateProfile = useUpdateProfile();
 
   if (isLoading) {
     return (
       <div className="p-6">
         <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6 space-y-3">
+        <p className="text-sm font-medium text-destructive">Couldn&apos;t load your debts</p>
+        <p className="text-sm text-muted-foreground">
+          The request timed out or failed. Your data is safe — try again.
+        </p>
+        <Button type="button" onClick={() => void refetch()}>
+          Retry
+        </Button>
       </div>
     );
   }
