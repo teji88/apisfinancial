@@ -19,7 +19,7 @@ export const FEDERAL_BPA_PHASEOUT_START = 181_440;
 export const FEDERAL_BPA_PHASEOUT_END = 258_482;
 export const LOWEST_FED_RATE = 0.14;
 
-/** Federal age amount (65+) claim values, using 2026 CRA indexation. */
+/** Federal age amount (65+) claim values, using 2026 CRA indexation. Must match CANADA_2026_PARAMETERS.tax.federalAgeAmount / federalAgeAmountReductionThreshold — that file is the single source of truth. */
 export const FED_AGE_CLAWBACK_START = 46_432;
 /** Net income at which the age amount is fully clawed back. */
 export const FED_AGE_CLAWBACK_END = 107_819;
