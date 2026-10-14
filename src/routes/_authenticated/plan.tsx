@@ -58,8 +58,6 @@ function PlanPage() {
   const isOwner = entitlement.plan === "owner";
   const isPaid = (entitlement.tier === "pro" || entitlement.tier === "pro_plus") && !isOwner;
   const isInvite = entitlement.tier === "invite";
-  const isTrial = false;
-  const isReferral = false;
 
   async function refreshFromProvider(quiet = false) {
     const result = await sync({ data: { environment: getStripeEnvironment() } });
@@ -155,11 +153,7 @@ function PlanPage() {
                 ? "Pro — $10 a year"
                 : isInvite
                   ? "Invite code — everything unlocked"
-                  : isTrial
-                    ? "Free trial — everything unlocked"
-                    : isReferral
-                      ? "Free year from a referral"
-                      : "Free"}
+                  : "Free"}
           </p>
           {entitlement.readOnly && <Badge variant="destructive">View only</Badge>}
           {entitlement.cancelAtPeriodEnd && <Badge variant="secondary">Ends at period end</Badge>}
@@ -185,13 +179,9 @@ function PlanPage() {
           <p className="mt-3 text-sm text-muted-foreground">
             {isInvite
               ? `Free access runs until ${formatDate(entitlement.accessEndsAt)}.`
-              : isTrial
-                ? `Pro is included until ${formatDate(entitlement.accessEndsAt)}.`
-                : isReferral
-                  ? `Your referral reward keeps everything unlocked until ${formatDate(entitlement.accessEndsAt)}.`
-                  : entitlement.cancelAtPeriodEnd
-                    ? `Pro stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
-                    : `Renews on ${formatDate(entitlement.accessEndsAt)}.`}
+              : entitlement.cancelAtPeriodEnd
+                ? `Pro stays on until ${formatDate(entitlement.accessEndsAt)}, then you return to the free plan.`
+                : `Renews on ${formatDate(entitlement.accessEndsAt)}.`}
           </p>
         ) : isInvite ? (
           <p className="mt-3 text-sm text-muted-foreground">Free access with no end date.</p>
