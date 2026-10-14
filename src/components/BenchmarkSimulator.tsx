@@ -21,6 +21,7 @@ import {
   SIM_MAX_HOLDINGS,
   SIM_PERIODS,
   SIM_START_AMOUNT,
+  resolveHoldingWeights,
   type SimPeriod,
   type SimResult,
 } from "@/lib/simulator";
@@ -47,10 +48,7 @@ export function BenchmarkSimulator() {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   async function submit() {
-    const holdings = rows
-      .map((r) => ({ symbol: r.symbol.trim().toUpperCase(), weight: Number(r.weight) || 0 }))
-      .filter((r) => r.symbol.length > 0)
-      .map((r) => ({ ...r, weight: r.weight > 0 ? r.weight : 1 }));
+    const holdings = resolveHoldingWeights(rows);
     if (holdings.length === 0) {
       setError("Add at least one ticker — for example ENB.TO or AAPL.");
       return;
