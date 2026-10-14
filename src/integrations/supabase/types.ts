@@ -324,6 +324,7 @@ export type Database = {
       profiles: {
         Row: {
           annual_savings: number
+          asset_holdings: Json | null
           base_currency: string
           cpp_avg_income: number
           cpp_future_income: number
@@ -332,14 +333,19 @@ export type Database = {
           cpp_years_worked: number
           created_at: string
           current_age: number | null
+          db_pension: Json | null
+          debts: Json | null
           desired_income: number
           display_name: string | null
+          employer_match: Json | null
           growth_rate: number
           id: string
+          income: number
           inflation_rate: number
           life_expectancy: number
           manual_override: boolean
           marital_status: string
+          net_worth: Json | null
           oas_start_age: number
           oas_years_in_canada: number
           override_fhsa: number
@@ -348,6 +354,7 @@ export type Database = {
           override_rrsp: number
           override_tfsa: number
           pension_split_percent: number
+          properties: Json | null
           province: string
           referral_code: string | null
           referred_by: string | null
@@ -355,6 +362,8 @@ export type Database = {
           save_pct_nonreg: number
           save_pct_rrsp: number
           save_pct_tfsa: number
+          smith_settings: Json | null
+          smith_tranches: Json | null
           spouse_age: number | null
           spouse_cpp_avg_income: number
           spouse_cpp_future_income: number
@@ -375,6 +384,7 @@ export type Database = {
         }
         Insert: {
           annual_savings?: number
+          asset_holdings?: Json | null
           base_currency?: string
           cpp_avg_income?: number
           cpp_future_income?: number
@@ -383,14 +393,19 @@ export type Database = {
           cpp_years_worked?: number
           created_at?: string
           current_age?: number | null
+          db_pension?: Json | null
+          debts?: Json | null
           desired_income?: number
           display_name?: string | null
+          employer_match?: Json | null
           growth_rate?: number
           id: string
+          income?: number
           inflation_rate?: number
           life_expectancy?: number
           manual_override?: boolean
           marital_status?: string
+          net_worth?: Json | null
           oas_start_age?: number
           oas_years_in_canada?: number
           override_fhsa?: number
@@ -399,6 +414,7 @@ export type Database = {
           override_rrsp?: number
           override_tfsa?: number
           pension_split_percent?: number
+          properties?: Json | null
           province?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -406,6 +422,8 @@ export type Database = {
           save_pct_nonreg?: number
           save_pct_rrsp?: number
           save_pct_tfsa?: number
+          smith_settings?: Json | null
+          smith_tranches?: Json | null
           spouse_age?: number | null
           spouse_cpp_avg_income?: number
           spouse_cpp_future_income?: number
@@ -426,6 +444,7 @@ export type Database = {
         }
         Update: {
           annual_savings?: number
+          asset_holdings?: Json | null
           base_currency?: string
           cpp_avg_income?: number
           cpp_future_income?: number
@@ -434,14 +453,19 @@ export type Database = {
           cpp_years_worked?: number
           created_at?: string
           current_age?: number | null
+          db_pension?: Json | null
+          debts?: Json | null
           desired_income?: number
           display_name?: string | null
+          employer_match?: Json | null
           growth_rate?: number
           id?: string
+          income?: number
           inflation_rate?: number
           life_expectancy?: number
           manual_override?: boolean
           marital_status?: string
+          net_worth?: Json | null
           oas_start_age?: number
           oas_years_in_canada?: number
           override_fhsa?: number
@@ -450,6 +474,7 @@ export type Database = {
           override_rrsp?: number
           override_tfsa?: number
           pension_split_percent?: number
+          properties?: Json | null
           province?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -457,6 +482,8 @@ export type Database = {
           save_pct_nonreg?: number
           save_pct_rrsp?: number
           save_pct_tfsa?: number
+          smith_settings?: Json | null
+          smith_tranches?: Json | null
           spouse_age?: number | null
           spouse_cpp_avg_income?: number
           spouse_cpp_future_income?: number
