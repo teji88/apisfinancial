@@ -241,6 +241,20 @@ export function runRetirementSimulation(
     const retired = alivePeople.some((person) => (ages[person.role] ?? 0) >= person.retirementAge);
     const allRetired = alivePeople.length > 0 && alivePeople.every((person) => (ages[person.role] ?? 0) >= person.retirementAge);
 
+    // Mid-year household transitions (spouse death → SURVIVOR, second death →
+    // ESTATE) start a fresh tax ledger. The pre-transition household's YTD
+    // income belongs to its own final return — mixing it into the new
+    // household's cumulative tax would overstate the survivor's liability.
+    // The December reset below handles the normal year-end case. (An age-71
+    // RRIF rollover is an account-type change, not a household change, so it
+    // needs no reset.)
+    if (stage !== previousStage) {
+      yearTaxInputs.MAIN_USER = {};
+      yearTaxInputs.PARTNER = {};
+      cumulativeTaxLiability = 0;
+      cumulativeOasRecovery = 0;
+    }
+
     const calendarYear = date.getUTCFullYear();
     // At age 71, RRSP converts to RRIF and LIRA converts to LIF (mandatory
     // minimums apply from 71). Without this, minimums never trigger.
@@ -252,13 +266,18 @@ export function runRetirementSimulation(
         account.type = "LIF";
       }
     }
-    // Year-specific return override (sequence-of-returns stress tests)
+    // Year-specific return override (sequence-of-returns stress tests).
+    // The override models a crash in retirement — it must only apply to
+    // post-retirement months. Applying it to the whole calendar year would
+    // also crash the accumulation-phase months before the retirement
+    // birthday, understating the portfolio at retirement.
     const overrideReturn = scenario.assumptions.annualReturnOverrides?.[calendarYear];
+    const retirementPhaseOverride = allRetired ? overrideReturn : undefined;
     // Use working-years return before retirement, retirement return after.
     const baseReturn = !retired && scenario.assumptions.workingInvestmentReturn !== undefined
       ? scenario.assumptions.workingInvestmentReturn
       : scenario.assumptions.investmentReturn;
-    const effectiveReturn = overrideReturn ?? baseReturn;
+    const effectiveReturn = retirementPhaseOverride ?? baseReturn;
     for (const account of accounts) {
       if (account.minimumReferenceYear !== calendarYear && (account.type === "RRIF" || account.type === "LIF")) {
         account.minimumReferenceBalance = account.balance;
@@ -273,8 +292,16 @@ export function runRetirementSimulation(
       investmentGrowthThisMonth += account.balance - beforeReturn;
 
       const ownerAge = ages[account.owner] ?? maxAge;
+      // Contributions are gated on THIS account owner's retirement status,
+      // not the household's. A working spouse keeps contributing after the
+      // other spouse retires. (Household `retired` is true when ANY person
+      // has retired — using it here would stop all contributions early.)
+      const ownerPerson = people.find((person) => person.role === account.owner);
+      const ownerRetired = ownerPerson
+        ? (ages[account.owner] ?? 0) >= ownerPerson.retirementAge
+        : retired;
       if (
-        !retired &&
+        !ownerRetired &&
         account.contributionAnnual > 0 &&
         (!account.contributionUntilAge || ownerAge < account.contributionUntilAge)
       ) {
@@ -320,7 +347,11 @@ export function runRetirementSimulation(
       yearTaxInputs[person.role].age = ages[person.role] ?? 0;
       const annualEmploymentIncome = Math.max(0, person.employmentIncome ?? 0);
       const annualSelfEmploymentIncome = Math.max(0, person.selfEmploymentIncome ?? 0);
-      if ((ages[person.role] ?? 0) < person.retirementAge || annualEmploymentIncome > 0 || annualSelfEmploymentIncome > 0) {
+      // Employment income is modeled only while the person is below their
+      // retirement age. The retirement age IS the model's work-stop age — an
+      // OR with the income fields would keep adding employment income
+      // forever after retirement whenever the field is nonzero.
+      if ((ages[person.role] ?? 0) < person.retirementAge) {
         monthlyTaxInputs[person.role].employment =
           (annualEmploymentIncome + annualSelfEmploymentIncome) / 12;
       }
@@ -963,7 +994,11 @@ export function runRetirementSimulation(
         const deathTaxableIncome = treatment.taxableAtDeath + treatment.taxableCapitalGainAtDeath;
         deathCapitalGains += treatment.capitalGainAtDeath;
         deathTax += calculateBasicTax(deathTaxableIncome, scenario.household.province, maxAge, calendarYear, scenario.assumptions.inflationRate).totalTax;
-        estateGross += treatment.estateValue + treatment.transferredToSurvivor;
+        // Only amounts actually entering the estate count toward estateGross.
+        // Spousal rollovers (transferredToSurvivor) go to the surviving spouse,
+        // not the estate — including them would double-count assets already
+        // rolled to the survivor at the earlier survivor transition.
+        estateGross += treatment.estateValue;
         account.balance = treatment.estateValue;
       }
     }
