@@ -427,6 +427,11 @@ export function useProfile() {
     // Arrow wrapper: TanStack passes a context object as queryFn's first
     // argument, which would collide with getOrCreateProfile's timeoutMs.
     queryFn: () => getOrCreateProfile(),
+    // No retries: getOrCreateProfile already has a 12s timeout. Retrying a
+    // hung request just multiplies the worst-case wait (12s x 4 attempts =
+    // ~55s of "Loading…"). Surface the error immediately so the user gets
+    // the Retry button instead of staring at a spinner.
+    retry: false,
   });
 }
 
