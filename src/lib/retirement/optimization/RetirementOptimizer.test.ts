@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultRetirementScenario } from "../scenario/defaults";
-import { optimizeRetirementPlan } from "./RetirementOptimizer";
+import { optimizeRetirementPlan, defaultVariables } from "./RetirementOptimizer";
 
 describe("RetirementOptimizer", () => {
-  // These tests evaluate up to 288 full retirement simulations each.
+  // These tests evaluate up to 360 full retirement simulations each.
   // A single simulation takes ~60ms, so the optimizer needs well beyond
   // vitest's 5s default timeout.
   it("evaluates a bounded deterministic candidate set", () => {
@@ -15,12 +15,41 @@ describe("RetirementOptimizer", () => {
       startYear: 2026,
     });
 
-    expect(result.candidates.length).toBe(288); // 3 spending × 4 retirementAge × 3 CPP × 2 OAS × 4 policies
+    // Derive the expected count from the variable grid itself — the
+    // retirement-age axis gains an extra value when the scenario's
+    // retirement age isn't on the 5-year grid, so a hardcoded count would
+    // silently break for other ages.
+    const expected = defaultVariables(scenario).reduce(
+      (acc, v) => acc * v.values.length,
+      1,
+    );
+    // Default scenario: 3 spending × 4 retirementAge × 3 CPP × 2 OAS × 4 policies = 288
+    expect(expected).toBe(288);
+    expect(result.candidates.length).toBe(expected);
     expect(result.feasiblePlans.length).toBeGreaterThan(0);
     expect(result.selectedCandidate).toBeDefined();
     expect(result.selectedPlan).toBeDefined();
     expect(result.paretoCandidates.length).toBeGreaterThan(0);
     expect(result.selectedCandidate?.objectiveValue).toBeTypeOf("number");
+  }, 60_000);
+
+  it("grows the candidate set when the scenario retirement age is off-grid", () => {
+    const scenario = createDefaultRetirementScenario(new Date("2026-01-01T00:00:00Z"));
+    scenario.goals.retirementAge = 70; // not on the 5-year grid → appended
+
+    const result = optimizeRetirementPlan({
+      scenario,
+      startingPortfolio: 1_000_000,
+      startYear: 2026,
+    });
+
+    const expected = defaultVariables(scenario).reduce(
+      (acc, v) => acc * v.values.length,
+      1,
+    );
+    // 3 spending × 5 retirementAge (50,55,60,65,70) × 3 CPP × 2 OAS × 4 policies = 360
+    expect(expected).toBe(360);
+    expect(result.candidates.length).toBe(expected);
   }, 60_000);
 
   it("does not select a plan when every candidate violates a hard constraint", () => {
