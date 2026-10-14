@@ -695,3 +695,37 @@ export function formatPct(value: number | null, digits = 2): string {
 export function formatUnits(value: number): string {
   return new Intl.NumberFormat("en-CA", { maximumFractionDigits: 4 }).format(value || 0);
 }
+/**
+ * Units of a holding available to sell as of a date, for SELL validation.
+ * Same-day transactions count: the ledger list sorts same-day entries by id,
+ * so a buy recorded earlier the same day covers a sell later that day. When
+ * editing an existing transaction (excludedId set), only same-day entries
+ * ordered before the edited one count.
+ */
+export function unitsHeldBeforeDate(
+  holdingId: string,
+  transactions: Transaction[],
+  date: string,
+  excludedId?: string,
+): number {
+  let units = 0;
+  const ordered = transactions
+    .filter(
+      (t) =>
+        t.holding_id === holdingId &&
+        t.id !== excludedId &&
+        (t.transaction_date < date ||
+          (t.transaction_date === date && (excludedId === undefined || t.id < excludedId))),
+    )
+    .slice()
+    .sort(
+      (a, b) =>
+        a.transaction_date.localeCompare(b.transaction_date) || a.id.localeCompare(b.id),
+    );
+  for (const t of ordered) {
+    if (t.transaction_type === "BUY" || t.transaction_type === "DRIP") units += t.units || 0;
+    else if (t.transaction_type === "SELL") units = Math.max(0, units - (t.units || 0));
+    else if (t.transaction_type === "SPLIT") units *= (t.units || 0) > 0 ? t.units : 1;
+  }
+  return units;
+}

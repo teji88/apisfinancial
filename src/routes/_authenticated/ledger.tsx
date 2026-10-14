@@ -7,6 +7,7 @@ import {
   TRANSACTION_TYPES,
   formatCad,
   formatUnits,
+  unitsHeldBeforeDate,
   type Account,
   type Holding,
   type Transaction,
@@ -985,29 +986,3 @@ function EditTransactionDialog({
   );
 }
 
-function unitsHeldBeforeDate(
-  holdingId: string,
-  transactions: Transaction[],
-  date: string,
-  excludedId?: string,
-): number {
-  let units = 0;
-  const ordered = transactions
-    .filter(
-      (t) =>
-        t.holding_id === holdingId &&
-        t.id !== excludedId &&
-        t.transaction_date < date,
-    )
-    .slice()
-    .sort(
-      (a, b) =>
-        a.transaction_date.localeCompare(b.transaction_date) || a.id.localeCompare(b.id),
-    );
-  for (const t of ordered) {
-    if (t.transaction_type === "BUY" || t.transaction_type === "DRIP") units += t.units || 0;
-    else if (t.transaction_type === "SELL") units = Math.max(0, units - (t.units || 0));
-    else if (t.transaction_type === "SPLIT") units *= (t.units || 0) > 0 ? t.units : 1;
-  }
-  return units;
-}

@@ -260,3 +260,43 @@ function unitsBeforeDate(transactions: Transaction[], holdingId: string, exDate:
   }
   return units;
 }
+
+/**
+ * Per-user dismissal keys for the dividend review list. Dismissals must not
+ * leak between accounts sharing a device. The old "maplewealth.*" key is read
+ * once and migrated on first load.
+ */
+export const LEGACY_DISMISSED_KEY = "maplewealth.dismissedDividends";
+export const dismissedKeyFor = (userId: string | null): string =>
+  userId ? `apis.dismissedDividends.${userId}` : "apis.dismissedDividends.device";
+
+export function loadDismissed(key: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as string[];
+    }
+    // One-time migration from the old shared key.
+    const legacy = window.localStorage.getItem(LEGACY_DISMISSED_KEY);
+    if (legacy) {
+      const parsed: unknown = JSON.parse(legacy);
+      const migrated = Array.isArray(parsed) ? (parsed as string[]) : [];
+      window.localStorage.setItem(key, JSON.stringify(migrated));
+      window.localStorage.removeItem(LEGACY_DISMISSED_KEY);
+      return migrated;
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDismissedToStorage(key: string, next: string[]): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(next));
+  } catch {
+    /* storage unavailable — dismissal lasts for this visit only */
+  }
+}

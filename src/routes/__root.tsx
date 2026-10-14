@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/react";
+import { useAuth } from "../hooks/useAuth";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -130,10 +131,18 @@ function RootShell({ children }: { children: ReactNode }) {
       <body>
         {children}
         <Scripts />
-        <Analytics />
       </body>
     </html>
   );
+}
+
+// Vercel Analytics only fires for anonymous visitors. Authenticated pages show
+// financial data, so pageviews there are never sent — the component renders
+// nothing until auth settles and a user is present.
+function GatedAnalytics() {
+  const { user, loading } = useAuth();
+  if (loading || user) return null;
+  return <Analytics />;
 }
 
 function RootComponent() {
@@ -144,6 +153,7 @@ function RootComponent() {
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       <Toaster position="top-right" />
+      <GatedAnalytics />
     </QueryClientProvider>
   );
 }
