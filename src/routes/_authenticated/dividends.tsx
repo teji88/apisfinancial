@@ -23,10 +23,19 @@ import {
   type DividendSuggestion,
 } from "@/lib/dividend-reconcile";
 import { useEntitlement } from "@/lib/entitlement";
+import { useAuth } from "@/hooks/useAuth";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 
 import { computePositions, formatCad, formatPct, formatUnits } from "@/lib/finance";
-import { buildDividendRows, monthlyIncome, pendingDividends, projectIncome } from "@/lib/dividends";
+import {
+  buildDividendRows,
+  dismissedKeyFor,
+  loadDismissed,
+  monthlyIncome,
+  pendingDividends,
+  projectIncome,
+  saveDismissedToStorage,
+} from "@/lib/dividends";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,19 +84,6 @@ type ReviewDraft = {
   withholdingRate: number;
 };
 
-const DISMISSED_KEY = "maplewealth.dismissedDividends";
-
-function loadDismissed(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(DISMISSED_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? (parsed as string[]) : [];
-  } catch {
-    return [];
-  }
-}
-
 export function DividendsPage() {
   const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
     usePortfolio();
@@ -96,22 +92,20 @@ export function DividendsPage() {
   const fetchDivHistory = useServerFn(getDividendHistory);
   const fetchFxRateOn = useServerFn(getFxRateOn);
   const { entitlement } = useEntitlement();
+  const { user } = useAuth();
+  const dismissedKey = dismissedKeyFor(user?.id ?? null);
   const [recording, setRecording] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewDraft | null>(null);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   useEffect(() => {
-    setDismissed(loadDismissed());
-  }, []);
+    setDismissed(loadDismissed(dismissedKey));
+  }, [dismissedKey]);
 
   const saveDismissed = (next: string[]) => {
     setDismissed(next);
-    try {
-      window.localStorage.setItem(DISMISSED_KEY, JSON.stringify(next));
-    } catch {
-      /* storage unavailable — dismissal lasts for this visit only */
-    }
+    saveDismissedToStorage(dismissedKey, next);
   };
 
   const [growth, setGrowth] = useState(6);
