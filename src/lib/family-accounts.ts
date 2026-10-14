@@ -7,8 +7,8 @@
  * All figures are 2026 real dollars, matching the retirement engine.
  */
 
-/** 2026 federal basic personal amount. */
-export const BASIC_PERSONAL_AMOUNT = 16_129;
+/** 2026 federal basic personal amount. Must match CANADA_2026_PARAMETERS.tax.federalBasicPersonalAmount — that file is the single source of truth. */
+export const BASIC_PERSONAL_AMOUNT = 16_452;
 /** 2026 federal disability tax credit amount. */
 export const DISABILITY_AMOUNT = 10_298;
 /** Lowest combined federal + typical provincial rate on the first bracket. */
