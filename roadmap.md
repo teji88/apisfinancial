@@ -1,4 +1,4 @@
-# MapleWealth roadmap
+# Apis Financial roadmap
 
 ## Phase 1 — done
 
@@ -12,7 +12,7 @@
 ## Phase 2 — AI ingestion (done)
 
 - [x] Drag-and-drop CSV / PDF / screenshot upload
-- [x] Lovable AI structured parsing of broker statements (Questrade, Wealthsimple, TD, RBC, IBKR)
+- [x] Gemini structured parsing of broker statements (Questrade, Wealthsimple, TD, RBC, IBKR)
 - [x] Verification table with confidence flags before committing to the ledger
 
 ## Phase 3 — dividends (done)
