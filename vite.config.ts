@@ -25,16 +25,23 @@ if (!process.env["VITE_SUPABASE_URL"] && process.env["SUPABASE_URL"]) {
 if (!process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] && process.env["SUPABASE_PUBLISHABLE_KEY"]) {
   process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] = process.env["SUPABASE_PUBLISHABLE_KEY"];
 }
-// Last-resort public fallbacks so a build never ships without them (both are
-// publishable, safe for the browser).
+// No hardcoded fallbacks: a build without these env vars must fail fast
+// rather than silently pointing at production.
 const SUPABASE_PUBLIC_URL =
-  process.env["VITE_SUPABASE_URL"] ||
-  process.env["SUPABASE_URL"] ||
-  "https://izmrxsvzxctzswrameng.supabase.co";
+  process.env["VITE_SUPABASE_URL"] || process.env["SUPABASE_URL"];
 const SUPABASE_PUBLIC_KEY =
   process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
-  process.env["SUPABASE_PUBLISHABLE_KEY"] ||
-  "sb_publishable_rOV7PAjsBS8M3QTFHE0ceg_8XqiQMLQ";
+  process.env["SUPABASE_PUBLISHABLE_KEY"];
+if (!SUPABASE_PUBLIC_URL) {
+  throw new Error(
+    "Missing Supabase URL: set VITE_SUPABASE_URL or SUPABASE_URL in the environment.",
+  );
+}
+if (!SUPABASE_PUBLIC_KEY) {
+  throw new Error(
+    "Missing Supabase publishable key: set VITE_SUPABASE_PUBLISHABLE_KEY or SUPABASE_PUBLISHABLE_KEY in the environment.",
+  );
+}
 
 export default defineConfig({
   tanstackStart: {
