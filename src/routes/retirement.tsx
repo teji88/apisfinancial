@@ -227,6 +227,7 @@ const GUEST_PROFILE: Profile = {
   province: "ON",
   current_age: 45,
   target_retirement_age: 65,
+  pension_split_percent: 0,
   inflation_rate: 2.5,
   growth_rate: 6,
   working_growth_rate: 6,

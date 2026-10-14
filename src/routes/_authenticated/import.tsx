@@ -30,7 +30,6 @@ import {
 import { findDuplicateRows } from "@/lib/duplicate-check";
 import { isValidFxDate, resolveFxRates } from "@/lib/fxCache";
 import { useAccounts, useHoldings, useAddTransactions, createAccount, useTransactions, type NewTransaction } from "@/lib/portfolio";
-import { filterNewRows } from "@/lib/importDedupe";
 import { useEntitlement } from "@/lib/entitlement";
 import { UpgradeDialog } from "@/components/PlanUpgrade";
 import { AiQuotaNote } from "@/components/AiQuotaNote";
@@ -519,32 +518,11 @@ function ImportPage() {
       return;
     }
 
-    // Idempotency: skip rows already in the ledger so re-uploading after an
-    // interrupted save never creates duplicates.
-    const symbolByHoldingId = new Map(holdings.map((h) => [h.id, h.symbol]));
-    const { fresh, skipped } = filterNewRows(
-      rows,
-      ledgerTransactions.map((t) => ({
-        account_id: t.account_id,
-        transaction_date: t.transaction_date,
-        transaction_type: t.transaction_type,
-        symbol: (t.holding_id && symbolByHoldingId.get(t.holding_id)) || "",
-        units: t.units,
-        amount: t.amount,
-        price_per_unit: t.price_per_unit,
-      })),
-    );
-    if (skipped > 0) {
-      toast.info(
-        `${skipped} row${skipped === 1 ? "" : "s"} already in your ledger — skipped.`,
-      );
-    }
-    if (fresh.length === 0) {
-      toast.info("Nothing new to save — every row is already in your ledger.");
-      setRows([]);
-      setBroker(null);
-      return;
-    }
+    // The review screen flags possible duplicates and the user explicitly
+    // approves every row they keep — insert all of them. Identical rows can
+    // be real (split fills, two DRIP buys on the same day), so nothing is
+    // dropped silently here.
+    const fresh = rows;
 
     setSaving(true);
     setProgress(0);

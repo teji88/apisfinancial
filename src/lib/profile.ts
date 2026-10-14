@@ -291,6 +291,8 @@ export type Profile = {
   spouse_oas_start_age: number;
   spouse_lira: number;
   spouse_nonreg: number;
+  /** Pension income splitting with spouse (0-50%). */
+  pension_split_percent: number;
   /** DB pension inputs (JSONB, null = none entered). */
   db_pension: DbPensionInput | null;
   /** Holdings classified for asset location (JSONB, null = none entered). */
@@ -310,7 +312,7 @@ export type Profile = {
 };
 
 const COLUMNS =
-  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg, db_pension, asset_holdings, employer_match, debts, net_worth, smith_tranches, properties, smith_settings";
+  "id, display_name, base_currency, province, current_age, target_retirement_age, inflation_rate, growth_rate, working_growth_rate, retirement_growth_rate, life_expectancy, marital_status, spouse_age, spouse_rrsp, spouse_tfsa, spouse_income, income, desired_income, cpp_start_age, cpp_pct, oas_start_age, manual_override, override_tfsa, override_rrsp, override_lira, override_fhsa, override_nonreg, annual_savings, save_pct_tfsa, save_pct_rrsp, save_pct_nonreg, cpp_avg_income, cpp_years_worked, cpp_future_income, oas_years_in_canada, spouse_retirement_age, spouse_cpp_avg_income, spouse_cpp_years_worked, spouse_cpp_future_income, spouse_oas_years_in_canada, spouse_cpp_start_age, spouse_oas_start_age, spouse_lira, spouse_nonreg, pension_split_percent, db_pension, asset_holdings, employer_match, debts, net_worth, smith_tranches, properties, smith_settings";
 
 function toNumbers(row: Record<string, unknown>): Profile {
   const num = (v: unknown, fallback = 0) => (v == null ? fallback : Number(v));
@@ -348,6 +350,7 @@ function toNumbers(row: Record<string, unknown>): Profile {
     spouse_oas_start_age: num(row["spouse_oas_start_age"], 65),
     spouse_lira: num(row["spouse_lira"]),
     spouse_nonreg: num(row["spouse_nonreg"]),
+    pension_split_percent: num(row["pension_split_percent"]),
     db_pension: (row["db_pension"] as DbPensionInput | null) ?? null,
     asset_holdings: (row["asset_holdings"] as AssetHoldingInput[] | null) ?? null,
     employer_match: (row["employer_match"] as EmployerMatchInput | null) ?? null,

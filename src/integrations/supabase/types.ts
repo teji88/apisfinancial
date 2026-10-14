@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -331,14 +331,13 @@ export type Database = {
           cpp_pct: number
           cpp_start_age: number
           cpp_years_worked: number
-          db_pension: Json | null
-          debts: Json | null
           created_at: string
           current_age: number | null
+          db_pension: Json | null
+          debts: Json | null
           desired_income: number
           display_name: string | null
           employer_match: Json | null
-          net_worth: Json | null
           growth_rate: number
           id: string
           income: number
@@ -346,6 +345,7 @@ export type Database = {
           life_expectancy: number
           manual_override: boolean
           marital_status: string
+          net_worth: Json | null
           oas_start_age: number
           oas_years_in_canada: number
           override_fhsa: number
@@ -353,6 +353,8 @@ export type Database = {
           override_nonreg: number
           override_rrsp: number
           override_tfsa: number
+          pension_split_percent: number
+          properties: Json | null
           province: string
           referral_code: string | null
           referred_by: string | null
@@ -360,6 +362,8 @@ export type Database = {
           save_pct_nonreg: number
           save_pct_rrsp: number
           save_pct_tfsa: number
+          smith_settings: Json | null
+          smith_tranches: Json | null
           spouse_age: number | null
           spouse_cpp_avg_income: number
           spouse_cpp_future_income: number
@@ -373,9 +377,6 @@ export type Database = {
           spouse_retirement_age: number | null
           spouse_rrsp: number
           spouse_tfsa: number
-          smith_tranches: Json | null
-          properties: Json | null
-          smith_settings: Json | null
           target_retirement_age: number | null
           trial_ends_at: string | null
           updated_at: string
@@ -390,14 +391,13 @@ export type Database = {
           cpp_pct?: number
           cpp_start_age?: number
           cpp_years_worked?: number
-          db_pension?: Json | null
-          debts?: Json | null
           created_at?: string
           current_age?: number | null
+          db_pension?: Json | null
+          debts?: Json | null
           desired_income?: number
           display_name?: string | null
           employer_match?: Json | null
-          net_worth?: Json | null
           growth_rate?: number
           id: string
           income?: number
@@ -405,6 +405,7 @@ export type Database = {
           life_expectancy?: number
           manual_override?: boolean
           marital_status?: string
+          net_worth?: Json | null
           oas_start_age?: number
           oas_years_in_canada?: number
           override_fhsa?: number
@@ -412,6 +413,8 @@ export type Database = {
           override_nonreg?: number
           override_rrsp?: number
           override_tfsa?: number
+          pension_split_percent?: number
+          properties?: Json | null
           province?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -419,6 +422,8 @@ export type Database = {
           save_pct_nonreg?: number
           save_pct_rrsp?: number
           save_pct_tfsa?: number
+          smith_settings?: Json | null
+          smith_tranches?: Json | null
           spouse_age?: number | null
           spouse_cpp_avg_income?: number
           spouse_cpp_future_income?: number
@@ -432,9 +437,6 @@ export type Database = {
           spouse_retirement_age?: number | null
           spouse_rrsp?: number
           spouse_tfsa?: number
-          smith_tranches?: Json | null
-          properties?: Json | null
-          smith_settings?: Json | null
           target_retirement_age?: number | null
           trial_ends_at?: string | null
           updated_at?: string
@@ -449,14 +451,13 @@ export type Database = {
           cpp_pct?: number
           cpp_start_age?: number
           cpp_years_worked?: number
-          db_pension?: Json | null
-          debts?: Json | null
           created_at?: string
           current_age?: number | null
+          db_pension?: Json | null
+          debts?: Json | null
           desired_income?: number
           display_name?: string | null
           employer_match?: Json | null
-          net_worth?: Json | null
           growth_rate?: number
           id?: string
           income?: number
@@ -464,6 +465,7 @@ export type Database = {
           life_expectancy?: number
           manual_override?: boolean
           marital_status?: string
+          net_worth?: Json | null
           oas_start_age?: number
           oas_years_in_canada?: number
           override_fhsa?: number
@@ -471,6 +473,8 @@ export type Database = {
           override_nonreg?: number
           override_rrsp?: number
           override_tfsa?: number
+          pension_split_percent?: number
+          properties?: Json | null
           province?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -478,6 +482,8 @@ export type Database = {
           save_pct_nonreg?: number
           save_pct_rrsp?: number
           save_pct_tfsa?: number
+          smith_settings?: Json | null
+          smith_tranches?: Json | null
           spouse_age?: number | null
           spouse_cpp_avg_income?: number
           spouse_cpp_future_income?: number
@@ -491,9 +497,6 @@ export type Database = {
           spouse_retirement_age?: number | null
           spouse_rrsp?: number
           spouse_tfsa?: number
-          smith_tranches?: Json | null
-          properties?: Json | null
-          smith_settings?: Json | null
           target_retirement_age?: number | null
           trial_ends_at?: string | null
           updated_at?: string
