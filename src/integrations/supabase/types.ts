@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -324,24 +324,18 @@ export type Database = {
       profiles: {
         Row: {
           annual_savings: number
-          asset_holdings: Json | null
           base_currency: string
           cpp_avg_income: number
           cpp_future_income: number
           cpp_pct: number
           cpp_start_age: number
           cpp_years_worked: number
-          db_pension: Json | null
-          debts: Json | null
           created_at: string
           current_age: number | null
           desired_income: number
           display_name: string | null
-          employer_match: Json | null
-          net_worth: Json | null
           growth_rate: number
           id: string
-          income: number
           inflation_rate: number
           life_expectancy: number
           manual_override: boolean
@@ -373,9 +367,6 @@ export type Database = {
           spouse_retirement_age: number | null
           spouse_rrsp: number
           spouse_tfsa: number
-          smith_tranches: Json | null
-          properties: Json | null
-          smith_settings: Json | null
           target_retirement_age: number | null
           trial_ends_at: string | null
           updated_at: string
@@ -383,24 +374,18 @@ export type Database = {
         }
         Insert: {
           annual_savings?: number
-          asset_holdings?: Json | null
           base_currency?: string
           cpp_avg_income?: number
           cpp_future_income?: number
           cpp_pct?: number
           cpp_start_age?: number
           cpp_years_worked?: number
-          db_pension?: Json | null
-          debts?: Json | null
           created_at?: string
           current_age?: number | null
           desired_income?: number
           display_name?: string | null
-          employer_match?: Json | null
-          net_worth?: Json | null
           growth_rate?: number
           id: string
-          income?: number
           inflation_rate?: number
           life_expectancy?: number
           manual_override?: boolean
@@ -432,9 +417,6 @@ export type Database = {
           spouse_retirement_age?: number | null
           spouse_rrsp?: number
           spouse_tfsa?: number
-          smith_tranches?: Json | null
-          properties?: Json | null
-          smith_settings?: Json | null
           target_retirement_age?: number | null
           trial_ends_at?: string | null
           updated_at?: string
@@ -442,24 +424,18 @@ export type Database = {
         }
         Update: {
           annual_savings?: number
-          asset_holdings?: Json | null
           base_currency?: string
           cpp_avg_income?: number
           cpp_future_income?: number
           cpp_pct?: number
           cpp_start_age?: number
           cpp_years_worked?: number
-          db_pension?: Json | null
-          debts?: Json | null
           created_at?: string
           current_age?: number | null
           desired_income?: number
           display_name?: string | null
-          employer_match?: Json | null
-          net_worth?: Json | null
           growth_rate?: number
           id?: string
-          income?: number
           inflation_rate?: number
           life_expectancy?: number
           manual_override?: boolean
@@ -491,9 +467,6 @@ export type Database = {
           spouse_retirement_age?: number | null
           spouse_rrsp?: number
           spouse_tfsa?: number
-          smith_tranches?: Json | null
-          properties?: Json | null
-          smith_settings?: Json | null
           target_retirement_age?: number | null
           trial_ends_at?: string | null
           updated_at?: string
