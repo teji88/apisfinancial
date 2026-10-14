@@ -34,23 +34,16 @@ export const SUBSCRIPTION_PRICE = {
   period: "per year",
 } as const;
 
-export type PaidPlan = "pro" | "pro_plus";
-export type ProBilling = "monthly" | "yearly";
+/** The single paid plan: Pro, $10/year. (Legacy "pro_plus" tiers are still
+ * recognized by the entitlement system for existing subscriptions.) */
+export type PaidPlan = "pro";
 
-export const PLAN_PRICES: Record<PaidPlan, Record<ProBilling, { id: string; label: string }>> = {
-  pro: {
-    monthly: { id: "pro_monthly", label: "$1 / month" },
-    yearly: { id: "pro_yearly", label: "$10 / year" },
-  },
-  pro_plus: {
-    monthly: { id: "pro_plus_monthly", label: "$2 / month" },
-    yearly: { id: "pro_plus_yearly", label: "$20 / year" },
-  },
+export const PLAN_PRICES: Record<PaidPlan, { id: string; label: string }> = {
+  pro: { id: "pro_yearly", label: "$10 / year" },
 };
 
 export function planOfPrice(priceId: string | null): PaidPlan | null {
   if (!priceId) return null;
-  if (priceId.startsWith("pro_plus")) return "pro_plus";
   if (priceId.startsWith("pro")) return "pro";
   return null;
 }
