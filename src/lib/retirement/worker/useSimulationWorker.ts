@@ -31,6 +31,7 @@ export function useSimulationWorker() {
   // Fallback timers for when the worker doesn't respond (e.g. Safari issue).
   const compareFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stressFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const projectFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Severities for the current stress batch (for main-thread fallback).
   const stressSeveritiesRef = useRef<Record<string, StressSeverity>>({});
 
@@ -97,6 +98,10 @@ export function useSimulationWorker() {
       }
 
       if (kind === "project") {
+        if (projectFallbackRef.current) {
+          clearTimeout(projectFallbackRef.current);
+          projectFallbackRef.current = null;
+        }
         setProjection(result as Projection);
         setProjecting(false);
         // Full result arrived — any pending quick result is now stale.
@@ -143,6 +148,7 @@ export function useSimulationWorker() {
     return () => {
       if (compareFallbackRef.current) clearTimeout(compareFallbackRef.current);
       if (stressFallbackRef.current) clearTimeout(stressFallbackRef.current);
+      if (projectFallbackRef.current) clearTimeout(projectFallbackRef.current);
       worker.terminate();
       workerRef.current = null;
     };
@@ -162,7 +168,34 @@ export function useSimulationWorker() {
   const runProject = useCallback(
     (inputs: PlannerInputs) => {
       setProjecting(true);
-      post("project", inputs);
+      const id = post("project", inputs);
+      // Fallback: if the worker doesn't respond in 20s (e.g. Safari worker
+      // issue), compute on the main thread instead. The timer is cleared
+      // when the worker's full-project reply arrives (onmessage) or when a
+      // newer project job supersedes this one.
+      if (projectFallbackRef.current) clearTimeout(projectFallbackRef.current);
+      const fallbackInputs = inputs;
+      projectFallbackRef.current = setTimeout(async () => {
+        // Stale check: a newer project job may have superseded this one.
+        if (latestRef.current["project"] !== id) return;
+        let stillWaiting = false;
+        setProjecting((prev) => {
+          stillWaiting = prev;
+          return prev;
+        });
+        if (!stillWaiting) return;
+        try {
+          const { projectRetirement } = await import(
+            "@/lib/retirement/adapter/oldApiAdapter"
+          );
+          const result = projectRetirement(fallbackInputs);
+          setProjection(result);
+          setProjecting(false);
+        } catch (err) {
+          setWorkerError(err instanceof Error ? err.message : "Projection failed");
+          setProjecting(false);
+        }
+      }, 20000);
     },
     [post],
   );
