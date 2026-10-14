@@ -347,6 +347,7 @@ export type Database = {
           override_nonreg: number
           override_rrsp: number
           override_tfsa: number
+          pension_split_percent: number
           province: string
           referral_code: string | null
           referred_by: string | null
@@ -397,6 +398,7 @@ export type Database = {
           override_nonreg?: number
           override_rrsp?: number
           override_tfsa?: number
+          pension_split_percent?: number
           province?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -447,6 +449,7 @@ export type Database = {
           override_nonreg?: number
           override_rrsp?: number
           override_tfsa?: number
+          pension_split_percent?: number
           province?: string
           referral_code?: string | null
           referred_by?: string | null
