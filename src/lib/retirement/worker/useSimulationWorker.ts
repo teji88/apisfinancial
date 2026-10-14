@@ -31,6 +31,11 @@ export function useSimulationWorker() {
   // Fallback timers for when the worker doesn't respond (e.g. Safari issue).
   const compareFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stressFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Last FULL projection's success verdict. Quick results use a simplified
+  // withdrawal (no tax gross-up) and can show a rosier verdict than the full
+  // run — preserving the last full verdict across quick updates prevents the
+  // UI from flickering between outcomes while the full result is in flight.
+  const lastFullSuccessRef = useRef<boolean | null>(null);
   const projectFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Severities for the current stress batch (for main-thread fallback).
   const stressSeveritiesRef = useRef<Record<string, StressSeverity>>({});
@@ -102,14 +107,23 @@ export function useSimulationWorker() {
           clearTimeout(projectFallbackRef.current);
           projectFallbackRef.current = null;
         }
-        setProjection(result as Projection);
+        const full = result as Projection;
+        lastFullSuccessRef.current = full.success;
+        setProjection(full);
         setProjecting(false);
         // Full result arrived — any pending quick result is now stale.
         // (Quick uses its own id tracking, so this is just for clarity.)
       } else if (kind === "project-quick") {
         // Only use quick result if a full projection isn't already in flight
         // for newer inputs. The full projection will overwrite when done.
-        setProjection(result as Projection);
+        // Hold the last FULL verdict: the quick run skips tax gross-up and
+        // can show a rosier outcome than the full run will confirm.
+        const quick = result as Projection;
+        if (lastFullSuccessRef.current !== null) {
+          setProjection({ ...quick, success: lastFullSuccessRef.current });
+        } else {
+          setProjection(quick);
+        }
         // Don't clear projecting — the full version is still coming.
       } else if (kind === "earliest") {
         setEarliest(result as number | null);

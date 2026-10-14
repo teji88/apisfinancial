@@ -100,7 +100,7 @@ function applyVariable(
   return next;
 }
 
-function defaultVariables(
+export function defaultVariables(
   scenario: RetirementScenario,
 ): OptimizationVariable[] {
   // Retirement ages for grid search: 5-year steps. The MIN_RETIREMENT_AGE
