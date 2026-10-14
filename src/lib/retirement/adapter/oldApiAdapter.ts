@@ -188,6 +188,24 @@ export const WITHDRAWAL_POLICIES: {
 ];
 
 /**
+ * Estimate a birth year from an integer age.
+ * With only an age, the true birthdate is uncertain by up to a year. We assume
+ * a mid-year birthday (birthMonth 6, matching the convention used throughout
+ * the engine) and check whether that birthday has occurred yet this year:
+ * if today is before June, the birthday hasn't happened, so the birth year
+ * is one earlier. This keeps the estimate consistent with the assumed birth
+ * month instead of always assuming the birthday already passed.
+ */
+export function birthYearFromAge(
+  age: number,
+  birthMonth: number = 6,
+  now: Date = new Date(),
+): number {
+  const currentMonth = now.getUTCMonth() + 1; // 1-12
+  return now.getUTCFullYear() - age - (currentMonth < birthMonth ? 1 : 0);
+}
+
+/**
  * Convert old PlannerInputs to new RetirementScenario.
  */
 export function plannerInputsToScenario(
@@ -196,7 +214,6 @@ export function plannerInputsToScenario(
   portfolioByType?: Record<string, number>,
 ): RetirementScenario {
   const scenario = createDefaultRetirementScenario(new Date());
-  const currentYear = new Date().getFullYear();
 
   // Goals
   scenario.goals.retirementAge = input.retirementAge;
@@ -232,10 +249,11 @@ export function plannerInputsToScenario(
   // People - convert old PersonSpec to new format
   const toPerson = (spec: PersonSpec, role: "MAIN_USER" | "PARTNER") => {
     // Prefer an explicit birth year when the caller knows it; otherwise estimate
-    // from the integer age with a mid-year convention (birthMonth 6). With only
-    // an integer age the true birthdate is uncertain by up to a year either way;
-    // mid-year minimizes the average error. (UI still collects age only.)
-    const birthYear = spec.birthYear ?? currentYear - spec.age;
+    // from the integer age with a mid-year convention (birthMonth 6), adjusted
+    // for whether that birthday has occurred yet this year (birthYearFromAge).
+    // With only an integer age the true birthdate is uncertain by up to a year
+    // either way; mid-year minimizes the average error. (UI still collects age only.)
+    const birthYear = spec.birthYear ?? birthYearFromAge(spec.age);
     // Monthly CPP at 65 from annual
     const cppMonthly = spec.cppAt65 / 12;
     const person: RetirementScenario["household"]["people"][number] = {
@@ -465,7 +483,7 @@ function simulationToProjection(
 
   const sortedYears = Array.from(yearlyMap.keys()).sort((a, b) => a - b);
   const currentYear2 = new Date().getFullYear();
-  const birthYear2 = currentYear2 - input.self.age;
+  const birthYear2 = birthYearFromAge(input.self.age);
   // The engine simulates in nominal dollars (correct for tax brackets, YMPE,
   // OAS thresholds which all inflate). Deflate to today's dollars for display
   // so the spending line stays flat and all values show real purchasing power.
@@ -519,7 +537,7 @@ function simulationToProjection(
 
   const metrics = result.metrics;
   const currentYear = new Date().getFullYear();
-  const birthYear = currentYear - input.self.age;
+  const birthYear = birthYearFromAge(input.self.age);
   let depletionAge: number | null = null;
   if (metrics.depletionDate) {
     depletionAge = new Date(metrics.depletionDate).getFullYear() - birthYear;
@@ -694,13 +712,18 @@ export function oasFractionFromResidence(years: number): number {
  * Applies OAS Act s.7.1(3)'s "greatest of": frozen fraction × deferral boost
  * vs. fresh fraction at approval (residence earned while deferring counts,
  * without the boost). Needs 10 completed years at approval (s.3).
+ * Age 75+ gets the automatic 10% increase (uses `currentAge`, defaulting to
+ * `startAge` when the payment age isn't known). The result is capped at the
+ * applicable maximum: base × (1 + max deferral 36%).
  */
 export function oasAt(
   startAge: number,
   residenceYears: number,
+  currentAge: number = startAge,
 ): number {
-  // Oct-Dec 2026 OAS max: $762.50/mo ($9,150/yr) for 65-74
-  const baseAnnual = 762.50 * 12;
+  // Oct-Dec 2026 OAS max: $762.50/mo ($9,150/yr) for 65-74; $838.75/mo for 75+
+  const baseMonthly = currentAge >= 75 ? 838.75 : 762.50;
+  const baseAnnual = baseMonthly * 12;
   const frozenFraction = oasFractionFromResidence(residenceYears);
   const deferralYears = Math.max(0, startAge - 65);
   const deferralMonths = Math.min(60, Math.floor(deferralYears * 12));
@@ -710,7 +733,11 @@ export function oasAt(
     Math.floor(Math.max(0, residenceYears)) + Math.floor(deferralYears),
   );
   if (freshYears < 10) return 0;
-  return baseAnnual * Math.max(frozenFraction * deferralFactor, freshYears / 40);
+  const cappedFactor = Math.min(
+    Math.max(frozenFraction * deferralFactor, freshYears / 40),
+    1.36,
+  );
+  return baseAnnual * cappedFactor;
 }
 
 /**
