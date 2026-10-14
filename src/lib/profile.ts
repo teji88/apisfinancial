@@ -362,7 +362,7 @@ function toNumbers(row: Record<string, unknown>): Profile {
   };
 }
 
-async function getOrCreateProfile(): Promise<Profile | null> {
+async function fetchOrCreateProfile(): Promise<Profile | null> {
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError) throw authError;
 
@@ -392,10 +392,41 @@ async function getOrCreateProfile(): Promise<Profile | null> {
   return toNumbers(repaired as unknown as Record<string, unknown>);
 }
 
+/**
+ * How long to wait for the profile request before giving up.
+ * 12s is generous for a healthy request but bounds the worst case.
+ */
+export const PROFILE_REQUEST_TIMEOUT_MS = 12_000;
+
+/**
+ * Race a promise against a timeout. Supabase requests can hang forever
+ * (never resolve, never reject) — e.g. a stalled auth refresh or a
+ * network stall — and TanStack Query retries only fire on rejection, so
+ * a hung request would leave useProfile() stuck on isLoading indefinitely
+ * (the Retirement and Debts pages both block on it).
+ */
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
+export async function getOrCreateProfile(
+  timeoutMs: number = PROFILE_REQUEST_TIMEOUT_MS,
+): Promise<Profile | null> {
+  return withTimeout(fetchOrCreateProfile(), timeoutMs, "Profile request");
+}
+
 export function useProfile() {
   return useQuery({
     queryKey: ["profile"],
-    queryFn: getOrCreateProfile,
+    // Arrow wrapper: TanStack passes a context object as queryFn's first
+    // argument, which would collide with getOrCreateProfile's timeoutMs.
+    queryFn: () => getOrCreateProfile(),
   });
 }
 
