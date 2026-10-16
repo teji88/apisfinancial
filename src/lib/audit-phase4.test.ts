@@ -102,16 +102,16 @@ describe("#26 loadDismissed — migration from the legacy shared key", () => {
   it("migrates the legacy key once and removes it", () => {
     window.localStorage.setItem(LEGACY_DISMISSED_KEY, JSON.stringify(["k1", "k2"]));
     const key = dismissedKeyFor("user-1");
-    expect(loadDismissed(key)).toEqual(["k1", "k2"]);
+    expect(loadDismissed(key, "user-1")).toEqual(["k1", "k2"]);
     // Migrated value is now under the per-user key; legacy key is gone.
     expect(window.localStorage.getItem(key)).toBe(JSON.stringify(["k1", "k2"]));
     expect(window.localStorage.getItem(LEGACY_DISMISSED_KEY)).toBeNull();
     // Second load reads the per-user key directly.
-    expect(loadDismissed(key)).toEqual(["k1", "k2"]);
+    expect(loadDismissed(key, "user-1")).toEqual(["k1", "k2"]);
   });
 
   it("returns empty when nothing is stored", () => {
-    expect(loadDismissed(dismissedKeyFor("user-9"))).toEqual([]);
+    expect(loadDismissed(dismissedKeyFor("user-9"), "user-9")).toEqual([]);
   });
 
   it("keeps per-user dismissals separate", () => {
@@ -119,7 +119,32 @@ describe("#26 loadDismissed — migration from the legacy shared key", () => {
       dismissedKeyFor("user-a"),
       JSON.stringify(["ka"]),
     );
-    expect(loadDismissed(dismissedKeyFor("user-a"))).toEqual(["ka"]);
-    expect(loadDismissed(dismissedKeyFor("user-b"))).toEqual([]);
+    expect(loadDismissed(dismissedKeyFor("user-a"), "user-a")).toEqual(["ka"]);
+    expect(loadDismissed(dismissedKeyFor("user-b"), "user-b")).toEqual([]);
+  });
+
+  it("does NOT migrate while auth is loading (userId null) — reads legacy as fallback", () => {
+    // Reproduces the 2026-10-15 bug: the migration ran under the device key
+    // while sign-in was still loading, deleted the legacy key, and the
+    // dismissals never reached the user's own slot.
+    window.localStorage.setItem(LEGACY_DISMISSED_KEY, JSON.stringify(["k1", "k2"]));
+    const deviceKey = dismissedKeyFor(null);
+    // Auth loading: fallback read, legacy key must survive.
+    expect(loadDismissed(deviceKey, null)).toEqual(["k1", "k2"]);
+    expect(window.localStorage.getItem(LEGACY_DISMISSED_KEY)).not.toBeNull();
+    expect(window.localStorage.getItem(deviceKey)).toBeNull();
+    // Auth resolves: migration now runs into the per-user slot.
+    const userKey = dismissedKeyFor("user-1");
+    expect(loadDismissed(userKey, "user-1")).toEqual(["k1", "k2"]);
+    expect(window.localStorage.getItem(LEGACY_DISMISSED_KEY)).toBeNull();
+    expect(window.localStorage.getItem(userKey)).toBe(JSON.stringify(["k1", "k2"]));
+  });
+
+  it("merges interim device-slot dismissals on migration", () => {
+    window.localStorage.setItem(LEGACY_DISMISSED_KEY, JSON.stringify(["k1"]));
+    // User dismisses k2 while auth is still loading (saved to device slot).
+    window.localStorage.setItem(dismissedKeyFor(null), JSON.stringify(["k1", "k2"]));
+    const userKey = dismissedKeyFor("user-1");
+    expect(loadDismissed(userKey, "user-1")).toEqual(["k1", "k2"]);
   });
 });
