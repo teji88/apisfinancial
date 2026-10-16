@@ -270,24 +270,41 @@ export const LEGACY_DISMISSED_KEY = "maplewealth.dismissedDividends";
 export const dismissedKeyFor = (userId: string | null): string =>
   userId ? `apis.dismissedDividends.${userId}` : "apis.dismissedDividends.device";
 
-export function loadDismissed(key: string): string[] {
-  if (typeof window === "undefined") return [];
+function readStringArray(key: string): string[] | null {
   try {
     const raw = window.localStorage.getItem(key);
-    if (raw) {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed as string[];
-    }
-    // One-time migration from the old shared key.
-    const legacy = window.localStorage.getItem(LEGACY_DISMISSED_KEY);
-    if (legacy) {
-      const parsed: unknown = JSON.parse(legacy);
-      const migrated = Array.isArray(parsed) ? (parsed as string[]) : [];
-      window.localStorage.setItem(key, JSON.stringify(migrated));
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as string[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function loadDismissed(key: string, userId: string | null): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const existing = readStringArray(key);
+    if (existing) return existing;
+    const legacy = readStringArray(LEGACY_DISMISSED_KEY);
+    if (!legacy) return [];
+    if (userId) {
+      // One-time migration from the old shared key — only into a per-user
+      // slot. Migrating while auth is still loading (userId null) would strand
+      // the dismissals in the device slot and delete the only other copy, so
+      // every dismissal would reappear once the real user ID resolves.
+      // Merge any interim dismissals saved to the device slot while auth was
+      // loading, so nothing the user dismissed in that window is lost.
+      const deviceList = key === dismissedKeyFor(null) ? [] : (readStringArray(dismissedKeyFor(null)) ?? []);
+      const merged = [...new Set([...legacy, ...deviceList])];
+      window.localStorage.setItem(key, JSON.stringify(merged));
       window.localStorage.removeItem(LEGACY_DISMISSED_KEY);
-      return migrated;
+      return merged;
     }
-    return [];
+    // Auth still loading (or signed out): read the legacy key as a fallback
+    // WITHOUT consuming it, so the migration can still happen once the real
+    // user ID is known.
+    return legacy;
   } catch {
     return [];
   }
