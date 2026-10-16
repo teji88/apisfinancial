@@ -93,15 +93,16 @@ export function DividendsPage() {
   const fetchFxRateOn = useServerFn(getFxRateOn);
   const { entitlement } = useEntitlement();
   const { user } = useAuth();
-  const dismissedKey = dismissedKeyFor(user?.id ?? null);
+  const userId = user?.id ?? null;
+  const dismissedKey = dismissedKeyFor(userId);
   const [recording, setRecording] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewDraft | null>(null);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   useEffect(() => {
-    setDismissed(loadDismissed(dismissedKey));
-  }, [dismissedKey]);
+    setDismissed(loadDismissed(dismissedKey, userId));
+  }, [dismissedKey, userId]);
 
   const saveDismissed = (next: string[]) => {
     setDismissed(next);
