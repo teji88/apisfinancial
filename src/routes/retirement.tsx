@@ -560,6 +560,7 @@ function RetirementPage() {
       oasStartAge: p.oas_start_age ?? 65,
       oasFraction: derived.selfOasFraction,
       otherIncome: p.income ?? 0,
+      employmentIncome: p.cpp_future_income ?? 0,
       balances: { ...balances },
       // Use portfolio ACB if available, else user override, else 0.4 estimate.
       nonregGainRatio: gainRatioOverride ?? byType.nonregGainRatio ?? 0.4,
@@ -575,6 +576,7 @@ function RetirementPage() {
           oasStartAge: p.spouse_oas_start_age ?? 65,
           oasFraction: derived.spouseOasFraction,
           otherIncome: p.spouse_income ?? 0,
+          employmentIncome: p.spouse_cpp_future_income ?? 0,
           balances: {
             tfsa: p.spouse_tfsa ?? 0,
             rrsp: p.spouse_rrsp ?? 0,
