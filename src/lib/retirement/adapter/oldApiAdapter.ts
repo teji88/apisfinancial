@@ -57,6 +57,9 @@ export type PersonSpec = {
   oasFraction: number;
   /** Other taxable retirement income (pension, rental…), today's dollars. */
   otherIncome: number;
+  /** Annual employment income while working, today's dollars. Counted as
+   * spendable household cash (and taxed) until retirementAge. */
+  employmentIncome?: number;
   balances: { tfsa: number; rrsp: number; lira: number; nonreg: number };
   nonregGainRatio: number;
   // For CPP calculator integration (new)
@@ -270,6 +273,7 @@ export function plannerInputsToScenario(
     if (spec.cppEarningsHistory) person.cppEarningsHistory = spec.cppEarningsHistory;
     if (spec.cppFutureEarnings !== undefined) person.cppFutureEarnings = spec.cppFutureEarnings;
     if (spec.cppChildRearingYears) person.cppChildRearingYears = spec.cppChildRearingYears;
+    if (spec.employmentIncome !== undefined) person.employmentIncome = spec.employmentIncome;
     return person;
   };
 
