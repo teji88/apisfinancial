@@ -340,6 +340,12 @@ export function runRetirementSimulation(
     let otherIncome = 0;
     let nonRegisteredInvestmentIncome = 0;
     let nonRegisteredCapitalGains = 0;
+    // Employment (and self-employment) income is real household cash while the
+    // person is working — it must offset the withdrawal need and land in the
+    // cash settlement, not just the tax inputs. Tracked separately from
+    // otherIncome so the taxable-income ledger (which already gets employment
+    // via monthlyTaxInputs) is not double-counted.
+    let employmentCash = 0;
     const monthlyTaxInputs = {} as Record<PersonRole, TaxIncomeComponents>;
     for (const person of alivePeople) {
       monthlyTaxInputs[person.role] = { age: ages[person.role] ?? 0 };
@@ -352,8 +358,9 @@ export function runRetirementSimulation(
       // OR with the income fields would keep adding employment income
       // forever after retirement whenever the field is nonzero.
       if ((ages[person.role] ?? 0) < person.retirementAge) {
-        monthlyTaxInputs[person.role].employment =
-          (annualEmploymentIncome + annualSelfEmploymentIncome) / 12;
+        const monthlyEmployment = (annualEmploymentIncome + annualSelfEmploymentIncome) / 12;
+        monthlyTaxInputs[person.role].employment = monthlyEmployment;
+        employmentCash += monthlyEmployment;
       }
     }
 
@@ -515,9 +522,13 @@ export function runRetirementSimulation(
       mandatoryByOwner[account.owner] += taken;
     }
     const taxableMandatory = mandatoryTaken;
-    // Retirement spending starts once EVERYONE is retired. While one spouse still
-    // works, the household is still in its working years (allRetired, not retired).
-    let targetSpending = allRetired ? spending : 0;
+    // Retirement spending starts once ANYONE is retired. While one spouse still
+    // works, the household still needs its full spending funded — the worker's
+    // employment income offsets it via employmentCash in baseCashNeed, and the
+    // remainder is withdrawn. (Previously this was gated on allRetired, which
+    // zeroed out spending for the entire staggered period and understated
+    // withdrawals.)
+    let targetSpending = retired ? spending : 0;
     if (stage === "SURVIVOR" && targetSpending > 0) targetSpending *= Math.max(0, Math.min(1, scenario.goals.survivorSpendingRate ?? 0.75));
     if (stage === "ESTATE") targetSpending = 0;
 
@@ -567,6 +578,7 @@ export function runRetirementSimulation(
         estimatedMonthlyTax -
         benefits -
         otherIncome -
+        employmentCash -
         nonRegisteredInvestmentIncome -
         beginningHouseholdCash,
     );
@@ -1017,6 +1029,7 @@ export function runRetirementSimulation(
       beginningHouseholdCash +
       benefits +
       otherIncome +
+      employmentCash +
       withdrawals -
       (currentTax + deathTax) -
       targetSpending -
@@ -1029,7 +1042,7 @@ export function runRetirementSimulation(
 
     lifetimeSpending += targetSpending;
     lifetimeAfterTaxCash +=
-      benefits + otherIncome + withdrawals - currentTax - deathTax - meltdownReinvestedThisMonth;
+      benefits + otherIncome + employmentCash + withdrawals - currentTax - deathTax - meltdownReinvestedThisMonth;
     lifetimeTax += currentTax + deathTax;
     totalBenefits += benefits;
     maxShortfall = Math.max(maxShortfall, shortfall);
@@ -1039,7 +1052,7 @@ export function runRetirementSimulation(
       beginningHouseholdCash,
       investmentGrowth: investmentGrowthThisMonth,
       contributions: contributionsThisMonth,
-      grossIncome: benefits + otherIncome,
+      grossIncome: benefits + otherIncome + employmentCash,
       withdrawals,
       taxes: currentTax + deathTax,
       oasRecovery: currentOasRecovery,
@@ -1053,7 +1066,7 @@ export function runRetirementSimulation(
       beginningPortfolio,
       investmentGrowth: investmentGrowthThisMonth,
       contributions: contributionsThisMonth,
-      grossIncome: benefits + otherIncome,
+      grossIncome: benefits + otherIncome + employmentCash,
       withdrawals,
       taxes: currentTax + deathTax,
       oasRecovery: currentOasRecovery,
@@ -1085,7 +1098,7 @@ export function runRetirementSimulation(
       householdCash,
       debt: debtBalance,
       netWorth,
-      grossIncome: benefits + otherIncome + withdrawals,
+      grossIncome: benefits + otherIncome + employmentCash + withdrawals,
       benefits,
       benefitSources,
       benefitsByPerson,
@@ -1106,7 +1119,7 @@ export function runRetirementSimulation(
         beginningHouseholdCash,
         investmentGrowth: investmentGrowthThisMonth,
         contributions: contributionsThisMonth,
-        grossIncome: benefits + otherIncome,
+        grossIncome: benefits + otherIncome + employmentCash,
         grossWithdrawals: withdrawals,
         taxes: currentTax + deathTax,
       oasRecovery: currentOasRecovery,
