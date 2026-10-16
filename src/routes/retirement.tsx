@@ -1536,7 +1536,7 @@ function RetirementPage() {
 
           <Section
             title="Your earnings history — this sets your CPP"
-            subtitle={`We credit each year at your income divided by the yearly maximum, over the best 39 years. Estimated entitlement: ${derived.selfPct}% of the maximum.`}
+            subtitle={`We credit each year at your gross (pre-tax) income divided by the yearly maximum, over the best 39 years. Estimated entitlement: ${derived.selfPct}% of the maximum.`}
           >
             <Field label="Typical income in past working years (today's $)">
               <NumInput
