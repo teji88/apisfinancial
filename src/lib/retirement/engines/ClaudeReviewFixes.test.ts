@@ -64,8 +64,8 @@ describe("fix #8: household horizon uses the longest-lived person's planning age
   });
 });
 
-describe("fix #10: retirement spending starts when everyone is retired", () => {
-  it("holds spending at zero while one spouse still works", () => {
+describe("fix #10: retirement spending starts when anyone is retired", () => {
+  it("funds spending while one spouse still works (staggered retirement)", () => {
     const scenario: RetirementScenario = {
       ...base,
       household: {
@@ -79,10 +79,12 @@ describe("fix #10: retirement spending starts when everyone is retired", () => {
     const result = runRetirementSimulation(scenario, 1_000_000, 2026);
     expect(result.status).toBe("COMPLETE");
     const yearOf = (d: string) => new Date(d).getUTCFullYear();
-    // 2042: main retired, partner still working -> no retirement spending yet.
+    // 2042: main retired, partner still working -> retirement spending IS
+    // funded (2026-10-15 fix: previously forced to zero until everyone retired,
+    // which understated withdrawals for the whole staggered period).
     const during = result.monthly.filter((m) => yearOf(m.date) === 2042);
     expect(during.length).toBeGreaterThan(0);
-    expect(during.every((m) => m.spending === 0)).toBe(true);
+    expect(during.every((m) => m.spending > 0)).toBe(true);
     // 2046: both retired -> spending flows.
     const after = result.monthly.filter((m) => yearOf(m.date) === 2046);
     expect(after.length).toBeGreaterThan(0);
