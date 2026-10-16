@@ -188,13 +188,16 @@ export function OldUiCppHistoryEditor({
         </div>
       )}
 
+      <p className="mb-1 text-[11px] text-muted-foreground">
+        Enter gross employment earnings before tax (T4 Box 26 / your Service Canada CPP statement). Post-tax figures understate your CPP.
+      </p>
       <div className="max-h-64 overflow-y-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-background">
             <tr className="text-left text-xs text-muted-foreground">
               <th className="py-1">Year</th>
               <th className="py-1">YMPE</th>
-              <th className="py-1">Your earnings</th>
+              <th className="py-1">Your earnings (gross, pre-tax)</th>
               <th className="py-1">Child-rearing?</th>
             </tr>
           </thead>
