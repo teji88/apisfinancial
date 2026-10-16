@@ -73,9 +73,9 @@ export interface PersonScenario {
   birthMonth: number;
   retirementAge: number;
   cppAt65?: Money;
-  /** Annual employment income while working, used for tax and GIS modelling. */
+  /** Annual employment income while working: taxed, GIS-tested, and counted as spendable household cash. */
   employmentIncome?: Money;
-  /** Annual net self-employment income while working, used for tax and GIS modelling. */
+  /** Annual net self-employment income while working: taxed, GIS-tested, and counted as spendable household cash. */
   selfEmploymentIncome?: Money;
   cppStartAge: number | "OPTIMIZE";
   oasStartAge: number | "OPTIMIZE";
