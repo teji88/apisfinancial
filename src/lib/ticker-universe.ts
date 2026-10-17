@@ -513,6 +513,49 @@ const US_SYMBOLS = [
   "SNY",
   "GSK",
   "ABB",
+  // Dual-listed Canadian companies (same ticker on TSX and NYSE/NASDAQ).
+  // These must appear here so normalizeTicker() does NOT force-append ".TO"
+  // when the user types the bare symbol — the ledger tries the US listing
+  // first and falls back to the .TO spelling via canadianAlternative().
+  // Banks
+  "RY",
+  "TD",
+  "BMO",
+  "BNS",
+  "CM",
+  // Energy
+  "ENB",
+  "SU",
+  "CNQ",
+  "CVE",
+  "TRP",
+  "IMO",
+  // Brookfield
+  "BN",
+  "BAM",
+  // Insurance
+  "MFC",
+  "SLF",
+  // Tech
+  "SHOP",
+  "LSPD",
+  "OTEX",
+  "KXS",
+  // Miners & materials
+  "ABX",
+  "AEM",
+  "FNV",
+  "WPM",
+  "AG",
+  "PAAS",
+  "NTR",
+  // Other dual-listed
+  "BCE",
+  "TRI",
+  "FTS",
+  "AQN",
+  "ERO",
+  "NXE",
 ];
 
 /** Every Canadian symbol in the form our price sources use, e.g. "RY.TO". */
