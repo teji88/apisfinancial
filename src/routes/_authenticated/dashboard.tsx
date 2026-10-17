@@ -443,7 +443,7 @@ function Dashboard() {
             ))}
           </div>
           <Button asChild variant="outline">
-            <Link to="/ledger">Add a transaction</Link>
+            <Link to="/investments" search={{ tab: "ledger" }}>Add a transaction</Link>
           </Button>
         </div>
       </div>
