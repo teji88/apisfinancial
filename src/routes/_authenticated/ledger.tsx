@@ -58,13 +58,11 @@ import {
 
 export const Route = createFileRoute("/_authenticated/ledger")({
   staticData: { sitemap: false },
-  component: LedgerRedirect,
+  beforeLoad: () => {
+    throw redirect({ to: "/investments", search: { tab: "ledger" } });
+  }
 });
 
-// Ledger now lives under the Investments hub — keep the old URL working.
-function LedgerRedirect() {
-  throw redirect({ to: "/investments", search: { tab: "ledger" } });
-}
 
 const CASH_TYPES = ["DEPOSIT", "WITHDRAWAL", "FEE"];
 

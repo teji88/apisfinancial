@@ -27,13 +27,11 @@ import {
 
 export const Route = createFileRoute("/_authenticated/properties")({
   staticData: { sitemap: false },
-  component: PropertiesRedirect,
+  beforeLoad: () => {
+    throw redirect({ to: "/investments", search: { tab: "properties" } });
+  }
 });
 
-// Properties now lives under the Investments hub — keep the old URL working.
-function PropertiesRedirect() {
-  throw redirect({ to: "/investments", search: { tab: "properties" } });
-}
 
 function newProperty(): PropertyInput {
   return {
