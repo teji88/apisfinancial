@@ -59,13 +59,11 @@ import {
 
 export const Route = createFileRoute("/_authenticated/dividends")({
   staticData: { sitemap: false },
-  component: DividendsRedirect,
+  beforeLoad: () => {
+    throw redirect({ to: "/investments", search: { tab: "dividends" } });
+  }
 });
 
-// Dividends now lives under the Investments hub — keep the old URL working.
-function DividendsRedirect() {
-  throw redirect({ to: "/investments", search: { tab: "dividends" } });
-}
 
 type ReviewDraft = {
   key: string;
