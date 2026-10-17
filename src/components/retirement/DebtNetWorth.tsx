@@ -189,10 +189,16 @@ export function DebtsForm({
 export function NetWorthCard({
   profile,
   investments,
+  debts,
+  viewLabel,
   onSave,
 }: {
   profile: Profile;
   investments: number;
+  /** View-filtered debts (respects the dashboard family-view toggle). */
+  debts: Array<{ balance: number }>;
+  /** Label for the active view: "Mine", "Household", or "Family". */
+  viewLabel: string;
   onSave: (v: NetWorthInput) => void;
 }) {
   const [homeValue, setHomeValue] = useState(profile.net_worth?.homeValue ?? 0);
@@ -215,21 +221,23 @@ export function NetWorthCard({
     otherPropertyValue: otherProperty + propertyValue,
     cash,
     investments,
-    debts: [
-      ...(profile.debts ?? []).map((d) => ({ balance: d.balance })),
-      ...manualMortgages,
-    ],
+    debts: [...debts, ...manualMortgages],
   });
 
   const save = () => onSave({ homeValue, otherPropertyValue: otherProperty, cash });
 
   return (
     <div className="rounded-xl border bg-card p-4 space-y-4">
-      <div>
-        <h3 className="text-base font-semibold">Net worth</h3>
-        <p className="text-sm text-muted-foreground">
-          Liquid = investments + cash. Property is illiquid. Debts come from your debt list.
-        </p>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold">Net worth</h3>
+          <p className="text-sm text-muted-foreground">
+            Liquid = investments + cash. Property is illiquid. Debts come from your debt list.
+          </p>
+        </div>
+        <span className="rounded bg-muted px-2 py-px text-[11px] font-medium text-muted-foreground">
+          {viewLabel} view
+        </span>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1">

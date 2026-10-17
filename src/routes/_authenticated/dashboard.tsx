@@ -10,10 +10,7 @@ import {
 import { usePortfolio } from "@/lib/portfolio";
 import { useProfile, useUpdateProfile } from "@/lib/profile";
 import { NetWorthCard } from "@/components/retirement/DebtNetWorth";
-import {
-  computeNetWorth,
-  splitDebtsByOwner,
-} from "@/lib/retirement/optimization/NetWorth";
+import { splitDebtsByOwner } from "@/lib/retirement/optimization/NetWorth";
 import {
   annualise,
   buildValuationSeries,
@@ -117,114 +114,6 @@ function CurrencyBadge({ code }: { code: string }) {
     <span className="rounded bg-muted px-1 py-px text-[10px] font-medium tracking-wide text-muted-foreground">
       {label}
     </span>
-  );
-}
-
-function NetWorthStrip({
-  selfInvestments,
-  partnerInvestments,
-  netWorth,
-  debts,
-  familyView,
-}: {
-  selfInvestments: number;
-  partnerInvestments: number;
-  netWorth: { homeValue: number; otherPropertyValue: number; cash: number } | null;
-  debts: Array<{ balance: number; owner?: "self" | "partner" | "joint" }>;
-  familyView: FamilyView;
-}) {
-  if (!netWorth && debts.length === 0 && selfInvestments === 0 && partnerInvestments === 0)
-    return null;
-  const nw = netWorth ?? { homeValue: 0, otherPropertyValue: 0, cash: 0 };
-  // Joint debts split 50/50; untagged default to self. Children have no debts here.
-  const { selfDebts, partnerDebts, totalDebts } = splitDebtsByOwner(debts);
-
-  // Home value, other property and cash are household-level inputs; they sit in
-  // the "yours" figure (as today) and count once in the household total.
-  const mine = computeNetWorth({
-    cash: nw.cash,
-    investments: selfInvestments,
-    homeValue: nw.homeValue,
-    otherPropertyValue: nw.otherPropertyValue,
-    debts: [{ balance: selfDebts }],
-  });
-  const partner = computeNetWorth({
-    cash: 0,
-    investments: partnerInvestments,
-    homeValue: 0,
-    otherPropertyValue: 0,
-    debts: [{ balance: partnerDebts }],
-  });
-  const householdNetWorth = mine.netWorth + partner.netWorth;
-
-  return (
-    <div className="panel p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Net worth
-        </h2>
-        <Link to="/retirement" search={{ tab: "planner" }} className="text-xs text-primary underline">
-          Edit values
-        </Link>
-      </div>
-      {familyView === "mine" ? (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <div className="text-xs text-muted-foreground">Liquid assets</div>
-            <div className="text-lg font-semibold">{formatCad(mine.liquidAssets)}</div>
-            <div className="text-[11px] text-muted-foreground">Investments + cash</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Illiquid assets</div>
-            <div className="text-lg font-semibold">{formatCad(mine.illiquidAssets)}</div>
-            <div className="text-[11px] text-muted-foreground">
-              Home {formatCad(nw.homeValue)}
-              {nw.otherPropertyValue > 0 ? ` + other ${formatCad(nw.otherPropertyValue)}` : ""}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Total debts</div>
-            <div className="text-lg font-semibold">{formatCad(mine.totalDebts)}</div>
-            <div className="text-[11px] text-muted-foreground">
-              {debts.length} debt(s){totalDebts !== mine.totalDebts ? " · joint split 50/50" : ""}
-            </div>
-          </div>
-          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950 p-3">
-            <div className="text-xs text-muted-foreground">Net worth</div>
-            <div className="text-xl font-bold text-emerald-800 dark:text-emerald-300">{formatCad(mine.netWorth)}</div>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border p-3">
-            <div className="text-xs text-muted-foreground">Your net worth</div>
-            <div className="text-xl font-bold">{formatCad(mine.netWorth)}</div>
-            <div className="text-[11px] text-muted-foreground">
-              Investments {formatCad(selfInvestments)} · debts {formatCad(mine.totalDebts)}
-            </div>
-          </div>
-          <div className="rounded-lg border p-3">
-            <div className="text-xs text-muted-foreground">Partner&apos;s net worth</div>
-            <div className="text-xl font-bold">{formatCad(partner.netWorth)}</div>
-            <div className="text-[11px] text-muted-foreground">
-              Investments {formatCad(partnerInvestments)} · debts {formatCad(partner.totalDebts)}
-            </div>
-          </div>
-          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950 p-3">
-            <div className="text-xs text-muted-foreground">Household net worth</div>
-            <div className="text-xl font-bold text-emerald-800 dark:text-emerald-300">
-              {formatCad(householdNetWorth)}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              Combined · home {formatCad(nw.homeValue)} · joint debts split 50/50
-            </div>
-          </div>
-        </div>
-      )}
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        Children&apos;s accounts are excluded from all net worth figures.
-      </p>
-    </div>
   );
 }
 
@@ -340,22 +229,6 @@ function Dashboard() {
   const { data: profile } = useProfile();
   const updateProfile = useUpdateProfile();
 
-  // Total invested across accounts — feeds the NetWorthCard hero.
-  const investedTotal = useMemo(() => {
-    let total = 0;
-    for (const a of accounts) {
-      const s = summariseAccount(
-        a,
-        transactions.filter((t) => t.account_id === a.id),
-        holdings.filter((h) => h.account_id === a.id),
-        quotes,
-        fxUsdCad,
-      );
-      total += s.marketValue + Math.max(0, s.cash);
-    }
-    return total;
-  }, [accounts, holdings, transactions, quotes, fxUsdCad]);
-
   const [familyView, setFamilyViewState] = useState<FamilyView>(loadFamilyView);
   const setFamilyView = (v: FamilyView) => {
     setFamilyViewState(v);
@@ -454,15 +327,24 @@ function Dashboard() {
     };
   }, [summaries, viewAccounts, transactions, holdings, quotes, fxUsdCad]);
 
-  const investmentsByOwner = useMemo(() => {
-    let self = 0;
-    let partner = 0;
-    for (const s of summaries) {
-      if ((s.account.owner_type ?? "self") === "partner") partner += s.totalValue;
-      else self += s.totalValue;
+  // View-filtered investments for the NetWorthCard hero. `summaries` already
+  // respects the family-view toggle (mine / household / family); children are
+  // fenced off in every view.
+  const viewInvestedTotal = useMemo(
+    () => summaries.reduce((s, x) => s + x.marketValue + Math.max(0, x.cash), 0),
+    [summaries],
+  );
+
+  // View-filtered debts for the NetWorthCard hero. "Mine" counts the user's
+  // own debts plus half of joint debts; household/family count everything.
+  const viewDebts = useMemo(() => {
+    const debts = profile?.debts ?? [];
+    if (familyView === "mine") {
+      const { selfDebts } = splitDebtsByOwner(debts);
+      return [{ balance: selfDebts }];
     }
-    return { self, partner };
-  }, [summaries]);
+    return debts.map((d) => ({ balance: d.balance }));
+  }, [profile, familyView]);
 
   // Tax-location assessment per visible position. Respects the family toggle:
   // only positions in the current view are assessed.
@@ -569,7 +451,9 @@ function Dashboard() {
       {profile ? (
         <NetWorthCard
           profile={profile}
-          investments={investedTotal}
+          investments={viewInvestedTotal}
+          debts={viewDebts}
+          viewLabel={FAMILY_VIEW_LABELS[familyView]}
           onSave={(v) => updateProfile.mutate({ net_worth: v })}
         />
       ) : null}
@@ -599,14 +483,6 @@ function Dashboard() {
           tone={totals.realized + totals.dividends >= 0 ? "gain" : "loss"}
         />
       </div>
-
-      <NetWorthStrip
-        selfInvestments={investmentsByOwner.self}
-        partnerInvestments={investmentsByOwner.partner}
-        netWorth={profile?.net_worth ?? null}
-        debts={profile?.debts ?? []}
-        familyView={familyView}
-      />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="panel p-5 lg:col-span-2">
