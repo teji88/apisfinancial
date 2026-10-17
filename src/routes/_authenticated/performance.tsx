@@ -68,13 +68,11 @@ import {
 
 export const Route = createFileRoute("/_authenticated/performance")({
   staticData: { sitemap: false },
-  component: PerformanceRedirect,
+  beforeLoad: () => {
+    throw redirect({ to: "/investments", search: { tab: "performance" } });
+  }
 });
 
-// Performance now lives under the Investments hub — keep the old URL working.
-function PerformanceRedirect() {
-  throw redirect({ to: "/investments", search: { tab: "performance" } });
-}
 
 const CHART_COLORS = ["var(--series-3)", "var(--series-4)", "var(--series-2)"];
 
