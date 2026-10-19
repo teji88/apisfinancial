@@ -419,7 +419,9 @@ function simulationToProjection(
   }>();
 
   for (const m of result.monthly) {
-    const year = new Date(m.date).getFullYear();
+    // Dates are UTC midnight; use getUTCFullYear so January isn't attributed
+    // to the prior year in timezones behind UTC.
+    const year = new Date(m.date).getUTCFullYear();
     let y = yearlyMap.get(year);
     if (!y) {
       y = {
@@ -546,7 +548,7 @@ function simulationToProjection(
   const birthYear = birthYearFromAge(input.self.age);
   let depletionAge: number | null = null;
   if (metrics.depletionDate) {
-    depletionAge = new Date(metrics.depletionDate).getFullYear() - birthYear;
+    depletionAge = new Date(metrics.depletionDate).getUTCFullYear() - birthYear;
   }
 
   // Summary figures are also in today's dollars. Lifetime tax is the sum of
