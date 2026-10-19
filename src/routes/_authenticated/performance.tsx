@@ -411,8 +411,12 @@ export function PerformancePage() {
             series[i] = Math.round((growth - 1) * 10000) / 100;
           }
         } else {
+          // Start from the portfolio value at the period start (possibly $0
+          // at inception) and convert each subsequent cash flow into
+          // benchmark units. A $0 start is valid — units accumulate as
+          // deposits arrive.
           const initial = values[base] ?? 0;
-          if (initial > 0) {
+          {
             let units = initial / basePrice;
             let lastDate = grid[base]!;
             let flowIndex = flows.findIndex((flow) => flow.date > lastDate);

@@ -631,7 +631,7 @@ function RetirementPage() {
       self,
       spouse,
     };
-  }, [p, derived, balances, clawbackTolerance, policy, gainRatioOverride]);
+  }, [p, derived, balances, byType, clawbackTolerance, policy, gainRatioOverride]);
 
   /* All heavy engine work runs in a Web Worker — the UI thread never blocks.
      The projection updates live (debounced); earliest-age and strategy
@@ -874,6 +874,9 @@ function RetirementPage() {
     "RRIF / LIF": Math.round(r.rrifDraw + r.lifDraw),
     "Non-Reg": Math.round(r.nonregDraw),
     TFSA: Math.round(r.tfsaDraw),
+    // DB pensions, rental/other pension income, and employment income while
+    // still working. (otherIncome is net of withdrawals — see oldApiAdapter.)
+    "Other income": Math.round(r.otherIncome),
     Spending: Math.round(r.spending),
     // Pre-tax line: what must be funded before tax (spending + tax bill).
     // The gap between this (black) and Spending (red) is the year's tax.
@@ -1328,6 +1331,7 @@ function RetirementPage() {
                   <Bar dataKey="RRIF / LIF" stackId="i" fill="var(--series-3)" />
                   <Bar dataKey="Non-Reg" stackId="i" fill="var(--series-4)" />
                   <Bar dataKey="TFSA" stackId="i" fill="var(--series-5)" />
+                  <Bar dataKey="Other income" stackId="i" fill="var(--series-6)" />
 
                   <Line
                     type="monotone"
