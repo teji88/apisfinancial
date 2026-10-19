@@ -448,9 +448,11 @@ function simulationToProjection(
     y.taxes += m.taxes;
     y.spending += m.spending;
     y.shortfall = Math.max(y.shortfall, m.shortfall);
-    // grossIncome bundles withdrawals (which now include the meltdown gross);
-    // back the meltdown out so otherIncome stays pension/rental-type income.
-    y.otherIncome += m.grossIncome - m.benefits - (m.meltdownWithdrawals ?? 0);
+    // grossIncome = benefits + otherIncome + employmentCash + withdrawals.
+    // Back out benefits and ALL withdrawals so otherIncome stays
+    // pension/rental/employment-type income (no double-count with the
+    // rrifDraw/lifDraw/nonregDraw/tfsaDraw buckets below).
+    y.otherIncome += m.grossIncome - m.benefits - (m.withdrawals ?? 0);
     // Aggregate per-person data
     const bp = m.benefitsByPerson;
     const wp = m.withdrawalsByPerson;
