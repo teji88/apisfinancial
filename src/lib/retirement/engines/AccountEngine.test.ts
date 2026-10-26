@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createAccountState, estimateNonRegisteredMonthlyIncome, withdrawNonRegistered } from "./AccountEngine";
+import { createAccountState, estimateNonRegisteredMonthlyIncome, mandatoryRegisteredWithdrawal, rrifMinimumFactor, withdrawNonRegistered } from "./AccountEngine";
 
 describe("non-registered account engine", () => {
   it("tracks ACB and realizes proportional capital gains", () => {
@@ -47,5 +47,25 @@ describe("non-registered account engine", () => {
     const result = withdrawNonRegistered(account, 5_000);
     expect(result.realizedCapitalGain).toBe(0);
     expect(result.returnOfCapital).toBe(5_000);
+  });
+});
+
+describe("RRIF/LIF minimum factors", () => {
+  it("uses 1/(90-age) before 71 (CRA prescribed factor)", () => {
+    expect(rrifMinimumFactor(65)).toBeCloseTo(0.04, 10);
+    expect(rrifMinimumFactor(60)).toBeCloseTo(1 / 30, 10);
+    expect(rrifMinimumFactor(70)).toBeCloseTo(0.05, 10);
+  });
+
+  it("uses the prescribed table at 71+", () => {
+    expect(rrifMinimumFactor(71)).toBeCloseTo(0.0528, 10);
+    expect(rrifMinimumFactor(80)).toBeCloseTo(0.0682, 10);
+  });
+
+  it("requires monthly minimum withdrawals from an early-converted RRIF", () => {
+    // $100,000 at 65: 4% annual = $4,000/yr = $333.33/mo
+    expect(mandatoryRegisteredWithdrawal("RRIF", 65, 100_000)).toBeCloseTo(100_000 * 0.04 / 12, 6);
+    expect(mandatoryRegisteredWithdrawal("LIF", 70, 100_000)).toBeCloseTo(100_000 * 0.05 / 12, 6);
+    expect(mandatoryRegisteredWithdrawal("RRSP", 65, 100_000)).toBe(0);
   });
 });
