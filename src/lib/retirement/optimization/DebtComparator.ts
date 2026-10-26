@@ -153,10 +153,17 @@ export function comparePayoffVsInvest(inputs: PayoffVsInvestInputs): PayoffVsInv
   const nBase = base.ok ? base.months : 0;
   const nAccel = accelerated.months;
   // Wealth at month nBase:
-  //   payoff path: -acceleratedInterest + FV(fullPayment, nBase - nAccel)
-  //   invest path: -baseInterest + FV(extra, nBase)
-  const payoffWealth = -(accelerated.interest * afterTaxFactor) + fv(fullPayment, nBase - nAccel);
-  const investWealth = -(base.ok ? base.interest * afterTaxFactor : 0) + fv(extra, nBase);
+  //   payoff path: FV(fullPayment, nBase - nAccel) — debt gone at nAccel,
+  //     then the full freed payment is invested for the remaining months.
+  //   invest path: FV(extra, nBase) — the extra is invested all along.
+  // Interest paid is NOT subtracted on top: both paths spend identical total
+  // cash (fullPayment × nBase), and the interest saved by paying off early
+  // is already embedded in the payoff path — it is what lets that path invest
+  // the larger fullPayment in the tail period. Subtracting cumulative interest
+  // as well counted the payoff saving twice and skewed the comparison in
+  // favour of payoff by exactly the interest saved.
+  const payoffWealth = fv(fullPayment, nBase - nAccel);
+  const investWealth = fv(extra, nBase);
   const netAdvantageInvesting = investWealth - payoffWealth;
 
   // For display: FV of the extra invested over the accelerated horizon (simple view).
