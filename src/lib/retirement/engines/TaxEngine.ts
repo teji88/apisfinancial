@@ -37,6 +37,8 @@ export interface TaxResult {
   marginalRate: number;
   credits: number;
   dividendTaxCredit: number;
+  provincialDividendTaxCredit: number;
+  provincialAgeCredit: number;
   foreignTaxCredit: number;
   federalPensionIncomeCredit: number;
   provincialPensionIncomeCredit: number;
@@ -167,6 +169,10 @@ export function buildTaxIncome(components: TaxIncomeComponents) {
     eligibleDividendGrossUp: eligibleDividends * CANADA_2026_PARAMETERS.tax.eligibleDividendGrossUp,
     nonEligibleDividendGrossUp: nonEligibleDividends * CANADA_2026_PARAMETERS.tax.nonEligibleDividendGrossUp,
     taxableCanadianDividends,
+    // Split taxable dividends: provincial dividend credits apply at different
+    // rates to each, so the combined figure above is not enough.
+    eligibleTaxableDividends: eligibleDividends * (1 + CANADA_2026_PARAMETERS.tax.eligibleDividendGrossUp),
+    nonEligibleTaxableDividends: nonEligibleDividends * (1 + CANADA_2026_PARAMETERS.tax.nonEligibleDividendGrossUp),
     capitalGainInclusion,
     totalIncome,
     netIncome,
@@ -225,15 +231,34 @@ export function calculateTaxFromIncome(
     ? Math.max(0, ageAmountBase - Math.max(0, ledgers.netIncome - ageThreshold) * ageReductionRate)
     : 0;
   const federalAgeCredit = ageAmount * CANADA_2026_PARAMETERS.tax.federalPensionIncomeCreditRate;
+  // Provincial age credit: same 65+ rule and 15% phase-out shape as federal,
+  // at the province's own amount, threshold, and lowest-bracket credit rate.
+  // Provinces without a table entry (QC — no QC brackets in this engine) get 0.
+  const provincialAgeAmountBase = ((CANADA_2026_PARAMETERS.tax.provincialAgeAmount as Record<string, number>)[province] ?? 0) * indexFactor;
+  const provincialAgeThreshold = ((CANADA_2026_PARAMETERS.tax.provincialAgeAmountReductionThreshold as Record<string, number>)[province] ?? 0) * indexFactor;
+  const provincialAgeReductionRate = CANADA_2026_PARAMETERS.tax.provincialAgeAmountReductionRate ?? 0.15;
+  const provincialAgeAmount = age >= 65
+    ? Math.max(0, provincialAgeAmountBase - Math.max(0, ledgers.netIncome - provincialAgeThreshold) * provincialAgeReductionRate)
+    : 0;
+  const provincialAgeCredit = provincialAgeAmount * provincialBasicCreditRate(province);
+  // Provincial dividend credit: rates apply to the TAXABLE (grossed-up)
+  // dividend, unlike the federal rates in this file which apply to the
+  // gross-up slice (6/11 of gross-up = 15.0198% of taxable, same credit).
+  const provincialDividendRates = (CANADA_2026_PARAMETERS.tax.provincialDividendCreditRate as Record<string, readonly [number, number]>)[province] ?? [0, 0];
+  const provincialDividendCredit =
+    ledgers.eligibleTaxableDividends * provincialDividendRates[0] +
+    ledgers.nonEligibleTaxableDividends * provincialDividendRates[1];
   const credits =
     federalBasicCredit(ledgers.netIncome, indexFactor) +
     provincialBasicCredit(province, indexFactor) +
     federalDividendCredit +
+    provincialDividendCredit +
     federalPensionIncomeCredit +
     provincialPensionIncomeCredit +
-    federalAgeCredit;
+    federalAgeCredit +
+    provincialAgeCredit;
   const federalTax = Math.max(0, federalGross - federalBasicCredit(ledgers.netIncome, indexFactor) - federalDividendCredit - federalPensionIncomeCredit - federalAgeCredit);
-  const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province, indexFactor) - provincialPensionIncomeCredit);
+  const provincialTax = Math.max(0, provincialGross - provincialBasicCredit(province, indexFactor) - provincialPensionIncomeCredit - provincialDividendCredit - provincialAgeCredit);
   // OAS is included in net income for the recovery tax calculation.
   const oasRecoveryIncome = ledgers.netIncome;
   const oasRecovery = oasRecoveryForIncome(oasRecoveryIncome, ledgers.oas, indexFactor);
@@ -272,6 +297,8 @@ export function calculateTaxFromIncome(
     marginalRate: federalMarginal + provincialMarginal + recoveryMarginal,
     credits,
     dividendTaxCredit: federalDividendCredit,
+    provincialDividendTaxCredit: provincialDividendCredit,
+    provincialAgeCredit,
     foreignTaxCredit,
     federalPensionIncomeCredit,
     provincialPensionIncomeCredit,
