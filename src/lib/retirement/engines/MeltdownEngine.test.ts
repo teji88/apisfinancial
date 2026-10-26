@@ -181,7 +181,9 @@ describe("TAX_TARGETED true fill-to-ceiling meltdown (live engine)", () => {
     const rf = projectRetirement(meltBase({ withdrawalPolicy: "REGISTERED_FIRST" }));
     expect(tt.totalTaxes).toBeLessThan(rf.totalTaxes);
     expect(tt.totalClawback).toBeLessThan(rf.totalClawback);
-    expect(tt.totalClawback).toBe(0);
+    // Eliminated for all practical purposes (tolerance, not exact zero: the
+    // tax-credit change leaves floating-point dust at the 1e-12 level).
+    expect(tt.totalClawback).toBeLessThan(0.01);
   });
 
   it("stops melting by itself once the lookahead clears", () => {
