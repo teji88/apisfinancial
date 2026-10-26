@@ -81,7 +81,14 @@ const RRIF_FACTORS: Record<number, number> = {
 };
 
 export function rrifMinimumFactor(age: number): number {
-  if (age < 71) return 0;
+  if (age < 71) {
+    // CRA prescribed factor before 71: 1 / (90 - age at the start of the year)
+    // (ITA s. 146.3(1)(b) / Reg. 7308) — e.g. 4.00% at 65, 5.00% at 70.
+    // Previously this returned 0, so early-converted RRIF/LIF accounts showed
+    // no mandatory withdrawals at all until 71.
+    const floored = Math.floor(age);
+    return floored >= 0 && floored < 90 ? 1 / (90 - floored) : 0;
+  }
   return RRIF_FACTORS[Math.min(94, Math.floor(age))] ?? 0.20;
 }
 
