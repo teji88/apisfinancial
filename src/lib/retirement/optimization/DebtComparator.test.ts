@@ -148,6 +148,28 @@ describe("comparePayoffVsInvest", () => {
     expect(r.monthsSaved).toBeNull();
     expect(r.acceleratedMonths).toBeGreaterThan(0);
     expect(r.warnings.length).toBeGreaterThan(0);
+    // Degenerate horizon (base never pays off): no wealth comparison is
+    // meaningful, so the advantage is 0 — not the accelerated interest, as
+    // the old double-counted formula produced.
+    expect(r.netAdvantageInvesting).toBe(0);
+  });
+
+  it("does not double-count interest when the debt rate equals the expected return", () => {
+    // Same rate on both sides: the two paths spend identical total cash, so
+    // terminal wealth is nearly identical — the old formula understated the
+    // investing advantage by the full interest saved (~$77k here).
+    const r = comparePayoffVsInvest({
+      balance: 100_000,
+      annualRate: 0.06,
+      monthlyPayment: 600,
+      extraMonthly: 400,
+      expectedReturn: 0.06,
+      marginalRate: 0.3,
+      interestDeductible: false,
+    });
+    expectSuccess(r);
+    expect(r.interestSavedAfterTax).toBeGreaterThan(50_000);
+    expect(Math.abs(r.netAdvantageInvesting)).toBeLessThan(r.interestSavedAfterTax * 0.05);
   });
 
   it("is informational only", () => {
