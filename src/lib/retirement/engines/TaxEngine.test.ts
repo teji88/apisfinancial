@@ -33,16 +33,19 @@ describe("TaxEngine Canadian retirement ledgers", () => {
   it("applies provincial basic personal credits outside Alberta", () => {
     const bc = calculateTaxFromIncome({ rrspRrif: 50_000 }, "BC", 65);
     const on = calculateTaxFromIncome({ rrspRrif: 50_000 }, "ON", 65);
-    expect(bc.provincialTax).toBeCloseTo(2_059.90, 2);
-    expect(on.provincialTax).toBeCloseTo(1_869.06, 2);
+    // Provincial age credit at $50K: BC (5,915 - (50,000-44,032)×15%) × 5.6% = 281.11;
+    // ON (6,347 - (50,000-47,257)×15%) × 5.05% = 299.75 — subtracted from the old figures.
+    expect(bc.provincialTax).toBeCloseTo(1_778.80, 2);
+    expect(on.provincialTax).toBeCloseTo(1_569.31, 2);
   });
 
   it("applies the 2026 federal and Alberta basic personal credits", () => {
     const result = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 65);
     // Federal tax includes the age credit: $9,208 - ($50,000 - $46,432) × 15% = $8,672.80 × 14% = $1,214.19
+    // Provincial tax includes the AB age credit: (6,345 - (50,000-47,234)×15%) × 8% = 474.41
     expect(result.federalTax).toBeCloseTo(3_482.53, 2);
-    expect(result.provincialTax).toBeCloseTo(2_178.48, 2);
-    expect(result.totalTax).toBeCloseTo(5_661.01, 2);
+    expect(result.provincialTax).toBeCloseTo(1_704.07, 2);
+    expect(result.totalTax).toBeCloseTo(5_186.60, 2);
   });
 
   it("does not create tax from a zero-income return", () => {
@@ -99,8 +102,9 @@ describe("TaxEngine Canadian retirement ledgers", () => {
   it("applies the federal age credit at 65+", () => {
     const at64 = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 64, 2026, 2);
     const at65 = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 65, 2026, 2);
-    // Age credit at $50K: ($9,208 - ($50,000 - $46,432) × 15%) × 14% = $1,214.19
-    expect(at64.totalTax - at65.totalTax).toBeCloseTo(1214.19, 0);
+    // Age credit at $50K: federal ($9,208 - ($50,000 - $46,432) × 15%) × 14% = $1,214.19
+    // plus provincial AB (6,345 - (50,000-47,234)×15%) × 8% = $474.41
+    expect(at64.totalTax - at65.totalTax).toBeCloseTo(1688.60, 0);
   });
 
   it("reduces the age credit above the income threshold", () => {
@@ -109,6 +113,26 @@ describe("TaxEngine Canadian retirement ledgers", () => {
     // High income partially phases out the age credit, so the tax difference
     // should exceed just the bracket difference
     expect(highIncome.totalTax - lowIncome.totalTax).toBeGreaterThan(0);
+  });
+
+  it("applies provincial dividend tax credits on top of the federal credit", () => {
+    const eligible = calculateTaxFromIncome({ eligibleCanadianDividends: 10_000 }, "AB", 65);
+    // AB eligible DTC: $10,000 × 1.38 × 8.12% = $1,120.56
+    expect(eligible.provincialDividendTaxCredit).toBeCloseTo(1_120.56, 2);
+    const nonEligible = calculateTaxFromIncome({ nonEligibleCanadianDividends: 10_000 }, "AB", 65);
+    // AB non-eligible DTC: $10,000 × 1.15 × 2.18% = $250.70
+    expect(nonEligible.provincialDividendTaxCredit).toBeCloseTo(250.70, 2);
+    const ontario = calculateTaxFromIncome({ eligibleCanadianDividends: 10_000 }, "ON", 65);
+    // ON eligible DTC: $10,000 × 1.38 × 10% = $1,380
+    expect(ontario.provincialDividendTaxCredit).toBeCloseTo(1_380, 2);
+  });
+
+  it("applies the provincial age credit at 65+ and not below", () => {
+    const at65 = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 65);
+    // (6,345 - (50,000-47,234)×15%) × 8% = 474.41
+    expect(at65.provincialAgeCredit).toBeCloseTo(474.41, 2);
+    const at64 = calculateTaxFromIncome({ rrspRrif: 50_000 }, "AB", 64);
+    expect(at64.provincialAgeCredit).toBe(0);
   });
 
   it("keeps pension income available for a future pension-income credit", () => {

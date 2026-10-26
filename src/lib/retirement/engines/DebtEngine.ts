@@ -82,12 +82,23 @@ export function accrueDebtMonth(state: DebtState): DebtMonthResult {
 
   const interest = beginningBalance * monthlyRate(state.annualInterestRate);
   const amountAvailable = beginningBalance + interest;
-  const scheduledPayment = Math.min(amountAvailable, state.scheduledMonthlyPayment);
-  const scheduledPrincipal = Math.max(0, Math.min(beginningBalance, scheduledPayment - interest));
+  // Cash actually drawn this month: the stated payments, capped at what is
+  // owed. Payments apply to interest first, then principal.
+  const scheduledCash = Math.min(amountAvailable, state.scheduledMonthlyPayment);
+  const extraCash = Math.min(Math.max(0, amountAvailable - scheduledCash), state.extraMonthlyPayment);
+  const totalPayment = scheduledCash + extraCash;
+  const interestCoveredByScheduled = Math.min(scheduledCash, interest);
+  const interestCoveredByExtra = Math.min(extraCash, Math.max(0, interest - interestCoveredByScheduled));
+  const scheduledPrincipal = Math.max(0, Math.min(beginningBalance, scheduledCash - interestCoveredByScheduled));
   const remainingAfterScheduled = Math.max(0, beginningBalance - scheduledPrincipal);
-  const extraPrincipal = Math.min(remainingAfterScheduled, state.extraMonthlyPayment);
-  const endingBalance = Math.max(0, remainingAfterScheduled - extraPrincipal);
-  const totalPayment = interest + scheduledPrincipal + extraPrincipal;
+  const extraPrincipal = Math.max(0, Math.min(remainingAfterScheduled, extraCash - interestCoveredByExtra));
+  // Under-amortizing case: when the stated payments do not cover the month's
+  // interest, the unpaid interest capitalizes into the balance instead of
+  // being silently forgiven (previously the ledger withdrew the FULL interest
+  // from the budget while leaving the balance flat — cash and balance
+  // disagreed by the unpaid amount every month).
+  const unpaidInterest = Math.max(0, interest - interestCoveredByScheduled - interestCoveredByExtra);
+  const endingBalance = Math.max(0, remainingAfterScheduled - extraPrincipal + unpaidInterest);
 
   state.balance = endingBalance;
   state.active = endingBalance > 1e-8;

@@ -51,4 +51,38 @@ describe("DebtEngine", () => {
     expect(month.extraPrincipal).toBeCloseTo(250, 6);
     expect(month.endingBalance).toBeCloseTo(9_350, 6);
   });
+
+  it("capitalizes unpaid interest when the payment does not cover it", () => {
+    const state = createDebtState({
+      id: "loc",
+      type: "LINE_OF_CREDIT",
+      startingBalance: 100_000,
+      annualInterestRate: 12,
+      paymentAmount: 500, // interest alone is $1,000/mo
+    });
+    const month = accrueDebtMonth(state);
+    expect(month.interest).toBeCloseTo(1_000, 6);
+    // Cash drawn is the stated payment, not the full interest.
+    expect(month.totalPayment).toBeCloseTo(500, 6);
+    expect(month.scheduledPrincipal).toBe(0);
+    // Unpaid $500 capitalizes instead of vanishing.
+    expect(month.endingBalance).toBeCloseTo(100_500, 6);
+    expect(state.active).toBe(true);
+  });
+
+  it("applies extra payments to interest first when scheduled alone underpays", () => {
+    const state = createDebtState({
+      id: "loc",
+      type: "LINE_OF_CREDIT",
+      startingBalance: 100_000,
+      annualInterestRate: 12,
+      paymentAmount: 500,
+      extraPayment: 600, // 500 + 600 = 1,100 covers $1,000 interest + $100 principal
+    });
+    const month = accrueDebtMonth(state);
+    expect(month.totalPayment).toBeCloseTo(1_100, 6);
+    expect(month.scheduledPrincipal).toBe(0);
+    expect(month.extraPrincipal).toBeCloseTo(100, 6);
+    expect(month.endingBalance).toBeCloseTo(99_900, 6);
+  });
 });

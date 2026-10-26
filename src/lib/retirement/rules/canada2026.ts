@@ -41,6 +41,26 @@ export const CANADA_2026_PARAMETERS = {
     nonEligibleDividendFederalCreditRate: 9 / 13,
     federalPensionIncomeCreditRate: 0.14,
     provincialPensionIncomeAmount: { AB: 1753, BC: 1000, MB: 1000, NB: 1000, NL: 1000, NT: 1000, NS: 1173, NU: 2000, ON: 1796, PE: 1000, SK: 1000, YT: 2000 },
+    // Provincial dividend tax credits as a fraction of the TAXABLE (grossed-up)
+    // dividend: [eligible, non-eligible]. 2026 rates (RSM 2025 planner and
+    // Accountor 2026 table agree). NS non-eligible is 1.50% from 2025 (was
+    // 2.99%); PEI non-eligible is 1.30%. QC is included for completeness but
+    // this engine models QC provincial tax as 0 (no QC brackets), so its
+    // credits never change a result today.
+    provincialDividendCreditRate: {
+      AB: [0.0812, 0.0218], BC: [0.12, 0.0196], MB: [0.08, 0.0078], NB: [0.14, 0.0275],
+      NL: [0.063, 0.032], NS: [0.0885, 0.015], NT: [0.115, 0.06], NU: [0.0551, 0.0261],
+      ON: [0.10, 0.029863], PE: [0.105, 0.013], QC: [0.117, 0.0342], SK: [0.11, 0.0252],
+      YT: [0.1202, 0.0067],
+    },
+    // Provincial age amounts (65+) and the net-income thresholds above which
+    // the amount is reduced by 15% — 2026 base values = 2025 Taxtips/CRA
+    // amounts × 1.02, the same convention this file already uses for the
+    // federal age amount (9,028 → 9,208). QC omitted: no QC brackets in this
+    // engine, so a QC age amount would never change a result.
+    provincialAgeAmount: { AB: 6345, BC: 5915, MB: 3803, NB: 6158, NL: 7205, NS: 5849, NT: 8902, NU: 12549, ON: 6347, PE: 6640, SK: 5901, YT: 9208 },
+    provincialAgeAmountReductionThreshold: { AB: 47234, BC: 44032, MB: 28304, NB: 45844, NL: 39486, NS: 31445, NT: 46432, NU: 46432, ON: 47257, PE: 37332, SK: 43926, YT: 46432 },
+    provincialAgeAmountReductionRate: 0.15,
   },
   oasRecovery: { startIncome: 95323 }, // 2026 recovery threshold (ITA s.180.2); indexed annually
 } as const;
