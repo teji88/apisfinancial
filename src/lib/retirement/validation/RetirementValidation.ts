@@ -62,7 +62,7 @@ export function runRetirementGoldenCases(): GoldenCaseResult[] {
   const taxable = createAccountState({id:"rrsp",owner:"MAIN_USER",type:"RRSP",valuation:{mode:"MANUAL",value:1000}});
   cases.push({name:"TFSA withdrawals are tax-free",passed:calculateBasicTax(0,"AB",65).totalTax === 0,details:"Zero taxable income produces zero modeled basic tax."});
   cases.push({name:"RRSP withdrawals are taxable",passed:calculateIncrementalWithdrawalCost(50000,1000,"AB",65).incrementalTax > 0,details:"A positive registered withdrawal creates incremental tax."});
-  cases.push({name:"RRIF minimum before age 71 is zero",passed:mandatoryRegisteredWithdrawal("RRIF",70,100000) === 0,details:"No minimum is required before age 71."});
+  cases.push({name:"RRIF minimum before age 71 follows 1/(90-age)",passed:Math.abs(mandatoryRegisteredWithdrawal("RRIF",70,100000) - 100000 * 0.05 / 12) < 1e-9,details:"CRA requires a RRIF/LIF minimum withdrawal before 71 at 1/(90-age) — 5% at 70, 4% at 65."});
   cases.push({name:"RRIF minimum at 71 is positive",passed:mandatoryRegisteredWithdrawal("RRIF",71,100000) > 0,details:"The age-71 minimum is applied."});
   cases.push({name:"OAS residence is capped at 40 years",passed:estimateGovernmentBenefits({...base.household.people[0],oasResidenceYears:80},65,0,{calendarYear:2026}).oas === estimateGovernmentBenefits(base.household.people[0],65,0,{calendarYear:2026}).oas,details:"Residence factor is capped at full residence."});
   cases.push({name:"CPP survivor cannot exceed requested/base cap",passed:estimateCppSurvivorAnnual(12000,70,0,60) <= 7200,details:"Survivor estimate is bounded by the modeled survivor percentage."});
