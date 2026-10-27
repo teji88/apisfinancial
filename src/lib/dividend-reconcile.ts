@@ -105,6 +105,36 @@ function recordedInListing(
 
 export type SuggestionKind = "missing" | "fix";
 
+/**
+ * Whether a suggestion needs a human look before it is recorded.
+ *
+ * Doubtful means any of:
+ * - kind "fix": something IS recorded, but it disagrees with the expected
+ *   payment (amount, date, or withholding) — overwriting it unseen would
+ *   destroy the user's own ledger entry;
+ * - awaitingPayDate: the fallback quote-feed event has an ex-date but no
+ *   known payment date, and a date is required to record;
+ * - a non-empty reasons list: the reconciler flagged something about it;
+ * - a non-positive expected amount: not a real payment.
+ *
+ * Everything else — unrecorded, dated, unflagged, positive — is confident
+ * enough to record in bulk. This is the rule the dividends page's
+ * "Accept all confident" button uses; single-review recording is unaffected.
+ */
+export function isDoubtfulDividend(p: {
+  kind: SuggestionKind;
+  awaitingPayDate?: boolean | undefined;
+  reasons: string[];
+  expected: number;
+}): boolean {
+  return (
+    p.kind !== "missing" ||
+    p.awaitingPayDate === true ||
+    p.reasons.length > 0 ||
+    !(p.expected > 0)
+  );
+}
+
 export type DividendSuggestion = {
   key: string;
   kind: SuggestionKind;

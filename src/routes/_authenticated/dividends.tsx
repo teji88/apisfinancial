@@ -15,9 +15,10 @@ import { CalendarClock, Coins, Percent, Sprout } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { usePortfolio, useAddTransaction, useUpdateTransaction } from "@/lib/portfolio";
+import { usePortfolio, useAddTransaction, useAddTransactions, useUpdateTransaction } from "@/lib/portfolio";
 import { getDividendHistory, getFxRateOn } from "@/lib/history.functions";
 import {
+  isDoubtfulDividend,
   reconcileDividends,
   withholdingRate,
   type DividendSuggestion,
@@ -86,6 +87,7 @@ export function DividendsPage() {
   const { accounts, holdings, transactions, quotes, fxUsdCad, pricesAsOf, loading } =
     usePortfolio();
   const addTransaction = useAddTransaction();
+  const addTransactions = useAddTransactions();
   const updateTransaction = useUpdateTransaction();
   const fetchDivHistory = useServerFn(getDividendHistory);
   const fetchFxRateOn = useServerFn(getFxRateOn);
@@ -94,6 +96,7 @@ export function DividendsPage() {
   const userId = user?.id ?? null;
   const dismissedKey = dismissedKeyFor(userId);
   const [recording, setRecording] = useState<string | null>(null);
+  const [bulkRecording, setBulkRecording] = useState(false);
   const [review, setReview] = useState<ReviewDraft | null>(null);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -221,6 +224,13 @@ export function DividendsPage() {
     (p) =>
       dismissed.includes(p.key) && (pendingAccount === "all" || p.accountId === pendingAccount),
   ).length;
+  // Bulk-accept candidates: the visible pending items that need no human
+  // look. Doubtful ones (fixes, dateless fallbacks, flagged, zero-amount)
+  // stay in the list for individual review.
+  const bulkEligible = useMemo(
+    () => pending.filter((p) => !isDoubtfulDividend(p)),
+    [pending],
+  );
 
   const totals = useMemo(() => {
     const marketValue = summaryRows.reduce((s, r) => s + r.marketValue, 0);
@@ -390,6 +400,66 @@ export function DividendsPage() {
     }
   };
 
+  const acceptAllConfident = async () => {
+    if (entitlement.readOnly) {
+      setUpgradeOpen(true);
+      return;
+    }
+    if (bulkEligible.length === 0 || bulkRecording) return;
+    setBulkRecording(true);
+    try {
+      // Mirror the single-review dialog: USD items use the historical rate
+      // for their pay date when available, otherwise the current rate.
+      const fxByKey = new Map<string, number>();
+      await Promise.all(
+        bulkEligible.map(async (p) => {
+          if (p.currency !== "USD") return;
+          try {
+            const { rate } = await fetchFxRateOn({ data: { date: p.payDate } });
+            if (rate != null && Number.isFinite(rate) && rate > 0) fxByKey.set(p.key, rate);
+          } catch {
+            // Fall through to the current rate, like the dialog does.
+          }
+        }),
+      );
+      const inputs = bulkEligible.map((p) => {
+        const holding = holdings.find((h) => h.id === p.holdingId);
+        return {
+          accountId: p.accountId,
+          symbol: p.symbol,
+          name: holding?.name ?? null,
+          assetType: holding?.asset_type ?? "Stock",
+          transactionType: "DIVIDEND" as const,
+          units: 0,
+          pricePerUnit: 0,
+          amount: Number(p.expected.toFixed(2)),
+          currency: p.currency,
+          fxRate: p.currency === "USD" ? (fxByKey.get(p.key) ?? fxUsdCad) : 1,
+          fee: 0,
+          date: p.payDate,
+        };
+      });
+      const result = await addTransactions.mutateAsync({ inputs });
+      const failedRows = result.failed.reduce((s, f) => s + f.rowCount, 0);
+      const leftBehind = pending.length - result.saved;
+      if (result.saved > 0) {
+        toast.success(
+          `Recorded ${result.saved} dividend${result.saved === 1 ? "" : "s"}` +
+            (leftBehind > 0 ? ` · ${leftBehind} doubtful left for review` : ""),
+        );
+      }
+      if (failedRows > 0) {
+        toast.error(
+          `${failedRows} dividend${failedRows === 1 ? "" : "s"} could not be recorded — left for review`,
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not record those dividends");
+    } finally {
+      setBulkRecording(false);
+    }
+  };
+
   const tooltipStyle = {
     background: "var(--popover)",
     border: "1px solid var(--border)",
@@ -477,6 +547,18 @@ export function DividendsPage() {
             Dividends to record or fix
           </h2>
           <span className="flex items-center gap-3 text-xs text-muted-foreground">
+            {bulkEligible.length > 0 ? (
+              <Button
+                size="sm"
+                disabled={bulkRecording}
+                title="Records every visible missing dividend with a known payment date and no flags. Fixes, dateless items, and flagged items stay here for individual review."
+                onClick={() => void acceptAllConfident()}
+              >
+                {bulkRecording
+                  ? "Recording…"
+                  : `Accept all confident (${bulkEligible.length})`}
+              </Button>
+            ) : null}
             <select
               aria-label="Filter by account"
               className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
