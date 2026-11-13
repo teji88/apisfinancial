@@ -1,7 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { ArrowDownRight, ArrowUpRight, Check, PiggyBank, TrendingUp } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  PiggyBank,
+  TrendingUp,
+} from "lucide-react";
 import {
   assessTaxLocation,
   totalActionableDrag,
@@ -29,6 +36,17 @@ import {
   type Transaction,
 } from "@/lib/finance";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  buildBreakdownRows,
+  formatShare,
+  groupAccountsByType,
+  groupPositionsBySymbol,
+  sanitizeSelection,
+  toggleAccountId,
+  toggleAccountType,
+} from "@/lib/portfolioBreakdown";
 
 import {
   Table,
@@ -38,14 +56,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 /** Which accounts the dashboard figures cover. Children never appear in the main stats. */
 export type FamilyView = "mine" | "household" | "family";
@@ -66,6 +76,21 @@ function loadFamilyView(): FamilyView {
     /* storage unavailable — fall through */
   }
   return "mine";
+}
+
+const SELECTION_KEY = "apis-dashboard-account-selection";
+
+/** The raw persisted picker choice: null when never stored, [] when the user unchecked everything. */
+function loadStoredSelection(): string[] | null {
+  try {
+    const raw = localStorage.getItem(SELECTION_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((v): v is string => typeof v === "string");
+  } catch {
+    return null;
+  }
 }
 
 /** True when an account belongs in the main figures for the given view. */
@@ -203,8 +228,8 @@ function FamilySection({
         Family
       </h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        Children&apos;s accounts — tracked for performance only. Excluded from your figures and
-        net worth.
+        Children&apos;s accounts — tracked for performance only. Excluded from your figures and net
+        worth.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {childGroups.map(([name, childAccounts]) => (
@@ -260,14 +285,31 @@ function Dashboard() {
     [positions, viewAccountIds],
   );
 
-  const [accountFilter, setAccountFilter] = useState("all");
+  // Multi-select account picker for the breakdown and Holdings table:
+  // include or exclude any accounts in the current family view. The raw
+  // choice is persisted; the effective selection re-sanitizes whenever the
+  // view changes (e.g. Mine -> Household), falling back to all accounts
+  // when the stored ids no longer overlap the view.
+  const viewAccountIdList = useMemo(() => viewAccounts.map((a) => a.id), [viewAccounts]);
+  const [storedSelection, setStoredSelection] = useState<string[] | null>(loadStoredSelection);
+  const selectedAccountIds = useMemo(
+    () => sanitizeSelection(storedSelection, viewAccountIdList),
+    [storedSelection, viewAccountIdList],
+  );
+  const selectedIdSet = useMemo(() => new Set(selectedAccountIds), [selectedAccountIds]);
+
+  useEffect(() => {
+    if (storedSelection == null) return;
+    try {
+      localStorage.setItem(SELECTION_KEY, JSON.stringify(storedSelection));
+    } catch {
+      /* storage unavailable — selection still applies for this session */
+    }
+  }, [storedSelection]);
 
   const visiblePositions = useMemo(
-    () =>
-      accountFilter === "all"
-        ? openPositions
-        : openPositions.filter((p) => p.accountId === accountFilter),
-    [openPositions, accountFilter],
+    () => openPositions.filter((p) => selectedIdSet.has(p.accountId)),
+    [openPositions, selectedIdSet],
   );
 
   const summaries = useMemo(
@@ -283,6 +325,28 @@ function Dashboard() {
       ),
     [viewAccounts, transactions, holdings, quotes, fxUsdCad],
   );
+
+  // Portfolio breakdown for the selected accounts: positions grouped by
+  // symbol, plus uninvested cash, as shares of the selected total.
+  const accountGroups = useMemo(() => groupAccountsByType(viewAccounts), [viewAccounts]);
+  const selectedCash = useMemo(
+    () => summaries.filter((s) => selectedIdSet.has(s.account.id)).reduce((s, x) => s + x.cash, 0),
+    [summaries, selectedIdSet],
+  );
+  const breakdownRows = useMemo(
+    () => buildBreakdownRows(groupPositionsBySymbol(visiblePositions), selectedCash),
+    [visiblePositions, selectedCash],
+  );
+  const breakdownTotal = useMemo(
+    () => breakdownRows.reduce((s, r) => s + r.marketValue, 0),
+    [breakdownRows],
+  );
+
+  const handleToggleAccount = (id: string) =>
+    setStoredSelection(toggleAccountId(selectedAccountIds, id));
+  const handleToggleType = (ids: string[]) =>
+    setStoredSelection(toggleAccountType(selectedAccountIds, ids));
+  const handleSelectAll = () => setStoredSelection([...viewAccountIdList]);
 
   const totals = useMemo(() => {
     const marketValue = summaries.reduce((s, x) => s + x.marketValue, 0);
@@ -305,7 +369,13 @@ function Dashboard() {
       flows.length > 0 && totalValue !== 0
         ? xirr([...flows, { date: new Date(), amount: totalValue }])
         : null;
-    const series = buildValuationSeries(viewTransactions, viewHoldings, quotes, fxUsdCad, cashAccounts);
+    const series = buildValuationSeries(
+      viewTransactions,
+      viewHoldings,
+      quotes,
+      fxUsdCad,
+      cashAccounts,
+    );
     const twrrTotal = twrr(series);
     const twrrAnnual = twrrTotal != null ? annualise(twrrTotal, series) : null;
 
@@ -414,7 +484,6 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
-
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
@@ -443,7 +512,9 @@ function Dashboard() {
             ))}
           </div>
           <Button asChild variant="outline">
-            <Link to="/investments" search={{ tab: "ledger" }}>Add a transaction</Link>
+            <Link to="/investments" search={{ tab: "ledger" }}>
+              Add a transaction
+            </Link>
           </Button>
         </div>
       </div>
@@ -606,6 +677,122 @@ function Dashboard() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Portfolio breakdown
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {selectedAccountIds.length === viewAccounts.length
+                ? `All ${viewAccounts.length} account${viewAccounts.length === 1 ? "" : "s"} · ${formatCad(breakdownTotal)}`
+                : `${selectedAccountIds.length} of ${viewAccounts.length} accounts · ${formatCad(breakdownTotal)}`}
+            </p>
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="h-8 text-xs"
+                aria-label="Choose accounts for the breakdown"
+              >
+                {selectedAccountIds.length === viewAccounts.length
+                  ? "All accounts"
+                  : `${selectedAccountIds.length} of ${viewAccounts.length} accounts`}
+                <ChevronDown className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="max-h-[24rem] w-80 overflow-auto p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Accounts
+                </span>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleSelectAll}>
+                  All
+                </Button>
+              </div>
+              {accountGroups.map((group) => {
+                const groupIds = group.accounts.map((a) => a.id);
+                const selectedInGroup = groupIds.filter((id) => selectedIdSet.has(id)).length;
+                return (
+                  <div key={group.type} className="mb-2">
+                    <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs font-medium hover:bg-muted/60">
+                      <Checkbox
+                        checked={
+                          selectedInGroup === groupIds.length
+                            ? true
+                            : selectedInGroup === 0
+                              ? false
+                              : "indeterminate"
+                        }
+                        onCheckedChange={() => handleToggleType(groupIds)}
+                        aria-label={`Toggle all ${group.type} accounts`}
+                      />
+                      {group.type} ({selectedInGroup}/{groupIds.length})
+                    </label>
+                    {group.accounts.map((a) => (
+                      <label
+                        key={a.id}
+                        className="flex cursor-pointer items-center gap-2 rounded py-1 pl-7 pr-1 text-xs hover:bg-muted/60"
+                      >
+                        <Checkbox
+                          checked={selectedIdSet.has(a.id)}
+                          onCheckedChange={() => handleToggleAccount(a.id)}
+                          aria-label={`Toggle ${a.account_name}`}
+                        />
+                        {a.account_name}
+                      </label>
+                    ))}
+                  </div>
+                );
+              })}
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div className="max-h-[37.5rem] overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead>Holding</TableHead>
+                <TableHead className="text-right">Units</TableHead>
+                <TableHead className="text-right">Market value (CAD)</TableHead>
+                <TableHead className="text-right">% of selected</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {breakdownRows.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <div className="font-medium">{r.label}</div>
+                    {r.detail ? (
+                      <div className="text-xs text-muted-foreground">{r.detail}</div>
+                    ) : null}
+                    <div className="mt-1.5 h-1.5 w-40 max-w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${Math.min(100, r.pct)}%` }}
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell className="num text-right">
+                    {r.units != null ? formatUnits(r.units) : "—"}
+                  </TableCell>
+                  <TableCell className="num text-right">{formatCad(r.marketValue)}</TableCell>
+                  <TableCell className="num text-right">{formatShare(r.pct)}</TableCell>
+                </TableRow>
+              ))}
+              {breakdownRows.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                    No holdings in the selected accounts.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <div className="panel overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               Holdings
             </h2>
             {actionableTaxDrag >= 25 ? (
@@ -622,19 +809,13 @@ function Dashboard() {
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Select value={accountFilter} onValueChange={setAccountFilter}>
-              <SelectTrigger className="h-8 w-56 text-xs" aria-label="Filter holdings by account">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All accounts</SelectItem>
-                {viewAccounts.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.account_name} · {a.account_type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <span className="text-xs text-muted-foreground">
+              {selectedAccountIds.length === viewAccounts.length
+                ? "All accounts"
+                : `${selectedAccountIds.length} of ${viewAccounts.length} accounts`}
+              {" · "}
+              set in Portfolio breakdown
+            </span>
             <span className="text-xs text-muted-foreground">
               Prices as of {pricesAsOf ?? "—"} · refreshed once daily after market close · USD/CAD{" "}
               {fxUsdCad.toFixed(4)}
@@ -652,6 +833,7 @@ function Dashboard() {
                 <TableHead className="text-right">Units</TableHead>
                 <TableHead className="text-right">Price (traded)</TableHead>
                 <TableHead className="text-right">Market value (CAD)</TableHead>
+                <TableHead className="text-right">% of selected</TableHead>
                 <TableHead className="text-right">ACB / unit (CAD)</TableHead>
                 <TableHead className="text-right">Day (CAD)</TableHead>
                 <TableHead className="text-right">Total return (CAD)</TableHead>
@@ -660,100 +842,103 @@ function Dashboard() {
             </TableHeader>
             <TableBody>
               {visiblePositions.map((p) => {
-                  const account = accounts.find((a) => a.id === p.accountId);
-                  return (
-                    <TableRow key={p.holdingId}>
-                      <TableCell>
-                        <div className="font-medium">{p.symbol}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {account?.account_type ?? ""} · {p.currency}
-                        </div>
-                      </TableCell>
-                      <TableCell className="num text-right">{formatUnits(p.units)}</TableCell>
-                      <TableCell className="num text-right">
-                        {p.price != null ? (
-                          <span
-                            className="inline-flex items-baseline gap-1"
-                            title={
-                              p.priceEstimated
-                                ? "No market feed for this symbol — valued at your own recorded price"
-                                : undefined
-                            }
-                          >
-                            {p.price.toFixed(2)}
-                            <CurrencyBadge code={p.currency} />
-                            {p.priceEstimated ? <CurrencyBadge code="your price" /> : null}
-                          </span>
+                const account = accounts.find((a) => a.id === p.accountId);
+                return (
+                  <TableRow key={p.holdingId}>
+                    <TableCell>
+                      <div className="font-medium">{p.symbol}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {account?.account_type ?? ""} · {p.currency}
+                      </div>
+                    </TableCell>
+                    <TableCell className="num text-right">{formatUnits(p.units)}</TableCell>
+                    <TableCell className="num text-right">
+                      {p.price != null ? (
+                        <span
+                          className="inline-flex items-baseline gap-1"
+                          title={
+                            p.priceEstimated
+                              ? "No market feed for this symbol — valued at your own recorded price"
+                              : undefined
+                          }
+                        >
+                          {p.price.toFixed(2)}
+                          <CurrencyBadge code={p.currency} />
+                          {p.priceEstimated ? <CurrencyBadge code="your price" /> : null}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell className="num text-right">
+                      <span className="inline-flex items-baseline gap-1">
+                        {formatCad(p.marketValue)}
+                        <CurrencyBadge code="CAD" />
+                      </span>
+                    </TableCell>
+                    <TableCell className="num text-right">
+                      {formatShare(breakdownTotal > 0 ? (p.marketValue / breakdownTotal) * 100 : 0)}
+                    </TableCell>
+                    <TableCell className="num text-right">
+                      <span className="inline-flex items-baseline gap-1">
+                        {formatCad(p.acbPerUnit)}
+                        <CurrencyBadge code="CAD" />
+                      </span>
+                    </TableCell>
+                    <TableCell
+                      className={`num text-right ${p.dayChange >= 0 ? "text-gain" : "text-loss"}`}
+                    >
+                      {formatCad(p.dayChange)}
+                    </TableCell>
+                    <TableCell
+                      className={`num text-right ${p.totalReturn >= 0 ? "text-gain" : "text-loss"}`}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {p.totalReturn >= 0 ? (
+                          <ArrowUpRight className="h-3.5 w-3.5" />
                         ) : (
-                          "—"
+                          <ArrowDownRight className="h-3.5 w-3.5" />
                         )}
-                      </TableCell>
-                      <TableCell className="num text-right">
-                        <span className="inline-flex items-baseline gap-1">
-                          {formatCad(p.marketValue)}
-                          <CurrencyBadge code="CAD" />
-                        </span>
-                      </TableCell>
-                      <TableCell className="num text-right">
-                        <span className="inline-flex items-baseline gap-1">
-                          {formatCad(p.acbPerUnit)}
-                          <CurrencyBadge code="CAD" />
-                        </span>
-                      </TableCell>
-                      <TableCell
-                        className={`num text-right ${p.dayChange >= 0 ? "text-gain" : "text-loss"}`}
-                      >
-                        {formatCad(p.dayChange)}
-                      </TableCell>
-                      <TableCell
-                        className={`num text-right ${p.totalReturn >= 0 ? "text-gain" : "text-loss"}`}
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          {p.totalReturn >= 0 ? (
-                            <ArrowUpRight className="h-3.5 w-3.5" />
-                          ) : (
-                            <ArrowDownRight className="h-3.5 w-3.5" />
-                          )}
-                          {formatCad(p.totalReturn)} ({formatPct(p.totalReturnPct)})
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {(() => {
-                          const a = taxAssessments.get(p.holdingId);
-                          if (!a || a.status === "unknown")
-                            return (
-                              <span
-                                className="text-xs text-muted-foreground"
-                                title="Not enough data to assess tax location."
-                              >
-                                —
-                              </span>
-                            );
-                          if (a.status === "ok")
-                            return (
-                              <span title={a.tooltip} className="inline-flex justify-end">
-                                <Check className="h-4 w-4 text-gain" aria-label="Well placed" />
-                              </span>
-                            );
+                        {formatCad(p.totalReturn)} ({formatPct(p.totalReturnPct)})
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(() => {
+                        const a = taxAssessments.get(p.holdingId);
+                        if (!a || a.status === "unknown")
                           return (
                             <span
-                              title={a.tooltip}
-                              className={`text-xs font-medium ${
-                                a.status === "flag" ? "text-amber-600" : "text-muted-foreground"
-                              }`}
+                              className="text-xs text-muted-foreground"
+                              title="Not enough data to assess tax location."
                             >
-                              {a.message}
+                              —
                             </span>
                           );
-                        })()}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                        if (a.status === "ok")
+                          return (
+                            <span title={a.tooltip} className="inline-flex justify-end">
+                              <Check className="h-4 w-4 text-gain" aria-label="Well placed" />
+                            </span>
+                          );
+                        return (
+                          <span
+                            title={a.tooltip}
+                            className={`text-xs font-medium ${
+                              a.status === "flag" ? "text-amber-600" : "text-muted-foreground"
+                            }`}
+                          >
+                            {a.message}
+                          </span>
+                        );
+                      })()}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {visiblePositions.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
-                    No open positions in this account.
+                  <TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">
+                    No open positions in the selected accounts.
                   </TableCell>
                 </TableRow>
               )}
