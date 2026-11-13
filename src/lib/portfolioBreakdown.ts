@@ -16,6 +16,8 @@ export type SymbolBreakdownRow = {
   marketValue: number;
   units: number;
   accountIds: string[];
+  /** True when any position for the symbol was recorded as an ETF. */
+  isEtf: boolean;
 };
 
 /**
@@ -26,12 +28,14 @@ export function groupPositionsBySymbol(positions: HoldingPosition[]): SymbolBrea
   const bySymbol = new Map<string, SymbolBreakdownRow>();
   for (const p of positions) {
     const key = p.symbol.toUpperCase();
+    const isEtf = (p.assetType ?? "").trim().toUpperCase() === "ETF";
     const row = bySymbol.get(key);
     if (row) {
       row.marketValue += p.marketValue;
       row.units += p.units;
       if (!row.accountIds.includes(p.accountId)) row.accountIds.push(p.accountId);
       if (!row.name && p.name) row.name = p.name;
+      if (isEtf) row.isEtf = true;
     } else {
       bySymbol.set(key, {
         symbol: p.symbol,
@@ -39,6 +43,7 @@ export function groupPositionsBySymbol(positions: HoldingPosition[]): SymbolBrea
         marketValue: p.marketValue,
         units: p.units,
         accountIds: [p.accountId],
+        isEtf,
       });
     }
   }

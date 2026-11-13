@@ -56,6 +56,36 @@ export type Database = {
         }
         Relationships: []
       }
+      etf_holdings: {
+        Row: {
+          as_of: string
+          etf_symbol: string
+          source: string
+          underlying_name: string
+          underlying_symbol: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          as_of: string
+          etf_symbol: string
+          source?: string
+          underlying_name?: string
+          underlying_symbol: string
+          updated_at?: string
+          weight: number
+        }
+        Update: {
+          as_of?: string
+          etf_symbol?: string
+          source?: string
+          underlying_name?: string
+          underlying_symbol?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: []
+      }
       fx_history: {
         Row: {
           created_at: string
