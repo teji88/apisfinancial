@@ -30,6 +30,7 @@ import { Route as AuthenticatedPlanRouteImport } from './routes/_authenticated/p
 import { Route as AuthenticatedPlanAheadRouteImport } from './routes/_authenticated/plan-ahead'
 import { Route as AuthenticatedPropertiesRouteImport } from './routes/_authenticated/properties'
 import { Route as AuthenticatedSmithRouteImport } from './routes/_authenticated/smith'
+import { Route as ApiPublicRefreshEtfHoldingsRouteImport } from './routes/api/public/refresh-etf-holdings'
 import { Route as ApiPublicRefreshPricesRouteImport } from './routes/api/public/refresh-prices'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 import { Route as LovableEmailAuthPreviewRouteImport } from './routes/lovable/email/auth/preview'
@@ -142,6 +143,12 @@ const AuthenticatedSmithRoute = AuthenticatedSmithRouteImport.update({
   path: '/smith',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicRefreshEtfHoldingsRoute =
+  ApiPublicRefreshEtfHoldingsRouteImport.update({
+    id: '/api/public/refresh-etf-holdings',
+    path: '/api/public/refresh-etf-holdings',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicRefreshPricesRoute = ApiPublicRefreshPricesRouteImport.update({
   id: '/api/public/refresh-prices',
   path: '/api/public/refresh-prices',
@@ -191,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/plan-ahead': typeof AuthenticatedPlanAheadRoute
   '/properties': typeof AuthenticatedPropertiesRoute
   '/smith': typeof AuthenticatedSmithRoute
+  '/api/public/refresh-etf-holdings': typeof ApiPublicRefreshEtfHoldingsRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
@@ -218,6 +226,7 @@ export interface FileRoutesByTo {
   '/plan-ahead': typeof AuthenticatedPlanAheadRoute
   '/properties': typeof AuthenticatedPropertiesRoute
   '/smith': typeof AuthenticatedSmithRoute
+  '/api/public/refresh-etf-holdings': typeof ApiPublicRefreshEtfHoldingsRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
@@ -247,6 +256,7 @@ export interface FileRoutesById {
   '/_authenticated/plan-ahead': typeof AuthenticatedPlanAheadRoute
   '/_authenticated/properties': typeof AuthenticatedPropertiesRoute
   '/_authenticated/smith': typeof AuthenticatedSmithRoute
+  '/api/public/refresh-etf-holdings': typeof ApiPublicRefreshEtfHoldingsRoute
   '/api/public/refresh-prices': typeof ApiPublicRefreshPricesRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/lovable/email/auth/preview': typeof LovableEmailAuthPreviewRoute
@@ -276,6 +286,7 @@ export interface FileRouteTypes {
     | '/plan-ahead'
     | '/properties'
     | '/smith'
+    | '/api/public/refresh-etf-holdings'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
     | '/lovable/email/auth/preview'
@@ -303,6 +314,7 @@ export interface FileRouteTypes {
     | '/plan-ahead'
     | '/properties'
     | '/smith'
+    | '/api/public/refresh-etf-holdings'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
     | '/lovable/email/auth/preview'
@@ -331,6 +343,7 @@ export interface FileRouteTypes {
     | '/_authenticated/plan-ahead'
     | '/_authenticated/properties'
     | '/_authenticated/smith'
+    | '/api/public/refresh-etf-holdings'
     | '/api/public/refresh-prices'
     | '/api/public/payments/webhook'
     | '/lovable/email/auth/preview'
@@ -347,6 +360,7 @@ export interface RootRouteChildren {
   RetirementRoute: typeof RetirementRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   SmithManoeuvreGuideRoute: typeof SmithManoeuvreGuideRoute
+  ApiPublicRefreshEtfHoldingsRoute: typeof ApiPublicRefreshEtfHoldingsRoute
   ApiPublicRefreshPricesRoute: typeof ApiPublicRefreshPricesRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
   LovableEmailAuthPreviewRoute: typeof LovableEmailAuthPreviewRoute
@@ -503,6 +517,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSmithRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/refresh-etf-holdings': {
+      id: '/api/public/refresh-etf-holdings'
+      path: '/api/public/refresh-etf-holdings'
+      fullPath: '/api/public/refresh-etf-holdings'
+      preLoaderRoute: typeof ApiPublicRefreshEtfHoldingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/refresh-prices': {
       id: '/api/public/refresh-prices'
       path: '/api/public/refresh-prices'
@@ -585,6 +606,7 @@ const rootRouteChildren: RootRouteChildren = {
   RetirementRoute: RetirementRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   SmithManoeuvreGuideRoute: SmithManoeuvreGuideRoute,
+  ApiPublicRefreshEtfHoldingsRoute: ApiPublicRefreshEtfHoldingsRoute,
   ApiPublicRefreshPricesRoute: ApiPublicRefreshPricesRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
   LovableEmailAuthPreviewRoute: LovableEmailAuthPreviewRoute,
@@ -594,13 +616,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

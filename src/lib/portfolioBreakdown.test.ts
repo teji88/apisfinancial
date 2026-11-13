@@ -89,6 +89,16 @@ describe("groupPositionsBySymbol", () => {
     expect(rows.map((r) => r.symbol)).toEqual(["BIG", "SMALL"]);
     expect(groupPositionsBySymbol([])).toEqual([]);
   });
+
+  it("marks a symbol as an ETF when any of its positions is recorded as one", () => {
+    const rows = groupPositionsBySymbol([
+      pos({ symbol: "XEQT", accountId: "a1", marketValue: 100, assetType: "Stock" }),
+      pos({ symbol: "XEQT", accountId: "a2", marketValue: 200, assetType: "ETF" }),
+      pos({ symbol: "RY.TO", accountId: "a1", marketValue: 50, assetType: "Stock" }),
+    ]);
+    expect(rows.find((r) => r.symbol === "XEQT")?.isEtf).toBe(true);
+    expect(rows.find((r) => r.symbol === "RY.TO")?.isEtf).toBe(false);
+  });
 });
 
 describe("buildBreakdownRows", () => {

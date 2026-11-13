@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import {
   ArrowDownRight,
@@ -47,6 +49,8 @@ import {
   toggleAccountId,
   toggleAccountType,
 } from "@/lib/portfolioBreakdown";
+import { buildLookthroughRows } from "@/lib/etfLookthrough";
+import { getEtfHoldings } from "@/lib/etfHoldings.functions";
 
 import {
   Table,
@@ -333,14 +337,46 @@ function Dashboard() {
     () => summaries.filter((s) => selectedIdSet.has(s.account.id)).reduce((s, x) => s + x.cash, 0),
     [summaries, selectedIdSet],
   );
+  // Positions grouped by symbol for the selected accounts; the same rows
+  // feed the breakdown and, when look-through is on, the per-stock view.
+  const symbolRows = useMemo(() => groupPositionsBySymbol(visiblePositions), [visiblePositions]);
   const breakdownRows = useMemo(
-    () => buildBreakdownRows(groupPositionsBySymbol(visiblePositions), selectedCash),
-    [visiblePositions, selectedCash],
+    () => buildBreakdownRows(symbolRows, selectedCash),
+    [symbolRows, selectedCash],
   );
   const breakdownTotal = useMemo(
     () => breakdownRows.reduce((s, r) => s + r.marketValue, 0),
     [breakdownRows],
   );
+  const investedTotal = useMemo(
+    () => symbolRows.reduce((s, r) => s + r.marketValue, 0),
+    [symbolRows],
+  );
+
+  // ETF look-through: expand the selected ETFs into their underlying
+  // stocks. Holdings come from the shared library (refreshed quarterly);
+  // the first open seeds it, so it can take a few seconds.
+  const [lookthrough, setLookthrough] = useState(false);
+  const etfSymbols = useMemo(
+    () => symbolRows.filter((r) => r.isEtf).map((r) => r.symbol),
+    [symbolRows],
+  );
+  const fetchEtfHoldings = useServerFn(getEtfHoldings);
+  const etfHoldingsQuery = useQuery({
+    queryKey: ["etf-holdings", etfSymbols.join(",")],
+    enabled: lookthrough && etfSymbols.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+    queryFn: async () => fetchEtfHoldings({ data: { symbols: etfSymbols } }),
+  });
+  const lookthroughResult = useMemo(
+    () =>
+      lookthrough && etfHoldingsQuery.data
+        ? buildLookthroughRows(symbolRows, etfHoldingsQuery.data.byEtf)
+        : null,
+    [lookthrough, etfHoldingsQuery.data, symbolRows],
+  );
+  const showLookthrough = lookthrough && lookthroughResult != null;
 
   const handleToggleAccount = (id: string) =>
     setStoredSelection(toggleAccountId(selectedAccountIds, id));
@@ -680,109 +716,245 @@ function Dashboard() {
               Portfolio breakdown
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {selectedAccountIds.length === viewAccounts.length
-                ? `All ${viewAccounts.length} account${viewAccounts.length === 1 ? "" : "s"} · ${formatCad(breakdownTotal)}`
-                : `${selectedAccountIds.length} of ${viewAccounts.length} accounts · ${formatCad(breakdownTotal)}`}
+              {showLookthrough
+                ? `Look-through · ${formatCad(investedTotal)} invested${lookthroughResult.asOf ? ` · ETF holdings as of ${lookthroughResult.asOf}` : ""}`
+                : lookthrough && etfHoldingsQuery.isPending
+                  ? "Look-through · loading ETF holdings…"
+                  : lookthrough && etfHoldingsQuery.isError
+                    ? "Look-through · couldn't load ETF holdings"
+                    : selectedAccountIds.length === viewAccounts.length
+                      ? `All ${viewAccounts.length} account${viewAccounts.length === 1 ? "" : "s"} · ${formatCad(breakdownTotal)}`
+                      : `${selectedAccountIds.length} of ${viewAccounts.length} accounts · ${formatCad(breakdownTotal)}`}
             </p>
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className="h-8 text-xs"
-                aria-label="Choose accounts for the breakdown"
-              >
-                {selectedAccountIds.length === viewAccounts.length
-                  ? "All accounts"
-                  : `${selectedAccountIds.length} of ${viewAccounts.length} accounts`}
-                <ChevronDown className="ml-1 h-3.5 w-3.5" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="max-h-[24rem] w-80 overflow-auto p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Accounts
-                </span>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleSelectAll}>
-                  All
+          <div className="flex items-center gap-2">
+            <Button
+              variant={lookthrough ? "default" : "outline"}
+              className="h-8 text-xs"
+              aria-pressed={lookthrough}
+              disabled={etfSymbols.length === 0}
+              title={
+                etfSymbols.length === 0
+                  ? "No ETFs in the selected accounts"
+                  : "Show each stock held directly and inside ETFs"
+              }
+              onClick={() => setLookthrough((v) => !v)}
+            >
+              Look-through
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="h-8 text-xs"
+                  aria-label="Choose accounts for the breakdown"
+                >
+                  {selectedAccountIds.length === viewAccounts.length
+                    ? "All accounts"
+                    : `${selectedAccountIds.length} of ${viewAccounts.length} accounts`}
+                  <ChevronDown className="ml-1 h-3.5 w-3.5" />
                 </Button>
-              </div>
-              {accountGroups.map((group) => {
-                const groupIds = group.accounts.map((a) => a.id);
-                const selectedInGroup = groupIds.filter((id) => selectedIdSet.has(id)).length;
-                return (
-                  <div key={group.type} className="mb-2">
-                    <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs font-medium hover:bg-muted/60">
-                      <Checkbox
-                        checked={
-                          selectedInGroup === groupIds.length
-                            ? true
-                            : selectedInGroup === 0
-                              ? false
-                              : "indeterminate"
-                        }
-                        onCheckedChange={() => handleToggleType(groupIds)}
-                        aria-label={`Toggle all ${group.type} accounts`}
-                      />
-                      {group.type} ({selectedInGroup}/{groupIds.length})
-                    </label>
-                    {group.accounts.map((a) => (
-                      <label
-                        key={a.id}
-                        className="flex cursor-pointer items-center gap-2 rounded py-1 pl-7 pr-1 text-xs hover:bg-muted/60"
-                      >
+              </PopoverTrigger>
+              <PopoverContent align="end" className="max-h-[24rem] w-80 overflow-auto p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Accounts
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={handleSelectAll}
+                  >
+                    All
+                  </Button>
+                </div>
+                {accountGroups.map((group) => {
+                  const groupIds = group.accounts.map((a) => a.id);
+                  const selectedInGroup = groupIds.filter((id) => selectedIdSet.has(id)).length;
+                  return (
+                    <div key={group.type} className="mb-2">
+                      <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs font-medium hover:bg-muted/60">
                         <Checkbox
-                          checked={selectedIdSet.has(a.id)}
-                          onCheckedChange={() => handleToggleAccount(a.id)}
-                          aria-label={`Toggle ${a.account_name}`}
+                          checked={
+                            selectedInGroup === groupIds.length
+                              ? true
+                              : selectedInGroup === 0
+                                ? false
+                                : "indeterminate"
+                          }
+                          onCheckedChange={() => handleToggleType(groupIds)}
+                          aria-label={`Toggle all ${group.type} accounts`}
                         />
-                        {a.account_name}
+                        {group.type} ({selectedInGroup}/{groupIds.length})
                       </label>
-                    ))}
-                  </div>
-                );
-              })}
-            </PopoverContent>
-          </Popover>
+                      {group.accounts.map((a) => (
+                        <label
+                          key={a.id}
+                          className="flex cursor-pointer items-center gap-2 rounded py-1 pl-7 pr-1 text-xs hover:bg-muted/60"
+                        >
+                          <Checkbox
+                            checked={selectedIdSet.has(a.id)}
+                            onCheckedChange={() => handleToggleAccount(a.id)}
+                            aria-label={`Toggle ${a.account_name}`}
+                          />
+                          {a.account_name}
+                        </label>
+                      ))}
+                    </div>
+                  );
+                })}
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
         <div className="max-h-[37.5rem] overflow-auto">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow>
                 <TableHead>Holding</TableHead>
-                <TableHead className="text-right">Units</TableHead>
-                <TableHead className="text-right">Market value (CAD)</TableHead>
-                <TableHead className="text-right">% of selected</TableHead>
+                {showLookthrough ? (
+                  <>
+                    <TableHead className="text-right">Direct (CAD)</TableHead>
+                    <TableHead className="text-right">Via ETFs (CAD)</TableHead>
+                    <TableHead className="text-right">Total (CAD)</TableHead>
+                    <TableHead className="text-right">% of invested</TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead className="text-right">Units</TableHead>
+                    <TableHead className="text-right">Market value (CAD)</TableHead>
+                    <TableHead className="text-right">% of selected</TableHead>
+                  </>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {breakdownRows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>
-                    <div className="font-medium">{r.label}</div>
-                    {r.detail ? (
-                      <div className="text-xs text-muted-foreground">{r.detail}</div>
-                    ) : null}
-                    <div className="mt-1.5 h-1.5 w-40 max-w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary"
-                        style={{ width: `${Math.min(100, r.pct)}%` }}
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell className="num text-right">
-                    {r.units != null ? formatUnits(r.units) : "—"}
-                  </TableCell>
-                  <TableCell className="num text-right">{formatCad(r.marketValue)}</TableCell>
-                  <TableCell className="num text-right">{formatShare(r.pct)}</TableCell>
-                </TableRow>
-              ))}
-              {breakdownRows.length === 0 && (
+              {lookthrough && etfHoldingsQuery.isPending ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                    No holdings in the selected accounts.
+                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                    Loading ETF holdings…
                   </TableCell>
                 </TableRow>
+              ) : lookthrough && etfHoldingsQuery.isError ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                    Couldn&apos;t load ETF holdings — try again later.
+                  </TableCell>
+                </TableRow>
+              ) : showLookthrough ? (
+                <>
+                  {lookthroughResult.rows.map((r) => {
+                    const detailParts = [
+                      r.name,
+                      r.viaEtfs.length > 0 ? `via ${r.viaEtfs.join(", ")}` : null,
+                    ].filter((part): part is string => Boolean(part));
+                    return (
+                      <TableRow key={r.symbol}>
+                        <TableCell>
+                          <div className="font-medium">{r.symbol}</div>
+                          {detailParts.length > 0 ? (
+                            <div className="text-xs text-muted-foreground">
+                              {detailParts.join(" · ")}
+                            </div>
+                          ) : null}
+                          <div className="mt-1.5 h-1.5 w-40 max-w-full overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary"
+                              style={{ width: `${Math.min(100, r.pct)}%` }}
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell className="num text-right">
+                          {r.directValue > 0 ? formatCad(r.directValue) : "—"}
+                        </TableCell>
+                        <TableCell className="num text-right">
+                          {r.viaEtfValue > 0 ? formatCad(r.viaEtfValue) : "—"}
+                        </TableCell>
+                        <TableCell className="num text-right">{formatCad(r.totalValue)}</TableCell>
+                        <TableCell className="num text-right">{formatShare(r.pct)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {lookthroughResult.unmappedValue > 0 && (
+                    <TableRow key="unmapped">
+                      <TableCell>
+                        <div className="font-medium">Unmapped</div>
+                        <div className="text-xs text-muted-foreground">
+                          {lookthroughResult.unmappedEtfs
+                            .map((u) => `${u.symbol} — ${u.reason}`)
+                            .join(" · ")}
+                        </div>
+                        <div className="mt-1.5 h-1.5 w-40 max-w-full overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-muted-foreground"
+                            style={{
+                              width: `${Math.min(100, investedTotal > 0 ? (lookthroughResult.unmappedValue / investedTotal) * 100 : 0)}%`,
+                            }}
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell className="num text-right">—</TableCell>
+                      <TableCell className="num text-right">
+                        {formatCad(lookthroughResult.unmappedValue)}
+                      </TableCell>
+                      <TableCell className="num text-right">
+                        {formatCad(lookthroughResult.unmappedValue)}
+                      </TableCell>
+                      <TableCell className="num text-right">
+                        {formatShare(
+                          investedTotal > 0
+                            ? (lookthroughResult.unmappedValue / investedTotal) * 100
+                            : 0,
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {lookthroughResult.rows.length === 0 && lookthroughResult.unmappedValue <= 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No holdings in the selected accounts.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              ) : (
+                <>
+                  {breakdownRows.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>
+                        <div className="font-medium">{r.label}</div>
+                        {r.detail ? (
+                          <div className="text-xs text-muted-foreground">{r.detail}</div>
+                        ) : null}
+                        <div className="mt-1.5 h-1.5 w-40 max-w-full overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-primary"
+                            style={{ width: `${Math.min(100, r.pct)}%` }}
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell className="num text-right">
+                        {r.units != null ? formatUnits(r.units) : "—"}
+                      </TableCell>
+                      <TableCell className="num text-right">{formatCad(r.marketValue)}</TableCell>
+                      <TableCell className="num text-right">{formatShare(r.pct)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {breakdownRows.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={4}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
+                        No holdings in the selected accounts.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
               )}
             </TableBody>
           </Table>
