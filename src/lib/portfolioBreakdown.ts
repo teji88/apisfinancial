@@ -8,6 +8,7 @@
  * plus uninvested cash in those accounts, so the rows sum to 100%.
  */
 import { ACCOUNT_TYPES, type Account, type HoldingPosition } from "./finance";
+import { isKnownEtfSymbol } from "./knownEtfs";
 
 /** One symbol across the selected accounts, values summed. */
 export type SymbolBreakdownRow = {
@@ -16,7 +17,9 @@ export type SymbolBreakdownRow = {
   marketValue: number;
   units: number;
   accountIds: string[];
-  /** True when any position for the symbol was recorded as an ETF. */
+  /** True when any position for the symbol was recorded as an ETF, or its
+   * ticker is a known ETF (fallback for imports that defaulted asset_type
+   * to "Stock"). */
   isEtf: boolean;
 };
 
@@ -28,7 +31,7 @@ export function groupPositionsBySymbol(positions: HoldingPosition[]): SymbolBrea
   const bySymbol = new Map<string, SymbolBreakdownRow>();
   for (const p of positions) {
     const key = p.symbol.toUpperCase();
-    const isEtf = (p.assetType ?? "").trim().toUpperCase() === "ETF";
+    const isEtf = (p.assetType ?? "").trim().toUpperCase() === "ETF" || isKnownEtfSymbol(p.symbol);
     const row = bySymbol.get(key);
     if (row) {
       row.marketValue += p.marketValue;

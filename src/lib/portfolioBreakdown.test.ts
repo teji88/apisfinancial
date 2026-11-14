@@ -99,6 +99,25 @@ describe("groupPositionsBySymbol", () => {
     expect(rows.find((r) => r.symbol === "XEQT")?.isEtf).toBe(true);
     expect(rows.find((r) => r.symbol === "RY.TO")?.isEtf).toBe(false);
   });
+
+  it("treats known ETF tickers as ETFs even when asset_type says Stock", () => {
+    const rows = groupPositionsBySymbol([
+      pos({ symbol: "FNDX", accountId: "a1", marketValue: 100 }),
+      pos({ symbol: "VE.TO", accountId: "a1", marketValue: 100 }),
+      pos({ symbol: "xeqt", accountId: "a1", marketValue: 100 }),
+      pos({ symbol: "TSX:XIC", accountId: "a1", marketValue: 100 }),
+      pos({ symbol: "AAPL", accountId: "a1", marketValue: 100 }),
+      // SPY has no adapter yet, so the fallback deliberately does not
+      // promote it — it cannot be looked through.
+      pos({ symbol: "SPY", accountId: "a1", marketValue: 100 }),
+    ]);
+    expect(rows.find((r) => r.symbol === "FNDX")?.isEtf).toBe(true);
+    expect(rows.find((r) => r.symbol === "VE.TO")?.isEtf).toBe(true);
+    expect(rows.find((r) => r.symbol === "xeqt")?.isEtf).toBe(true);
+    expect(rows.find((r) => r.symbol === "TSX:XIC")?.isEtf).toBe(true);
+    expect(rows.find((r) => r.symbol === "AAPL")?.isEtf).toBe(false);
+    expect(rows.find((r) => r.symbol === "SPY")?.isEtf).toBe(false);
+  });
 });
 
 describe("buildBreakdownRows", () => {
