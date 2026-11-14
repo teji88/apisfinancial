@@ -4,6 +4,8 @@ import {
   bareEtfSymbol,
   normalizeUnderlyingSymbol,
   parseISharesHoldingsCsv,
+  parseSchwabHoldingsHtml,
+  parseVanguardHoldingsJson,
 } from "./etfHoldings.server";
 
 // Fund-of-funds fixture, modelled on iShares' published XEQT file:
@@ -76,5 +78,145 @@ describe("symbol normalisation", () => {
     expect(normalizeUnderlyingSymbol("AAPL", "United States", "NASDAQ")).toBe("AAPL");
     expect(normalizeUnderlyingSymbol("RY", "Canada", "")).toBe("RY.TO");
     expect(normalizeUnderlyingSymbol("TSX:RY", "", "")).toBe("RY.TO");
+  });
+});
+
+// Schwab fixture, modelled on the live FNDX holdings page: 6-column
+// table, 0-based paging, cash + futures rows to drop, "As of M/D/YY".
+const FNDX_HTML = `<html><body>
+<p>Schwab Fundamental U.S. Large Company ETF (FNDX)</p>
+<p>As of 11/12/26</p>
+<p>Displaying 1 - 100 of 732</p>
+<table>
+<tr><th>Fund Name</th><th>CUSIP</th><th>Symbol</th><th>Quantity</th><th>% of Assets</th><th>Market Value</th></tr>
+<tr><td>APPLE INC</td><td>037833100</td><td>AAPL</td><td>4,026,104</td><td>4.96%</td><td>$1.4B</td></tr>
+<tr><td>BERKSHIRE HATHAWAY INC CLASS B</td><td>084670702</td><td>BRK/B</td><td>968,368</td><td>1.98%</td><td>$571.2M</td></tr>
+<tr><td>AT&amp;T INC</td><td>00206R102</td><td>T</td><td>1,000,000</td><td>1.00%</td><td>$25.0M</td></tr>
+<tr><td>US DOLLAR</td><td>999USDZ92</td><td>USD</td><td>3,714,982</td><td>0.01%</td><td>$3.7M</td></tr>
+<tr><td>S&amp;P500 EMINI DEC 26</td><td>ADI2VB4H9</td><td>ESZ6</td><td>5,400</td><td>0.00%</td><td>$0.0</td></tr>
+</table>
+</body></html>`;
+
+describe("parseSchwabHoldingsHtml", () => {
+  it("parses the holdings table, drops cash and futures rows, decodes entities", () => {
+    const parsed = parseSchwabHoldingsHtml(FNDX_HTML);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.asOf).toBe("2026-11-12");
+    expect(parsed!.rows).toEqual([
+      { symbol: "AAPL", name: "APPLE INC", weight: 0.0496 },
+      { symbol: "BRK/B", name: "BERKSHIRE HATHAWAY INC CLASS B", weight: 0.0198 },
+      { symbol: "T", name: "AT&T INC", weight: 0.01 },
+    ]);
+  });
+
+  it("rejects a page with no holdings table and one with no as-of date", () => {
+    expect(parseSchwabHoldingsHtml("<html><body><p>As of 11/12/26</p></body></html>")).toBeNull();
+    const noAsOf = FNDX_HTML.replace("<p>As of 11/12/26</p>\n", "");
+    expect(parseSchwabHoldingsHtml(noAsOf)).toBeNull();
+    expect(parseSchwabHoldingsHtml("<!DOCTYPE html><html><body>hi</body></html>")).toBeNull();
+  });
+});
+
+// Vanguard fixture, modelled on the live VGK JSON payload: market values
+// are the exact weights (percents are rounded); SAN collides across two
+// companies; one row has no ticker; tickers carry dots and spaces.
+const VGK_JSON = JSON.stringify({
+  size: 1241,
+  asOfDate: "2026-09-30T00:00:00-04:00",
+  fund: {
+    entity: [
+      {
+        type: "portfolioHolding",
+        longName: "ASML Holding NV",
+        sharesHeld: "930222",
+        marketValue: 50,
+        ticker: "ASML",
+        isin: "NL0010273215",
+        percentWeight: "50.00",
+      },
+      {
+        type: "portfolioHolding",
+        longName: "Banco Santander SA",
+        sharesHeld: "1000",
+        marketValue: 30,
+        ticker: "SAN",
+        isin: "ES0113900J37",
+        percentWeight: "30.00",
+      },
+      {
+        type: "portfolioHolding",
+        longName: "Sanofi",
+        sharesHeld: "1000",
+        marketValue: 10,
+        ticker: "SAN",
+        isin: "FR0000120578",
+        percentWeight: "10.00",
+      },
+      {
+        type: "portfolioHolding",
+        longName: "Air Liquide",
+        sharesHeld: "1000",
+        marketValue: 5,
+        ticker: "",
+        isin: "FR0000053951",
+        percentWeight: "5.00",
+      },
+      {
+        type: "portfolioHolding",
+        longName: "Rolls-Royce Holdings PLC",
+        sharesHeld: "1000",
+        marketValue: 3,
+        ticker: "RR.",
+        isin: "GB00B63H8491",
+        percentWeight: "3.00",
+      },
+      {
+        type: "portfolioHolding",
+        longName: "Novo Nordisk A/S",
+        sharesHeld: "1000",
+        marketValue: 2,
+        ticker: "NOVO B",
+        isin: "DK0060534915",
+        percentWeight: "2.00",
+      },
+      {
+        type: "portfolioHolding",
+        longName: "Zero Holding",
+        sharesHeld: "0",
+        marketValue: 0,
+        ticker: "ZERO",
+        isin: "US0000000000",
+        percentWeight: "0.00",
+      },
+    ],
+  },
+});
+
+describe("parseVanguardHoldingsJson", () => {
+  it("weights from market value, disambiguates a repeated ticker, keys an empty ticker by ISIN", () => {
+    const parsed = parseVanguardHoldingsJson(VGK_JSON);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.asOf).toBe("2026-09-30");
+    expect(parsed!.rows).toEqual([
+      { symbol: "ASML", name: "ASML Holding NV", weight: 0.5 },
+      { symbol: "SAN", name: "Banco Santander SA", weight: 0.3 },
+      { symbol: "SAN-FR", name: "Sanofi", weight: 0.1 },
+      { symbol: "FR0000053951", name: "Air Liquide", weight: 0.05 },
+      { symbol: "RR.", name: "Rolls-Royce Holdings PLC", weight: 0.03 },
+      { symbol: "NOVO B", name: "Novo Nordisk A/S", weight: 0.02 },
+    ]);
+  });
+
+  it("rejects garbage JSON, a missing as-of date, and an empty entity list", () => {
+    expect(parseVanguardHoldingsJson("not json")).toBeNull();
+    expect(parseVanguardHoldingsJson("<html><body>hi</body></html>")).toBeNull();
+    const noAsOf = JSON.parse(VGK_JSON) as Record<string, unknown>;
+    delete noAsOf.asOfDate;
+    expect(parseVanguardHoldingsJson(JSON.stringify(noAsOf))).toBeNull();
+    expect(
+      parseVanguardHoldingsJson(
+        JSON.stringify({ asOfDate: "2026-09-30T00:00:00-04:00", fund: { entity: [] } }),
+      ),
+    ).toBeNull();
   });
 });

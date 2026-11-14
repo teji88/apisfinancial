@@ -3,12 +3,15 @@
  * and store it in the shared `etf_holdings` library (like price_history:
  * fetched once, reused by every user).
  *
- * Source today: iShares' holdings CSV, one adapter for every iShares ETF.
- * The file is fetched server-side with a browser user agent; if the
- * issuer answers with a web page instead of the file (bot gating), the
- * fetch reports `unavailable` and the old rows stay — never replaced
- * with a bad parse. Other issuers (SPDR, Vanguard, Schwab, Franklin)
- * get their own adapter in this module when their file shape is verified.
+ * Source today: iShares' holdings CSV, one adapter for every iShares ETF;
+ * Schwab's paginated holdings HTML (FNDX); and Vanguard US's holdings
+ * JSON API (VGK as a proxy for the Canadian VE.TO, whose own issuer
+ * publishes no full holdings file). Each file is fetched server-side
+ * with a browser user agent; if the issuer answers with a web page
+ * instead of the file (bot gating), the fetch reports `unavailable`
+ * and the old rows stay — never replaced with a bad parse. Other
+ * issuers (SPDR, Franklin) get their own adapter in this module
+ * when their file shape is verified.
  *
  * Symbols are stored in app form: TSX listings carry the `.TO` suffix
  * (XEQT.TO, RY.TO), US listings are bare (AAPL, ITOT), so stored
@@ -200,10 +203,13 @@ export function parseISharesHoldingsCsv(
   return { asOf, rows };
 }
 
-async function fetchText(url: string): Promise<{ text: string; contentType: string } | null> {
+async function fetchText(
+  url: string,
+  accept: string,
+): Promise<{ text: string; contentType: string } | null> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "text/csv" } });
+      const res = await fetch(url, { headers: { "User-Agent": UA, Accept: accept } });
       if (!res.ok) continue;
       const text = await res.text();
       return { text, contentType: res.headers.get("content-type") ?? "" };
@@ -222,7 +228,7 @@ const MAPPED_WEIGHT_MAX = 1.02;
 async function fetchISharesHoldings(bareSymbol: string): Promise<EtfFetchResult> {
   const fund = ISHARES_FUNDS[bareSymbol];
   if (!fund) return { status: "unsupported", reason: `no iShares adapter entry for ${bareSymbol}` };
-  const fetched = await fetchText(holdingsUrl(fund, bareSymbol));
+  const fetched = await fetchText(holdingsUrl(fund, bareSymbol), "text/csv");
   if (!fetched) return { status: "unavailable", reason: "holdings file request failed" };
   const { text, contentType } = fetched;
   if (
@@ -247,10 +253,251 @@ async function fetchISharesHoldings(bareSymbol: string): Promise<EtfFetchResult>
   return { status: "ok", asOf: parsed.asOf, rows: parsed.rows, source: "ishares" };
 }
 
+// ------------------------------------------------------------ Schwab (HTML)
+
+/**
+ * Schwab funds the adapter knows, by bare ticker. Schwab publishes no
+ * holdings file — the list is paginated HTML tables at
+ * schwabassetmanagement.com/allholdings/<TICKER>?page=N (0-based,
+ * 100 rows a page). Verified for FNDX 2026-11-14: 8 pages, 732 rows,
+ * columns Fund Name / CUSIP / Symbol / Quantity / % of Assets /
+ * Market Value, as-of line "As of 11/12/26".
+ */
+export const SCHWAB_FUNDS = new Set(["FNDX"]);
+
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&nbsp;/gi, " ");
+}
+
+function stripTags(s: string): string {
+  return decodeHtmlEntities(s.replace(/<[^>]*>/g, ""))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseSchwabAsOf(html: string): string | null {
+  const m = /As of\s+(\d{1,2})\/(\d{1,2})\/(\d{2})\b/.exec(html);
+  if (!m) return null;
+  const month = Number(m[1]);
+  const day = Number(m[2]);
+  const year = 2000 + Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/**
+ * Parse one Schwab holdings page (HTML table). Keeps equity rows only;
+ * the cash row (USD) and the futures row (e.g. S&P500 EMINI) are left
+ * out so they surface as the unmapped remainder. Returns null when the
+ * text holds no holdings table at all. The table is found by its header
+ * row, not by tag attributes — the browser view never exposed those.
+ */
+export function parseSchwabHoldingsHtml(
+  html: string,
+): { asOf: string; rows: EtfHoldingInput[] } | null {
+  const asOf = parseSchwabAsOf(html);
+  if (!asOf) return null;
+  const tables = [...html.matchAll(/<table[^>]*>([\s\S]*?)<\/table>/gi)];
+  for (const table of tables) {
+    const body = table[1]!;
+    const rowHtml = [...body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((r) => r[1]!);
+    const headerIdx = rowHtml.findIndex((r) => {
+      const cells = [...r.matchAll(/<(?:th|td)[^>]*>([\s\S]*?)<\/(?:th|td)>/gi)].map((c) =>
+        stripTags(c[1]!).toLowerCase(),
+      );
+      return cells.includes("symbol") && cells.some((c) => c.includes("% of assets"));
+    });
+    if (headerIdx < 0) continue;
+    const headerCells = [
+      ...rowHtml[headerIdx]!.matchAll(/<(?:th|td)[^>]*>([\s\S]*?)<\/(?:th|td)>/gi),
+    ].map((c) => stripTags(c[1]!).toLowerCase());
+    const symbolCol = headerCells.indexOf("symbol");
+    const weightCol = headerCells.findIndex((c) => c.includes("% of assets"));
+    const nameCol = headerCells.indexOf("fund name");
+    if (symbolCol < 0 || weightCol < 0) continue;
+    const rows: EtfHoldingInput[] = [];
+    for (let i = headerIdx + 1; i < rowHtml.length; i += 1) {
+      const cells = [...rowHtml[i]!.matchAll(/<(?:td|th)[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)].map(
+        (c) => stripTags(c[1]!),
+      );
+      const symbol = (cells[symbolCol] ?? "").trim().toUpperCase();
+      if (!symbol) continue;
+      if (CASH_TICKERS.has(symbol)) continue;
+      const name = nameCol >= 0 ? (cells[nameCol] ?? "").trim() : "";
+      if (/emini|future/i.test(name)) continue;
+      const weightPct = toNumber((cells[weightCol] ?? "").replace("%", ""));
+      if (weightPct == null || weightPct <= 0 || weightPct > 100) continue;
+      rows.push({
+        symbol,
+        name,
+        weight: Math.round((weightPct / 100) * 1e6) / 1e6,
+      });
+    }
+    if (rows.length > 0) return { asOf, rows };
+  }
+  return null;
+}
+
+const SCHWAB_PAGE_SIZE = 100;
+const SCHWAB_MAX_PAGES = 20;
+
+async function fetchSchwabHoldings(bareSymbol: string): Promise<EtfFetchResult> {
+  if (!SCHWAB_FUNDS.has(bareSymbol)) {
+    return { status: "unsupported", reason: `no Schwab adapter entry for ${bareSymbol}` };
+  }
+  const rows: EtfHoldingInput[] = [];
+  const seen = new Set<string>();
+  let asOf: string | null = null;
+  for (let page = 0; page < SCHWAB_MAX_PAGES; page += 1) {
+    const fetched = await fetchText(
+      `https://www.schwabassetmanagement.com/allholdings/${bareSymbol}?page=${page}`,
+      "text/html",
+    );
+    if (!fetched) return { status: "unavailable", reason: "holdings page request failed" };
+    const parsed = parseSchwabHoldingsHtml(fetched.text);
+    if (!parsed) {
+      return { status: "unavailable", reason: "holdings page could not be parsed" };
+    }
+    if (!asOf) asOf = parsed.asOf;
+    for (const row of parsed.rows) {
+      if (seen.has(row.symbol)) continue;
+      seen.add(row.symbol);
+      rows.push(row);
+    }
+    // The last page is short; a full page means there may be more.
+    if (parsed.rows.length < SCHWAB_PAGE_SIZE) break;
+  }
+  if (!asOf || rows.length === 0) {
+    return { status: "unavailable", reason: "holdings pages could not be parsed" };
+  }
+  const mapped = rows.reduce((s, r) => s + r.weight, 0);
+  if (mapped < MAPPED_WEIGHT_MIN || mapped > MAPPED_WEIGHT_MAX) {
+    return {
+      status: "unavailable",
+      reason: `parsed equity weights sum to ${(mapped * 100).toFixed(1)}%, outside the sane band`,
+    };
+  }
+  return { status: "ok", asOf, rows, source: "schwab" };
+}
+
+// ------------------------------------------------------------ Vanguard (JSON)
+
+/**
+ * Canadian ETFs whose holdings come from a US twin tracking the same
+ * index, by bare ticker. Vanguard Canada publishes no full holdings
+ * file for VE.TO (top 10 only); the US twin VGK tracks the same FTSE
+ * Developed Europe All Cap index, and its weights match VE.TO's at the
+ * top almost exactly — close proxy, not exact. Approved by Gurteg
+ * 2026-11-14; the stored source names the proxy so it is never
+ * mistaken for VE.TO's own file.
+ */
+export const VANGUARD_PROXY_FUNDS: Record<string, string> = {
+  VE: "VGK",
+};
+
+/**
+ * Parse a Vanguard US holdings JSON payload (fund.entity[]). Weights are
+ * computed from marketValue (exact) rather than the rounded
+ * percentWeight. Tickers are exchange-scoped and NOT unique: the same
+ * bare ticker can be two companies (SAN = Santander ES0113900J37 and
+ * Sanofi FR0000120578), so a repeat ticker in one fund is suffixed with
+ * its ISIN country code (SAN, SAN-FR); a row with no ticker at all is
+ * keyed by its ISIN. Returns null when the payload is not holdings JSON.
+ */
+export function parseVanguardHoldingsJson(
+  jsonText: string,
+): { asOf: string; rows: EtfHoldingInput[] } | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(jsonText);
+  } catch {
+    return null;
+  }
+  if (typeof data !== "object" || data === null) return null;
+  const root = data as Record<string, unknown>;
+  const asOfRaw = typeof root["asOfDate"] === "string" ? root["asOfDate"] : null;
+  if (!asOfRaw) return null;
+  const asOf = asOfRaw.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) return null;
+  const fund = root["fund"] as Record<string, unknown> | undefined;
+  const entities = Array.isArray(fund?.["entity"]) ? (fund["entity"] as unknown[]) : [];
+  if (entities.length === 0) return null;
+  const seenTickers = new Map<string, number>();
+  const valued: Array<{ symbol: string; name: string; marketValue: number }> = [];
+  let percentSum = 0;
+  for (const e of entities) {
+    if (typeof e !== "object" || e === null) continue;
+    const row = e as Record<string, unknown>;
+    const marketValue = typeof row["marketValue"] === "number" ? row["marketValue"] : NaN;
+    if (!Number.isFinite(marketValue) || marketValue <= 0) continue;
+    const percent =
+      typeof row["percentWeight"] === "string" ? toNumber(row["percentWeight"]) : null;
+    if (percent != null) percentSum += percent / 100;
+    const isin = typeof row["isin"] === "string" ? row["isin"].trim().toUpperCase() : "";
+    const rawTicker = typeof row["ticker"] === "string" ? row["ticker"].trim().toUpperCase() : "";
+    const name = String(row["longName"] ?? row["shortName"] ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+    let symbol: string;
+    if (!rawTicker) {
+      if (!isin) continue;
+      symbol = isin;
+    } else {
+      const count = (seenTickers.get(rawTicker) ?? 0) + 1;
+      seenTickers.set(rawTicker, count);
+      symbol = count === 1 ? rawTicker : `${rawTicker}-${isin.slice(0, 2) || "XX"}`;
+    }
+    valued.push({ symbol, name, marketValue });
+  }
+  if (valued.length === 0) return null;
+  if (percentSum < MAPPED_WEIGHT_MIN || percentSum > MAPPED_WEIGHT_MAX) return null;
+  const total = valued.reduce((s, r) => s + r.marketValue, 0);
+  if (total <= 0) return null;
+  return {
+    asOf,
+    rows: valued.map((r) => ({
+      symbol: r.symbol,
+      name: r.name,
+      weight: Math.round((r.marketValue / total) * 1e6) / 1e6,
+    })),
+  };
+}
+
+async function fetchVanguardHoldings(proxyTicker: string): Promise<EtfFetchResult> {
+  const fetched = await fetchText(
+    `https://investor.vanguard.com/vmf/api/${proxyTicker}/portfolio-holding/stock.json?start=1&count=20000`,
+    "application/json",
+  );
+  if (!fetched) return { status: "unavailable", reason: "holdings request failed" };
+  if (/^\s*</.test(fetched.text)) {
+    return {
+      status: "unavailable",
+      reason: "issuer returned a web page instead of holdings JSON",
+    };
+  }
+  const parsed = parseVanguardHoldingsJson(fetched.text);
+  if (!parsed) return { status: "unavailable", reason: "holdings JSON could not be parsed" };
+  return {
+    status: "ok",
+    asOf: parsed.asOf,
+    rows: parsed.rows,
+    source: `vanguard-us-${proxyTicker.toLowerCase()}-proxy`,
+  };
+}
+
 /** Fetch one ETF's holdings from its issuer, by app-form symbol. */
 export async function fetchEtfHoldings(appSymbol: string): Promise<EtfFetchResult> {
   const bare = bareEtfSymbol(appSymbol);
   if (ISHARES_FUNDS[bare]) return fetchISharesHoldings(bare);
+  if (SCHWAB_FUNDS.has(bare)) return fetchSchwabHoldings(bare);
+  const proxy = VANGUARD_PROXY_FUNDS[bare];
+  if (proxy) return fetchVanguardHoldings(proxy);
   return { status: "unsupported", reason: `no holdings adapter for ${bare} yet` };
 }
 
@@ -365,6 +612,13 @@ export async function refreshEtfHoldings(symbols: string[]): Promise<EtfRefreshO
   return out;
 }
 
+/** True when any adapter knows this ETF (bare ticker), across issuers. */
+function isKnownEtf(bareSymbol: string): boolean {
+  return Boolean(
+    ISHARES_FUNDS[bareSymbol] || SCHWAB_FUNDS.has(bareSymbol) || VANGUARD_PROXY_FUNDS[bareSymbol],
+  );
+}
+
 export type StoredEtfHoldings = Record<string, { asOf: string | null; rows: EtfHoldingInput[] }>;
 
 /**
@@ -404,7 +658,7 @@ export async function readEtfHoldingsMap(symbols: string[]): Promise<StoredEtfHo
         weight: Number(row.weight),
       });
       const bare = bareEtfSymbol(row.underlying_symbol);
-      if (ISHARES_FUNDS[bare] && !seen.has(row.underlying_symbol.toUpperCase())) {
+      if (isKnownEtf(bare) && !seen.has(row.underlying_symbol.toUpperCase())) {
         next.add(row.underlying_symbol.toUpperCase());
       }
     }
@@ -414,7 +668,7 @@ export async function readEtfHoldingsMap(symbols: string[]): Promise<StoredEtfHo
   // discovered in another fund's rows — so the look-through treats them
   // as "no data" rather than as stocks.
   for (const symbol of seen) {
-    if (!map[symbol] && ISHARES_FUNDS[bareEtfSymbol(symbol)]) {
+    if (!map[symbol] && isKnownEtf(bareEtfSymbol(symbol))) {
       map[symbol] = { asOf: null, rows: [] };
     }
   }
