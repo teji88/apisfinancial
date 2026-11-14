@@ -49,6 +49,8 @@ type ISharesFund = {
  * iShares funds the adapter knows. Product ids are only known for the
  * funds already looked up; the rest use the slug-only holdings URL.
  * Add a product id here when it is looked up from the fund's page.
+ * When adding any adapter, also add the fund's app-form symbol to
+ * knownEtfs.ts — the Dashboard's ETF fallback reads that list.
  */
 export const ISHARES_FUNDS: Record<string, ISharesFund> = {
   XEQT: { locale: "ca/en", productId: "308188", slug: "ishares-core-equity-etf-portfolio" },
