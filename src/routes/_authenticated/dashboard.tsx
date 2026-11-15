@@ -42,6 +42,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   buildBreakdownRows,
+  formatAllocationSummary,
   formatShare,
   groupAccountsByType,
   groupPositionsBySymbol,
@@ -94,6 +95,17 @@ function loadStoredSelection(): string[] | null {
     return parsed.filter((v): v is string => typeof v === "string");
   } catch {
     return null;
+  }
+}
+
+const PERCENTAGES_ONLY_KEY = "apis-dashboard-percentages-only";
+
+/** The persisted percentages-only choice for the breakdown card. */
+function loadStoredPercentagesOnly(): boolean {
+  try {
+    return localStorage.getItem(PERCENTAGES_ONLY_KEY) === "true";
+  } catch {
+    return false;
   }
 }
 
@@ -377,6 +389,60 @@ function Dashboard() {
     [lookthrough, etfHoldingsQuery.data, symbolRows],
   );
   const showLookthrough = lookthrough && lookthroughResult != null;
+
+  // Percentages only: hide every dollar figure in the breakdown card so
+  // the allocation can be shown or shared without revealing values.
+  // Persisted like the account selection, so it stays how it was left.
+  const [percentagesOnly, setPercentagesOnly] = useState(loadStoredPercentagesOnly);
+  useEffect(() => {
+    try {
+      localStorage.setItem(PERCENTAGES_ONLY_KEY, JSON.stringify(percentagesOnly));
+    } catch {
+      /* storage unavailable — still applies for this session */
+    }
+  }, [percentagesOnly]);
+
+  const selectionLabel =
+    selectedAccountIds.length === viewAccounts.length
+      ? `All ${viewAccounts.length} account${viewAccounts.length === 1 ? "" : "s"}`
+      : `${selectedAccountIds.length} of ${viewAccounts.length} accounts`;
+
+  // Plain-text allocation summary for sharing: label + share only, never
+  // dollar values. Follows the card's mode — plain rows, or look-through
+  // rows plus the unmapped share when that view is showing.
+  const allocationSummary = useMemo(() => {
+    if (lookthrough) {
+      if (!lookthroughResult) return null;
+      const rows = lookthroughResult.rows.map((r) => ({ label: r.symbol, pct: r.pct }));
+      if (lookthroughResult.unmappedValue > 0) {
+        rows.push({
+          label: "Unmapped",
+          pct: investedTotal > 0 ? (lookthroughResult.unmappedValue / investedTotal) * 100 : 0,
+        });
+      }
+      return formatAllocationSummary(rows, selectionLabel, "look-through");
+    }
+    return formatAllocationSummary(
+      breakdownRows.map((r) => ({ label: r.label, pct: r.pct })),
+      selectionLabel,
+      "holdings",
+    );
+  }, [lookthrough, lookthroughResult, breakdownRows, selectionLabel, investedTotal]);
+  const canCopy =
+    lookthrough && lookthroughResult
+      ? lookthroughResult.rows.length > 0 || lookthroughResult.unmappedValue > 0
+      : breakdownRows.length > 0;
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const handleCopyAllocation = async () => {
+    if (!allocationSummary) return;
+    try {
+      await navigator.clipboard.writeText(allocationSummary);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+    window.setTimeout(() => setCopyState("idle"), 2000);
+  };
 
   const handleToggleAccount = (id: string) =>
     setStoredSelection(toggleAccountId(selectedAccountIds, id));
@@ -717,14 +783,14 @@ function Dashboard() {
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {showLookthrough
-                ? `Look-through · ${formatCad(investedTotal)} invested${lookthroughResult.asOf ? ` · ETF holdings as of ${lookthroughResult.asOf}` : ""}`
+                ? `Look-through${percentagesOnly ? "" : ` · ${formatCad(investedTotal)} invested`}${lookthroughResult.asOf ? ` · ETF holdings as of ${lookthroughResult.asOf}` : ""}`
                 : lookthrough && etfHoldingsQuery.isPending
                   ? "Look-through · loading ETF holdings…"
                   : lookthrough && etfHoldingsQuery.isError
                     ? "Look-through · couldn't load ETF holdings"
                     : selectedAccountIds.length === viewAccounts.length
-                      ? `All ${viewAccounts.length} account${viewAccounts.length === 1 ? "" : "s"} · ${formatCad(breakdownTotal)}`
-                      : `${selectedAccountIds.length} of ${viewAccounts.length} accounts · ${formatCad(breakdownTotal)}`}
+                      ? `All ${viewAccounts.length} account${viewAccounts.length === 1 ? "" : "s"}${percentagesOnly ? "" : ` · ${formatCad(breakdownTotal)}`}`
+                      : `${selectedAccountIds.length} of ${viewAccounts.length} accounts${percentagesOnly ? "" : ` · ${formatCad(breakdownTotal)}`}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -741,6 +807,24 @@ function Dashboard() {
               onClick={() => setLookthrough((v) => !v)}
             >
               Look-through
+            </Button>
+            <Button
+              variant={percentagesOnly ? "default" : "outline"}
+              className="h-8 text-xs"
+              aria-pressed={percentagesOnly}
+              title="Hide dollar values in this card — percentages only"
+              onClick={() => setPercentagesOnly((v) => !v)}
+            >
+              Percentages only
+            </Button>
+            <Button
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={!canCopy}
+              title="Copy a percentages-only summary to paste anywhere"
+              onClick={handleCopyAllocation}
+            >
+              {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
             </Button>
             <Popover>
               <PopoverTrigger asChild>
@@ -815,15 +899,19 @@ function Dashboard() {
                 <TableHead>Holding</TableHead>
                 {showLookthrough ? (
                   <>
-                    <TableHead className="text-right">Direct (CAD)</TableHead>
-                    <TableHead className="text-right">Via ETFs (CAD)</TableHead>
-                    <TableHead className="text-right">Total (CAD)</TableHead>
+                    {!percentagesOnly && <TableHead className="text-right">Direct (CAD)</TableHead>}
+                    {!percentagesOnly && (
+                      <TableHead className="text-right">Via ETFs (CAD)</TableHead>
+                    )}
+                    {!percentagesOnly && <TableHead className="text-right">Total (CAD)</TableHead>}
                     <TableHead className="text-right">% of invested</TableHead>
                   </>
                 ) : (
                   <>
-                    <TableHead className="text-right">Units</TableHead>
-                    <TableHead className="text-right">Market value (CAD)</TableHead>
+                    {!percentagesOnly && <TableHead className="text-right">Units</TableHead>}
+                    {!percentagesOnly && (
+                      <TableHead className="text-right">Market value (CAD)</TableHead>
+                    )}
                     <TableHead className="text-right">% of selected</TableHead>
                   </>
                 )}
@@ -865,13 +953,21 @@ function Dashboard() {
                             />
                           </div>
                         </TableCell>
-                        <TableCell className="num text-right">
-                          {r.directValue > 0 ? formatCad(r.directValue) : "—"}
-                        </TableCell>
-                        <TableCell className="num text-right">
-                          {r.viaEtfValue > 0 ? formatCad(r.viaEtfValue) : "—"}
-                        </TableCell>
-                        <TableCell className="num text-right">{formatCad(r.totalValue)}</TableCell>
+                        {!percentagesOnly && (
+                          <TableCell className="num text-right">
+                            {r.directValue > 0 ? formatCad(r.directValue) : "—"}
+                          </TableCell>
+                        )}
+                        {!percentagesOnly && (
+                          <TableCell className="num text-right">
+                            {r.viaEtfValue > 0 ? formatCad(r.viaEtfValue) : "—"}
+                          </TableCell>
+                        )}
+                        {!percentagesOnly && (
+                          <TableCell className="num text-right">
+                            {formatCad(r.totalValue)}
+                          </TableCell>
+                        )}
                         <TableCell className="num text-right">{formatShare(r.pct)}</TableCell>
                       </TableRow>
                     );
@@ -894,13 +990,17 @@ function Dashboard() {
                           />
                         </div>
                       </TableCell>
-                      <TableCell className="num text-right">—</TableCell>
-                      <TableCell className="num text-right">
-                        {formatCad(lookthroughResult.unmappedValue)}
-                      </TableCell>
-                      <TableCell className="num text-right">
-                        {formatCad(lookthroughResult.unmappedValue)}
-                      </TableCell>
+                      {!percentagesOnly && <TableCell className="num text-right">—</TableCell>}
+                      {!percentagesOnly && (
+                        <TableCell className="num text-right">
+                          {formatCad(lookthroughResult.unmappedValue)}
+                        </TableCell>
+                      )}
+                      {!percentagesOnly && (
+                        <TableCell className="num text-right">
+                          {formatCad(lookthroughResult.unmappedValue)}
+                        </TableCell>
+                      )}
                       <TableCell className="num text-right">
                         {formatShare(
                           investedTotal > 0
@@ -937,10 +1037,14 @@ function Dashboard() {
                           />
                         </div>
                       </TableCell>
-                      <TableCell className="num text-right">
-                        {r.units != null ? formatUnits(r.units) : "—"}
-                      </TableCell>
-                      <TableCell className="num text-right">{formatCad(r.marketValue)}</TableCell>
+                      {!percentagesOnly && (
+                        <TableCell className="num text-right">
+                          {r.units != null ? formatUnits(r.units) : "—"}
+                        </TableCell>
+                      )}
+                      {!percentagesOnly && (
+                        <TableCell className="num text-right">{formatCad(r.marketValue)}</TableCell>
+                      )}
                       <TableCell className="num text-right">{formatShare(r.pct)}</TableCell>
                     </TableRow>
                   ))}

@@ -107,6 +107,27 @@ export function formatShare(pct: number): string {
   return `${pct.toFixed(2)}%`;
 }
 
+/** One row of a shareable allocation summary: label and share only. */
+export type AllocationSummaryRow = {
+  label: string;
+  /** Share of the selected accounts (plain breakdown) or of invested (look-through), 0–100. */
+  pct: number;
+};
+
+/**
+ * Plain-text allocation summary for sharing: symbol + share only, never
+ * dollar values, so it is safe to paste anywhere. Rows stay in display
+ * order; the caller supplies the selection label and the mode.
+ */
+export function formatAllocationSummary(
+  rows: AllocationSummaryRow[],
+  selectionLabel: string,
+  mode: "holdings" | "look-through",
+): string {
+  const header = `Portfolio allocation — ${selectionLabel}${mode === "look-through" ? " (look-through)" : ""}`;
+  return [header, ...rows.map((r) => `${r.label} ${formatShare(r.pct)}`)].join("\n");
+}
+
 /** Only the account fields the picker needs. */
 export type AccountPick = Pick<Account, "id" | "account_name" | "account_type">;
 
