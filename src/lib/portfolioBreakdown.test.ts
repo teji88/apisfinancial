@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { HoldingPosition } from "./finance";
 import {
   buildBreakdownRows,
+  formatAllocationSummary,
   formatShare,
   groupAccountsByType,
   groupPositionsBySymbol,
@@ -237,5 +238,40 @@ describe("toggleAccountId / toggleAccountType", () => {
     expect(toggleAccountType(["a1"], ["a2", "a3"])).toEqual(["a1", "a2", "a3"]);
     expect(toggleAccountType(["a1", "a2", "a3"], ["a2", "a3"])).toEqual(["a1"]);
     expect(toggleAccountType(["a1"], [])).toEqual(["a1"]);
+  });
+});
+
+describe("formatAllocationSummary", () => {
+  it("lists label + share only, never dollar values", () => {
+    expect(
+      formatAllocationSummary(
+        [
+          { label: "FNDX", pct: 33.69 },
+          { label: "VE.TO", pct: 14.12 },
+          { label: "Cash", pct: 1.5 },
+        ],
+        "All 9 accounts",
+        "holdings",
+      ),
+    ).toBe("Portfolio allocation — All 9 accounts\nFNDX 33.69%\nVE.TO 14.12%\nCash 1.50%");
+  });
+
+  it("marks the look-through mode in the header", () => {
+    expect(
+      formatAllocationSummary(
+        [
+          { label: "AAPL", pct: 4.96 },
+          { label: "Unmapped", pct: 54.25 },
+        ],
+        "LIRA",
+        "look-through",
+      ),
+    ).toBe("Portfolio allocation — LIRA (look-through)\nAAPL 4.96%\nUnmapped 54.25%");
+  });
+
+  it("is just the header when there are no rows", () => {
+    expect(formatAllocationSummary([], "All 9 accounts", "holdings")).toBe(
+      "Portfolio allocation — All 9 accounts",
+    );
   });
 });
